@@ -1,0 +1,83 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: admin-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['admin-api:8080']
+  - job_name: dataset-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['dataset-service:8082']
+  - job_name: training-orchestrator
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['training-orchestrator:8083']
+  - job_name: model-registry-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['model-registry-service:8084']
+  - job_name: deployment-controller
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['deployment-controller:8085']
+  - job_name: webhook-receiver
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['webhook-receiver:8086']
+  - job_name: inference-gateway-rt
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['inference-gateway-rt:8087']
+  - job_name: inference-gateway-batch
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['inference-gateway-batch:8088']
+  - job_name: runtime-admin-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['runtime-admin-api:8090']
+  - job_name: runtime-plane
+    metrics_path: /api/v1/runtime/metrics
+    static_configs:
+      - targets: ['runtime-admin-api:8090']
+  - job_name: channel-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['channel-service:8091']
+  - job_name: pipeline-definition-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['pipeline-definition-service:8092']
+  - job_name: runtime-orchestrator
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['runtime-orchestrator:8093']
+  - job_name: realtime-executor
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['realtime-executor:8094']
+  - job_name: trigger-executor
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['trigger-executor:8095']
+  - job_name: overlay-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['overlay-service:8096']
+  - job_name: capture-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['capture-service:8097']
+  - job_name: result-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['result-service:8098']
+  - job_name: connector-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['connector-service:8099']
+  - job_name: prometheus
+    static_configs:
+      - targets: ['prometheus:9090']

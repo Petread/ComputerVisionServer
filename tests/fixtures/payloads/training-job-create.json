@@ -1,0 +1,27 @@
+{
+  "model_family_slug": "widget-inspection-cls",
+  "dataset_snapshot_id": "dss_training_ready",
+  "task_type": "classification",
+  "recipe_name": "baseline_cls",
+  "recipe_version": "1.0.0",
+  "max_epochs": 5,
+  "checkpoint_interval_steps": 5,
+  "parameter_overrides": {
+    "epochs": 5
+  },
+  "best_checkpoint_rule": {
+    "metric_name": "accuracy_top1",
+    "mode": "max",
+    "phase": "validation",
+    "minimum_epoch": 1
+  },
+  "promotion_criteria": [
+    {
+      "metric_name": "accuracy_top1",
+      "comparison": "gte",
+      "threshold": 0.9,
+      "phase": "evaluation"
+    }
+  ],
+  "allow_duplicate_snapshot_training": false
+}

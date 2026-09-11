@@ -1,0 +1,236 @@
+asyncapi: 3.0.0
+info:
+  title: CV Platform Domain Events
+  version: 1.0.0
+  description: Shared event channels for append-only audit and workflow state changes.
+channels:
+  training.job.state-changed:
+    address: training.job.state-changed
+    messages:
+      stateChanged:
+        $ref: '#/components/messages/StateChanged'
+  deployment.release.state-changed:
+    address: deployment.release.state-changed
+    messages:
+      stateChanged:
+        $ref: '#/components/messages/StateChanged'
+  dataset.snapshot.created:
+    address: dataset.snapshot.created
+    messages:
+      snapshotCreated:
+        $ref: '#/components/messages/StateChanged'
+  webhook.label-studio.received:
+    address: webhook.label-studio.received
+    messages:
+      webhookReceived:
+        $ref: '#/components/messages/WebhookReceived'
+  runtime.channel.state-changed:
+    address: runtime.channel.state-changed
+    messages:
+      stateChanged:
+        $ref: '#/components/messages/StateChanged'
+  runtime.execution.state-changed:
+    address: runtime.execution.state-changed
+    messages:
+      stateChanged:
+        $ref: '#/components/messages/StateChanged'
+  runtime.capture.requested:
+    address: runtime.capture.requested
+    messages:
+      runtimeCaptureRequested:
+        $ref: '#/components/messages/RuntimeCaptureRequested'
+  runtime.result.recorded:
+    address: runtime.result.recorded
+    messages:
+      runtimeResultRecorded:
+        $ref: '#/components/messages/RuntimeResultRecorded'
+  edge.device.state-changed:
+    address: edge.device.state-changed
+    messages:
+      stateChanged:
+        $ref: '#/components/messages/StateChanged'
+  edge.deployment.state-changed:
+    address: edge.deployment.state-changed
+    messages:
+      stateChanged:
+        $ref: '#/components/messages/StateChanged'
+  edge.result.received:
+    address: edge.result.received
+    messages:
+      edgeResultReceived:
+        $ref: '#/components/messages/EdgeResultReceived'
+components:
+  schemas:
+    EventEnvelope:
+      type: object
+      required:
+        - event_id
+        - event_type
+        - aggregate_type
+        - aggregate_id
+        - sequence_no
+        - source_service
+        - actor_type
+        - actor_id
+        - payload_schema_version
+        - occurred_at
+        - payload
+      properties:
+        event_id:
+          type: string
+        event_type:
+          type: string
+        aggregate_type:
+          type: string
+        aggregate_id:
+          type: string
+        sequence_no:
+          type: integer
+        source_service:
+          type: string
+        actor_type:
+          type: string
+        actor_id:
+          type: string
+        request_id:
+          type: string
+          nullable: true
+        correlation_id:
+          type: string
+          nullable: true
+        causation_id:
+          type: string
+          nullable: true
+        payload_schema_version:
+          type: integer
+        occurred_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+    StateChangePayload:
+      type: object
+      required:
+        - current_state
+      properties:
+        previous_state:
+          type: string
+          nullable: true
+        current_state:
+          type: string
+        reason:
+          type: string
+          nullable: true
+    WebhookReceivedPayload:
+      type: object
+      required:
+        - source
+        - action
+        - source_event_key
+      properties:
+        source:
+          type: string
+        action:
+          type: string
+        source_event_key:
+          type: string
+    RuntimeCaptureRequestedPayload:
+      type: object
+      required:
+        - channel_id
+        - capture_rule_id
+        - target_label_project_ids
+      properties:
+        channel_id:
+          type: string
+        capture_rule_id:
+          type: string
+        result_record_id:
+          type: string
+          nullable: true
+        target_label_project_ids:
+          type: array
+          items:
+            type: string
+    RuntimeResultRecordedPayload:
+      type: object
+      required:
+        - channel_id
+        - result_record_id
+        - status
+      properties:
+        channel_id:
+          type: string
+        runtime_execution_id:
+          type: string
+          nullable: true
+        result_record_id:
+          type: string
+        status:
+          type: string
+    EdgeResultReceivedPayload:
+      type: object
+      required:
+        - management_ip
+        - boot_id
+        - sequence
+        - channel_id
+      properties:
+        management_ip:
+          type: string
+          format: ipv4
+        boot_id:
+          type: string
+        sequence:
+          type: integer
+          minimum: 1
+        channel_id:
+          type: string
+        workload_release_id:
+          type: string
+  messages:
+    StateChanged:
+      name: StateChanged
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/StateChangePayload'
+    WebhookReceived:
+      name: WebhookReceived
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/WebhookReceivedPayload'
+    RuntimeCaptureRequested:
+      name: RuntimeCaptureRequested
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/RuntimeCaptureRequestedPayload'
+    RuntimeResultRecorded:
+      name: RuntimeResultRecorded
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/RuntimeResultRecordedPayload'
+    EdgeResultReceived:
+      name: EdgeResultReceived
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              payload:
+                $ref: '#/components/schemas/EdgeResultReceivedPayload'

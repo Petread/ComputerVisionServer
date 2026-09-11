@@ -1,0 +1,1354 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Result Service
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/runtime/boundary:
+    get:
+      tags:
+      - runtime-results
+      summary: Get Runtime Boundary
+      operationId: get_runtime_boundary_api_v1_runtime_boundary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBoundaryResponse'
+  /api/v1/runtime/results:
+    get:
+      tags:
+      - runtime-results
+      summary: List Runtime Results
+      operationId: list_runtime_results_api_v1_runtime_results_get
+      parameters:
+      - name: channel_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Channel Id
+      - name: pipeline_version_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Pipeline Version Id
+      - name: mode
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeMode'
+          - type: 'null'
+          title: Mode
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(completed|failed|timeout)$
+          - type: 'null'
+          title: Status
+      - name: result_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 2
+            maxLength: 64
+          - type: 'null'
+          title: Result Type
+      - name: completed_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed From
+      - name: completed_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed To
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 160
+          - type: 'null'
+          title: Search
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeResultListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-versions/{pipeline_version_id}/stem-shadow-evaluation:
+    get:
+      tags:
+      - runtime-results
+      summary: Get Stem Shadow Evaluation
+      operationId: get_stem_shadow_evaluation_api_v1_runtime_pipeline_versions__pipeline_version_id__stem_shadow_evaluation_get
+      parameters:
+      - name: pipeline_version_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pipeline Version Id
+      - name: completed_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed From
+      - name: completed_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed To
+      - name: maximum_sessions
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 10
+          default: 2000
+          title: Maximum Sessions
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStemShadowEvaluationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/channels/{channel_id}/results/latest:
+    get:
+      tags:
+      - runtime-results
+      summary: Get Latest Channel Result
+      operationId: get_latest_channel_result_api_v1_runtime_channels__channel_id__results_latest_get
+      parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Channel Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeResultDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/results/{result_record_id}:
+    get:
+      tags:
+      - runtime-results
+      summary: Get Runtime Result
+      operationId: get_runtime_result_api_v1_runtime_results__result_record_id__get
+      parameters:
+      - name: result_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Result Record Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeResultDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/results/{result_record_id}/stem-orientation-reviews:
+    get:
+      tags:
+      - runtime-results
+      summary: Get Stem Orientation Reviews
+      operationId: get_stem_orientation_reviews_api_v1_runtime_results__result_record_id__stem_orientation_reviews_get
+      parameters:
+      - name: result_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Result Record Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStemOrientationReviewListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - runtime-results
+      summary: Append Stem Orientation Review
+      operationId: append_stem_orientation_review_api_v1_runtime_results__result_record_id__stem_orientation_reviews_post
+      parameters:
+      - name: result_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Result Record Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeStemOrientationReviewCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStemOrientationReviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RuntimeBoundaryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.boundary.v1
+          title: Schema Version
+          default: runtime.boundary.v1
+        service_name:
+          type: string
+          title: Service Name
+        responsibilities:
+          items:
+            type: string
+          type: array
+          title: Responsibilities
+        non_responsibilities:
+          items:
+            type: string
+          type: array
+          title: Non Responsibilities
+      additionalProperties: false
+      type: object
+      required:
+      - service_name
+      title: RuntimeBoundaryResponse
+    RuntimeMode:
+      type: string
+      enum:
+      - realtime
+      - trigger
+      - interval
+      title: RuntimeMode
+    RuntimeResultDetailResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.results.detail.v1
+          title: Schema Version
+          default: runtime.results.detail.v1
+        item:
+          $ref: '#/components/schemas/RuntimeResultRecordDetail'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - item
+      - meta
+      title: RuntimeResultDetailResponse
+    RuntimeResultListResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.results.list.v1
+          title: Schema Version
+          default: runtime.results.list.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeResultRecordSummary'
+          type: array
+          title: Items
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+          default: 0
+        limit:
+          type: integer
+          minimum: 1.0
+          title: Limit
+          default: 50
+        offset:
+          type: integer
+          minimum: 0.0
+          title: Offset
+          default: 0
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeResultListResponse
+    RuntimeResultRecordDetail:
+      properties:
+        result_record_id:
+          type: string
+          title: Result Record Id
+        channel_id:
+          type: string
+          title: Channel Id
+        channel_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Name
+        technical_place:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Technical Place
+        pipeline_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pipeline Version Id
+        runtime_execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Execution Id
+        trigger_endpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Endpoint Id
+        correlation_id:
+          type: string
+          title: Correlation Id
+        source_timestamp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Timestamp
+        completed_at:
+          type: string
+          title: Completed At
+        mode:
+          $ref: '#/components/schemas/RuntimeMode'
+          default: realtime
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          - timeout
+          title: Status
+        result_type:
+          type: string
+          maxLength: 64
+          title: Result Type
+          default: pipeline_execution
+        schema_version:
+          type: string
+          title: Schema Version
+        result:
+          additionalProperties: true
+          type: object
+          title: Result
+        trigger_response:
+          additionalProperties: true
+          type: object
+          title: Trigger Response
+        derived_preview:
+          additionalProperties: true
+          type: object
+          title: Derived Preview
+        inference_output_count:
+          type: integer
+          minimum: 0.0
+          title: Inference Output Count
+          default: 0
+        derived_output_count:
+          type: integer
+          minimum: 0.0
+          title: Derived Output Count
+          default: 0
+        overlay_primitive_count:
+          type: integer
+          minimum: 0.0
+          title: Overlay Primitive Count
+          default: 0
+        timing:
+          additionalProperties: true
+          type: object
+          title: Timing
+        model_routes:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Model Routes
+        raw_inference_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Raw Inference Outputs
+        normalized_inference_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Normalized Inference Outputs
+        derived_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Derived Outputs
+        overlay_primitives:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Overlay Primitives
+        runtime_metadata:
+          additionalProperties: true
+          type: object
+          title: Runtime Metadata
+        execution_result:
+          additionalProperties: true
+          type: object
+          title: Execution Result
+      additionalProperties: false
+      type: object
+      required:
+      - result_record_id
+      - channel_id
+      - correlation_id
+      - completed_at
+      - status
+      - schema_version
+      title: RuntimeResultRecordDetail
+    RuntimeResultRecordSummary:
+      properties:
+        result_record_id:
+          type: string
+          title: Result Record Id
+        channel_id:
+          type: string
+          title: Channel Id
+        channel_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Name
+        technical_place:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Technical Place
+        pipeline_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pipeline Version Id
+        runtime_execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Execution Id
+        trigger_endpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Endpoint Id
+        correlation_id:
+          type: string
+          title: Correlation Id
+        source_timestamp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Timestamp
+        completed_at:
+          type: string
+          title: Completed At
+        mode:
+          $ref: '#/components/schemas/RuntimeMode'
+          default: realtime
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          - timeout
+          title: Status
+        result_type:
+          type: string
+          maxLength: 64
+          title: Result Type
+          default: pipeline_execution
+        schema_version:
+          type: string
+          title: Schema Version
+        result:
+          additionalProperties: true
+          type: object
+          title: Result
+        trigger_response:
+          additionalProperties: true
+          type: object
+          title: Trigger Response
+        derived_preview:
+          additionalProperties: true
+          type: object
+          title: Derived Preview
+        inference_output_count:
+          type: integer
+          minimum: 0.0
+          title: Inference Output Count
+          default: 0
+        derived_output_count:
+          type: integer
+          minimum: 0.0
+          title: Derived Output Count
+          default: 0
+        overlay_primitive_count:
+          type: integer
+          minimum: 0.0
+          title: Overlay Primitive Count
+          default: 0
+        timing:
+          additionalProperties: true
+          type: object
+          title: Timing
+        model_routes:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Model Routes
+      additionalProperties: false
+      type: object
+      required:
+      - result_record_id
+      - channel_id
+      - correlation_id
+      - completed_at
+      - status
+      - schema_version
+      title: RuntimeResultRecordSummary
+    RuntimeStemOrientationReview:
+      properties:
+        schema_version:
+          type: string
+          const: stem.orientation.review.v1
+          title: Schema Version
+          default: stem.orientation.review.v1
+        review_id:
+          type: string
+          title: Review Id
+        result_record_id:
+          type: string
+          title: Result Record Id
+        revision:
+          type: integer
+          minimum: 1.0
+          title: Revision
+        proposal_plausibility:
+          type: string
+          enum:
+          - 'yes'
+          - 'no'
+          - unclear
+          title: Proposal Plausibility
+        direction_assessment:
+          type: string
+          enum:
+          - correct
+          - incorrect
+          - unclear
+          title: Direction Assessment
+        angle_assessment:
+          type: string
+          enum:
+          - too_small
+          - appropriate
+          - too_large
+          - not_assessable
+          title: Angle Assessment
+        bow_relevance:
+          type: string
+          enum:
+          - relevant
+          - nearly_straight
+          - unclear
+          title: Bow Relevance
+        final_position:
+          type: string
+          enum:
+          - good
+          - acceptable
+          - bad
+          - not_assessed
+          title: Final Position
+        target_frame_start:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Target Frame Start
+        target_frame_end:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Target Frame End
+        comment:
+          type: string
+          title: Comment
+          default: ''
+        special_case:
+          type: string
+          title: Special Case
+          default: ''
+        supersedes_review_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supersedes Review Id
+        reviewer_user_id:
+          type: string
+          title: Reviewer User Id
+        reviewer_username:
+          type: string
+          title: Reviewer Username
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - review_id
+      - result_record_id
+      - revision
+      - proposal_plausibility
+      - direction_assessment
+      - angle_assessment
+      - bow_relevance
+      - final_position
+      - reviewer_user_id
+      - reviewer_username
+      - created_at
+      title: RuntimeStemOrientationReview
+    RuntimeStemOrientationReviewCreateRequest:
+      properties:
+        proposal_plausibility:
+          type: string
+          enum:
+          - 'yes'
+          - 'no'
+          - unclear
+          title: Proposal Plausibility
+        direction_assessment:
+          type: string
+          enum:
+          - correct
+          - incorrect
+          - unclear
+          title: Direction Assessment
+        angle_assessment:
+          type: string
+          enum:
+          - too_small
+          - appropriate
+          - too_large
+          - not_assessable
+          title: Angle Assessment
+        bow_relevance:
+          type: string
+          enum:
+          - relevant
+          - nearly_straight
+          - unclear
+          title: Bow Relevance
+        final_position:
+          type: string
+          enum:
+          - good
+          - acceptable
+          - bad
+          - not_assessed
+          title: Final Position
+        target_frame_start:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Target Frame Start
+        target_frame_end:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Target Frame End
+        comment:
+          type: string
+          maxLength: 4000
+          title: Comment
+          default: ''
+        special_case:
+          type: string
+          maxLength: 500
+          title: Special Case
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - proposal_plausibility
+      - direction_assessment
+      - angle_assessment
+      - bow_relevance
+      - final_position
+      title: RuntimeStemOrientationReviewCreateRequest
+    RuntimeStemOrientationReviewListResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.stem-orientation-reviews.list.v1
+          title: Schema Version
+          default: runtime.stem-orientation-reviews.list.v1
+        result_record_id:
+          type: string
+          title: Result Record Id
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeStemOrientationReview'
+          type: array
+          title: Items
+        latest:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeStemOrientationReview'
+          - type: 'null'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - result_record_id
+      - meta
+      title: RuntimeStemOrientationReviewListResponse
+    RuntimeStemOrientationReviewResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.stem-orientation-reviews.detail.v1
+          title: Schema Version
+          default: runtime.stem-orientation-reviews.detail.v1
+        item:
+          $ref: '#/components/schemas/RuntimeStemOrientationReview'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - item
+      - meta
+      title: RuntimeStemOrientationReviewResponse
+    RuntimeStemShadowDriftSummary:
+      properties:
+        status:
+          type: string
+          enum:
+          - NO_DRIFT_DETECTED
+          - DRIFT_SIGNAL
+          - INSUFFICIENT_DATA
+          title: Status
+        baseline_count:
+          type: integer
+          minimum: 0.0
+          title: Baseline Count
+          default: 0
+        recent_count:
+          type: integer
+          minimum: 0.0
+          title: Recent Count
+          default: 0
+        baseline_mean_confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Baseline Mean Confidence
+        recent_mean_confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Recent Mean Confidence
+        confidence_delta:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Confidence Delta
+        baseline_uncertain_share:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Baseline Uncertain Share
+        recent_uncertain_share:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Recent Uncertain Share
+        uncertain_share_delta:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Uncertain Share Delta
+        process_calibration_hashes:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Process Calibration Hashes
+        rotation_calibration_hashes:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Rotation Calibration Hashes
+        process_calibration_change_count:
+          type: integer
+          minimum: 0.0
+          title: Process Calibration Change Count
+          default: 0
+        rotation_calibration_change_count:
+          type: integer
+          minimum: 0.0
+          title: Rotation Calibration Change Count
+          default: 0
+        drift_reason_codes:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Drift Reason Codes
+        signals:
+          items:
+            type: string
+          type: array
+          title: Signals
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      title: RuntimeStemShadowDriftSummary
+    RuntimeStemShadowEvaluationResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.stem-shadow-evaluation.v1
+          title: Schema Version
+          default: runtime.stem-shadow-evaluation.v1
+        pipeline_version_id:
+          type: string
+          title: Pipeline Version Id
+        shadow_mode_enabled:
+          type: boolean
+          title: Shadow Mode Enabled
+        evaluation_status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+          - NO_SESSIONS
+          title: Evaluation Status
+        sessions_available:
+          type: integer
+          minimum: 0.0
+          title: Sessions Available
+          default: 0
+        sessions_analyzed:
+          type: integer
+          minimum: 0.0
+          title: Sessions Analyzed
+          default: 0
+        excluded_session_count:
+          type: integer
+          minimum: 0.0
+          title: Excluded Session Count
+          default: 0
+        maximum_sessions:
+          type: integer
+          minimum: 1.0
+          title: Maximum Sessions
+        limit_reached:
+          type: boolean
+          title: Limit Reached
+          default: false
+        completed_from:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Completed From
+        completed_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Completed To
+        decision_distribution:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Decision Distribution
+        no_rotation_share:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: No Rotation Share
+          default: 0
+        uncertain_share:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Uncertain Share
+          default: 0
+        deadline_miss_share:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Deadline Miss Share
+          default: 0
+        angle_histogram:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowHistogramBin'
+          type: array
+          title: Angle Histogram
+        angle_missing_count:
+          type: integer
+          minimum: 0.0
+          title: Angle Missing Count
+          default: 0
+        confidence_histogram:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowHistogramBin'
+          type: array
+          title: Confidence Histogram
+        confidence_percentiles:
+          additionalProperties:
+            anyOf:
+            - type: number
+            - type: 'null'
+          type: object
+          title: Confidence Percentiles
+        reason_code_distribution:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Reason Code Distribution
+        decision_latency:
+          $ref: '#/components/schemas/RuntimeStemShadowLatencySummary'
+        drift:
+          $ref: '#/components/schemas/RuntimeStemShadowDriftSummary'
+        feedback:
+          $ref: '#/components/schemas/RuntimeStemShadowFeedbackSummary'
+        report_json:
+          additionalProperties: true
+          type: object
+          title: Report Json
+        report_markdown:
+          type: string
+          title: Report Markdown
+          default: ''
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - pipeline_version_id
+      - shadow_mode_enabled
+      - evaluation_status
+      - maximum_sessions
+      - decision_latency
+      - drift
+      - feedback
+      - meta
+      title: RuntimeStemShadowEvaluationResponse
+    RuntimeStemShadowFeedbackSummary:
+      properties:
+        reviewed_session_count:
+          type: integer
+          minimum: 0.0
+          title: Reviewed Session Count
+          default: 0
+        ratings:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Ratings
+        technical_error_reasons:
+          items:
+            $ref: '#/components/schemas/RuntimeStemShadowMetricCount'
+          type: array
+          title: Technical Error Reasons
+      additionalProperties: false
+      type: object
+      title: RuntimeStemShadowFeedbackSummary
+    RuntimeStemShadowHistogramBin:
+      properties:
+        lower_bound:
+          type: number
+          title: Lower Bound
+        upper_bound:
+          type: number
+          title: Upper Bound
+        count:
+          type: integer
+          minimum: 0.0
+          title: Count
+      additionalProperties: false
+      type: object
+      required:
+      - lower_bound
+      - upper_bound
+      - count
+      title: RuntimeStemShadowHistogramBin
+    RuntimeStemShadowLatencySummary:
+      properties:
+        measured_count:
+          type: integer
+          minimum: 0.0
+          title: Measured Count
+        missing_count:
+          type: integer
+          minimum: 0.0
+          title: Missing Count
+        minimum_ms:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Minimum Ms
+        median_ms:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Median Ms
+        p90_ms:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: P90 Ms
+        p95_ms:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: P95 Ms
+        maximum_ms:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Maximum Ms
+      additionalProperties: false
+      type: object
+      required:
+      - measured_count
+      - missing_count
+      title: RuntimeStemShadowLatencySummary
+    RuntimeStemShadowMetricCount:
+      properties:
+        key:
+          type: string
+          title: Key
+        count:
+          type: integer
+          minimum: 0.0
+          title: Count
+        share:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Share
+          default: 0
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - count
+      title: RuntimeStemShadowMetricCount
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

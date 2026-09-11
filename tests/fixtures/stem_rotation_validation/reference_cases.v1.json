@@ -1,0 +1,125 @@
+{
+  "schema_version": "stem.rotation-reference-cases.v1",
+  "coordinate_system": "MACHINE_X_Y_Z_RIGHT_HANDED_V1",
+  "units": {
+    "angle": "deg",
+    "length": "mm"
+  },
+  "optimizer_config": {
+    "coarse_angle_step_deg": 1.0,
+    "fine_angle_step_deg": 0.1,
+    "fine_search_half_width_deg": 2.0,
+    "score_tolerance_mm": 1.0,
+    "min_gain_mm": 3.0,
+    "min_rotation_deg": 1.0,
+    "rotation_negative_limit_deg": -90.0,
+    "rotation_positive_limit_deg": 90.0
+  },
+  "cases": [
+    {
+      "id": "straight-round-no-gain",
+      "synthetic": {
+        "case": "straight_round",
+        "seed": 20260821,
+        "length_mm": 4000.0,
+        "slice_spacing_mm": 50.0,
+        "diameter_start_mm": 240.0
+      },
+      "priority_mode": "VORSCHNITT_KRITISCH",
+      "expected": {
+        "result_valid": true,
+        "should_rotate": false,
+        "delta_angle_deg": [-0.01, 0.01],
+        "gain_mm": [0.0, 0.000001],
+        "limiting_x_current_mm": [-1.0, 1.0],
+        "limiting_x_optimal_mm": [-1.0, 1.0]
+      }
+    },
+    {
+      "id": "centered-ellipse-vertical",
+      "synthetic": {
+        "case": "centered_ellipse",
+        "seed": 20260821,
+        "length_mm": 4000.0,
+        "slice_spacing_mm": 50.0,
+        "diameter_start_mm": 240.0,
+        "axis_ratio": 0.75,
+        "ellipse_angle_deg": 25.0
+      },
+      "priority_mode": "VORSCHNITT_KRITISCH",
+      "expected": {
+        "result_valid": true,
+        "should_rotate": true,
+        "delta_angle_deg": [55.0, 65.0],
+        "gain_mm": [50.0, 53.0],
+        "limiting_x_current_mm": [-1.0, 1.0],
+        "limiting_x_optimal_mm": [-1.0, 1.0]
+      }
+    },
+    {
+      "id": "centered-ellipse-horizontal",
+      "synthetic": {
+        "case": "centered_ellipse",
+        "seed": 20260821,
+        "length_mm": 4000.0,
+        "slice_spacing_mm": 50.0,
+        "diameter_start_mm": 240.0,
+        "axis_ratio": 0.75,
+        "ellipse_angle_deg": 25.0
+      },
+      "priority_mode": "NACHSCHNITT_KRITISCH",
+      "expected": {
+        "result_valid": true,
+        "should_rotate": true,
+        "delta_angle_deg": [-25.0, -15.0],
+        "gain_mm": [13.0, 16.0],
+        "limiting_x_current_mm": [-1.0, 1.0],
+        "limiting_x_optimal_mm": [-1.0, 1.0]
+      }
+    },
+    {
+      "id": "curved-round-directional",
+      "synthetic": {
+        "case": "curved_round",
+        "seed": 20260821,
+        "length_mm": 4000.0,
+        "slice_spacing_mm": 50.0,
+        "diameter_start_mm": 240.0,
+        "curvature_amplitude_mm": 35.0,
+        "curvature_direction_deg": 90.0
+      },
+      "priority_mode": "VORSCHNITT_KRITISCH",
+      "expected": {
+        "result_valid": true,
+        "should_rotate": true,
+        "delta_angle_deg": [85.0, 90.0],
+        "gain_mm": [57.0, 61.0],
+        "limiting_x_current_mm": [1950.0, 2050.0],
+        "limiting_x_optimal_mm": [1950.0, 2050.0]
+      }
+    },
+    {
+      "id": "curved-ellipse-compromise",
+      "synthetic": {
+        "case": "curved_ellipse",
+        "seed": 20260821,
+        "length_mm": 4000.0,
+        "slice_spacing_mm": 50.0,
+        "diameter_start_mm": 240.0,
+        "axis_ratio": 0.75,
+        "ellipse_angle_deg": 25.0,
+        "curvature_amplitude_mm": 35.0,
+        "curvature_direction_deg": 90.0
+      },
+      "priority_mode": "VORSCHNITT_KRITISCH",
+      "expected": {
+        "result_valid": true,
+        "should_rotate": true,
+        "delta_angle_deg": [75.0, 82.0],
+        "gain_mm": [97.0, 101.0],
+        "limiting_x_current_mm": [1950.0, 2050.0],
+        "limiting_x_optimal_mm": [1950.0, 2050.0]
+      }
+    }
+  ]
+}

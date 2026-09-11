@@ -1,0 +1,16 @@
+{
+  "name": "cv-platform-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.10.0",
+  "scripts": {
+    "demo:admin-web": "pnpm --filter @cv-platform/admin-web demo",
+    "build:demo": "pnpm --filter @cv-platform/admin-web build:demo",
+    "preview:demo": "pnpm --filter @cv-platform/admin-web preview:demo",
+    "dev:admin-web": "pnpm --filter @cv-platform/admin-web dev",
+    "build:admin-web": "pnpm --filter @cv-platform/admin-web build",
+    "lint:frontend": "pnpm -r lint",
+    "test:frontend": "pnpm -r test",
+    "generate:openapi": "uv run python scripts/dev/export_openapi.py",
+    "generate:config-schema": "uv run python scripts/dev/export_config_schema.py"
+  }
+}

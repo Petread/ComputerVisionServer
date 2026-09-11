@@ -1,0 +1,1503 @@
+{
+  "$defs": {
+    "ApiKeyBootstrapConfig": {
+      "properties": {
+        "key_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+          "title": "Key Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "intended_usage": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intended Usage"
+        },
+        "subject_type": {
+          "default": "inference_client",
+          "maxLength": 64,
+          "minLength": 3,
+          "title": "Subject Type",
+          "type": "string"
+        },
+        "subject_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Scopes",
+          "type": "array"
+        },
+        "secret_file": {
+          "title": "Secret File",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "endpoint_mode_hint": {
+          "anyOf": [
+            {
+              "enum": [
+                "realtime",
+                "batch",
+                "both"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpoint Mode Hint"
+        }
+      },
+      "required": [
+        "key_id",
+        "subject_id",
+        "secret_file"
+      ],
+      "title": "ApiKeyBootstrapConfig",
+      "type": "object"
+    },
+    "ApiKeyConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "authorization_header_name": {
+          "default": "Authorization",
+          "title": "Authorization Header Name",
+          "type": "string"
+        },
+        "legacy_header_name": {
+          "default": "X-API-Key",
+          "title": "Legacy Header Name",
+          "type": "string"
+        },
+        "bootstrap_keys": {
+          "items": {
+            "$ref": "#/$defs/ApiKeyBootstrapConfig"
+          },
+          "title": "Bootstrap Keys",
+          "type": "array"
+        }
+      },
+      "title": "ApiKeyConfig",
+      "type": "object"
+    },
+    "ArtifactRetentionConfig": {
+      "properties": {
+        "checkpoints_days": {
+          "default": 30,
+          "title": "Checkpoints Days",
+          "type": "integer"
+        },
+        "training_workspace_days": {
+          "default": 7,
+          "title": "Training Workspace Days",
+          "type": "integer"
+        },
+        "exports_days": {
+          "default": 30,
+          "title": "Exports Days",
+          "type": "integer"
+        },
+        "batch_outputs_days": {
+          "default": 14,
+          "title": "Batch Outputs Days",
+          "type": "integer"
+        },
+        "quarantine_days": {
+          "default": 7,
+          "title": "Quarantine Days",
+          "type": "integer"
+        },
+        "runtime_operational_result_minutes": {
+          "default": 60,
+          "maximum": 1440,
+          "minimum": 5,
+          "title": "Runtime Operational Result Minutes",
+          "type": "integer"
+        },
+        "runtime_result_prune_batch_size": {
+          "default": 1000,
+          "maximum": 100000,
+          "minimum": 100,
+          "title": "Runtime Result Prune Batch Size",
+          "type": "integer"
+        },
+        "runtime_delivery_metadata_days": {
+          "default": 7,
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Runtime Delivery Metadata Days",
+          "type": "integer"
+        },
+        "runtime_capture_metadata_days": {
+          "default": 30,
+          "maximum": 3650,
+          "minimum": 1,
+          "title": "Runtime Capture Metadata Days",
+          "type": "integer"
+        },
+        "runtime_temporal_sample_days": {
+          "default": 30,
+          "maximum": 3650,
+          "minimum": 1,
+          "title": "Runtime Temporal Sample Days",
+          "type": "integer"
+        }
+      },
+      "title": "ArtifactRetentionConfig",
+      "type": "object"
+    },
+    "BackupConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "metadata_retention_days": {
+          "default": 30,
+          "title": "Metadata Retention Days",
+          "type": "integer"
+        }
+      },
+      "title": "BackupConfig",
+      "type": "object"
+    },
+    "CorsConfig": {
+      "properties": {
+        "allowed_origins": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Origins",
+          "type": "array"
+        },
+        "allow_methods": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allow Methods",
+          "type": "array"
+        },
+        "allow_headers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allow Headers",
+          "type": "array"
+        },
+        "allow_credentials": {
+          "default": true,
+          "title": "Allow Credentials",
+          "type": "boolean"
+        }
+      },
+      "title": "CorsConfig",
+      "type": "object"
+    },
+    "DatabaseConfig": {
+      "properties": {
+        "host": {
+          "default": "postgres",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 5432,
+          "title": "Port",
+          "type": "integer"
+        },
+        "database": {
+          "default": "cv_platform",
+          "title": "Database",
+          "type": "string"
+        },
+        "user": {
+          "default": "cv_platform",
+          "title": "User",
+          "type": "string"
+        },
+        "password_file": {
+          "default": "/run/secrets/postgres_app_password",
+          "title": "Password File",
+          "type": "string"
+        },
+        "pool_size": {
+          "default": 10,
+          "title": "Pool Size",
+          "type": "integer"
+        }
+      },
+      "title": "DatabaseConfig",
+      "type": "object"
+    },
+    "DatasetWorkflowConfig": {
+      "properties": {
+        "default_export_format": {
+          "default": "JSON",
+          "title": "Default Export Format",
+          "type": "string"
+        },
+        "automatic_snapshot_actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Automatic Snapshot Actions",
+          "type": "array"
+        },
+        "minimum_annotation_count": {
+          "default": 1,
+          "title": "Minimum Annotation Count",
+          "type": "integer"
+        },
+        "required_classes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Classes",
+          "type": "array"
+        },
+        "default_train_ratio": {
+          "default": 80,
+          "title": "Default Train Ratio",
+          "type": "integer"
+        },
+        "default_val_ratio": {
+          "default": 10,
+          "title": "Default Val Ratio",
+          "type": "integer"
+        },
+        "default_test_ratio": {
+          "default": 10,
+          "title": "Default Test Ratio",
+          "type": "integer"
+        }
+      },
+      "title": "DatasetWorkflowConfig",
+      "type": "object"
+    },
+    "DvcConfig": {
+      "properties": {
+        "repo_root": {
+          "default": "/workspace/.local/dvc",
+          "title": "Repo Root",
+          "type": "string"
+        },
+        "remote_name": {
+          "default": "local",
+          "title": "Remote Name",
+          "type": "string"
+        },
+        "remote_url": {
+          "default": "/workspace/.local/dvc-remote",
+          "title": "Remote Url",
+          "type": "string"
+        }
+      },
+      "title": "DvcConfig",
+      "type": "object"
+    },
+    "EnvironmentName": {
+      "enum": [
+        "dev",
+        "prod"
+      ],
+      "title": "EnvironmentName",
+      "type": "string"
+    },
+    "GpuGuardrailsConfig": {
+      "properties": {
+        "realtime_reserved_memory_gb": {
+          "default": 8,
+          "title": "Realtime Reserved Memory Gb",
+          "type": "integer"
+        },
+        "allow_training_start": {
+          "default": true,
+          "title": "Allow Training Start",
+          "type": "boolean"
+        },
+        "pause_training_on_slo_pressure": {
+          "default": true,
+          "title": "Pause Training On Slo Pressure",
+          "type": "boolean"
+        }
+      },
+      "title": "GpuGuardrailsConfig",
+      "type": "object"
+    },
+    "InferenceLimitsConfig": {
+      "properties": {
+        "realtime_timeout_ms": {
+          "default": 1500,
+          "title": "Realtime Timeout Ms",
+          "type": "integer"
+        },
+        "batch_timeout_seconds": {
+          "default": 300,
+          "title": "Batch Timeout Seconds",
+          "type": "integer"
+        },
+        "batch_chunk_size": {
+          "default": 64,
+          "title": "Batch Chunk Size",
+          "type": "integer"
+        },
+        "realtime_max_concurrency": {
+          "default": 4,
+          "title": "Realtime Max Concurrency",
+          "type": "integer"
+        },
+        "realtime_per_release_max_concurrency": {
+          "default": 2,
+          "title": "Realtime Per Release Max Concurrency",
+          "type": "integer"
+        },
+        "batch_max_concurrency": {
+          "default": 2,
+          "title": "Batch Max Concurrency",
+          "type": "integer"
+        },
+        "batch_per_release_max_concurrency": {
+          "default": 1,
+          "title": "Batch Per Release Max Concurrency",
+          "type": "integer"
+        },
+        "realtime_requests_per_minute": {
+          "default": 240,
+          "title": "Realtime Requests Per Minute",
+          "type": "integer"
+        },
+        "batch_requests_per_minute": {
+          "default": 60,
+          "title": "Batch Requests Per Minute",
+          "type": "integer"
+        },
+        "metrics_window_size": {
+          "default": 200,
+          "title": "Metrics Window Size",
+          "type": "integer"
+        },
+        "routing_cache_ttl_seconds": {
+          "default": 5,
+          "title": "Routing Cache Ttl Seconds",
+          "type": "integer"
+        },
+        "warm_ttl_seconds": {
+          "default": 120,
+          "title": "Warm Ttl Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "InferenceLimitsConfig",
+      "type": "object"
+    },
+    "LabelStudioConfig": {
+      "properties": {
+        "base_url": {
+          "default": "http://label-studio:8080",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "token_file": {
+          "default": "/run/secrets/labelstudio_api_token",
+          "title": "Token File",
+          "type": "string"
+        },
+        "ml_backend_adapter_url": {
+          "default": "http://label-studio-ml-adapter:8089",
+          "title": "Ml Backend Adapter Url",
+          "type": "string"
+        },
+        "ml_backend_timeout_seconds": {
+          "default": 60,
+          "title": "Ml Backend Timeout Seconds",
+          "type": "integer"
+        },
+        "request_timeout_seconds": {
+          "default": 30,
+          "title": "Request Timeout Seconds",
+          "type": "integer"
+        },
+        "export_poll_interval_seconds": {
+          "default": 3,
+          "title": "Export Poll Interval Seconds",
+          "type": "integer"
+        },
+        "export_poll_attempts": {
+          "default": 40,
+          "title": "Export Poll Attempts",
+          "type": "integer"
+        },
+        "local_files_root": {
+          "default": "/srv/cv-platform",
+          "title": "Local Files Root",
+          "type": "string"
+        },
+        "local_files_url_prefix": {
+          "default": "/data/local-files/?d=",
+          "title": "Local Files Url Prefix",
+          "type": "string"
+        },
+        "webhook_auth": {
+          "$ref": "#/$defs/LabelStudioWebhookAuthConfig"
+        }
+      },
+      "title": "LabelStudioConfig",
+      "type": "object"
+    },
+    "LabelStudioWebhookAuthConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "header_name": {
+          "default": "X-Label-Studio-Signature",
+          "title": "Header Name",
+          "type": "string"
+        },
+        "secret_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "/run/secrets/labelstudio_webhook_secret",
+          "title": "Secret File"
+        },
+        "allowed_cidrs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Cidrs",
+          "type": "array"
+        }
+      },
+      "title": "LabelStudioWebhookAuthConfig",
+      "type": "object"
+    },
+    "LogRetentionConfig": {
+      "properties": {
+        "operational_days": {
+          "default": 14,
+          "title": "Operational Days",
+          "type": "integer"
+        },
+        "audit_days": {
+          "default": 365,
+          "title": "Audit Days",
+          "type": "integer"
+        }
+      },
+      "title": "LogRetentionConfig",
+      "type": "object"
+    },
+    "MlflowConfig": {
+      "properties": {
+        "base_url": {
+          "default": "http://mlflow:5000",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "tracking_uri": {
+          "default": "http://mlflow:5000",
+          "title": "Tracking Uri",
+          "type": "string"
+        }
+      },
+      "title": "MlflowConfig",
+      "type": "object"
+    },
+    "ObservabilityThresholdsConfig": {
+      "properties": {
+        "queue_depth_warning": {
+          "default": 100,
+          "title": "Queue Depth Warning",
+          "type": "integer"
+        },
+        "queue_depth_critical": {
+          "default": 500,
+          "title": "Queue Depth Critical",
+          "type": "integer"
+        },
+        "queue_oldest_age_warning_seconds": {
+          "default": 300,
+          "title": "Queue Oldest Age Warning Seconds",
+          "type": "integer"
+        },
+        "queue_oldest_age_critical_seconds": {
+          "default": 1800,
+          "title": "Queue Oldest Age Critical Seconds",
+          "type": "integer"
+        },
+        "worker_heartbeat_stale_seconds": {
+          "default": 90,
+          "title": "Worker Heartbeat Stale Seconds",
+          "type": "integer"
+        },
+        "disk_usage_warning_percent": {
+          "default": 80,
+          "title": "Disk Usage Warning Percent",
+          "type": "integer"
+        },
+        "disk_usage_critical_percent": {
+          "default": 90,
+          "title": "Disk Usage Critical Percent",
+          "type": "integer"
+        },
+        "gpu_memory_warning_percent": {
+          "default": 85,
+          "title": "Gpu Memory Warning Percent",
+          "type": "integer"
+        },
+        "gpu_memory_critical_percent": {
+          "default": 95,
+          "title": "Gpu Memory Critical Percent",
+          "type": "integer"
+        }
+      },
+      "title": "ObservabilityThresholdsConfig",
+      "type": "object"
+    },
+    "RedisConfig": {
+      "properties": {
+        "host": {
+          "default": "redis",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 6379,
+          "title": "Port",
+          "type": "integer"
+        },
+        "database": {
+          "default": 0,
+          "title": "Database",
+          "type": "integer"
+        },
+        "password_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password File"
+        }
+      },
+      "title": "RedisConfig",
+      "type": "object"
+    },
+    "RequestLimitsConfig": {
+      "properties": {
+        "default_timeout_seconds": {
+          "default": 30,
+          "title": "Default Timeout Seconds",
+          "type": "integer"
+        },
+        "upload_timeout_seconds": {
+          "default": 120,
+          "title": "Upload Timeout Seconds",
+          "type": "integer"
+        },
+        "edge_software_upload_timeout_seconds": {
+          "default": 3600,
+          "title": "Edge Software Upload Timeout Seconds",
+          "type": "integer"
+        },
+        "edge_software_upload_limit_bytes": {
+          "default": 8590983168,
+          "title": "Edge Software Upload Limit Bytes",
+          "type": "integer"
+        },
+        "default_body_limit_bytes": {
+          "default": 1048576,
+          "title": "Default Body Limit Bytes",
+          "type": "integer"
+        },
+        "inference_body_limit_bytes": {
+          "default": 3145728,
+          "title": "Inference Body Limit Bytes",
+          "type": "integer"
+        },
+        "upload_body_limit_bytes": {
+          "default": 33554432,
+          "title": "Upload Body Limit Bytes",
+          "type": "integer"
+        },
+        "pipeline_graph_body_limit_bytes": {
+          "default": 157286400,
+          "title": "Pipeline Graph Body Limit Bytes",
+          "type": "integer"
+        },
+        "camera_calibration_body_limit_bytes": {
+          "default": 67108864,
+          "title": "Camera Calibration Body Limit Bytes",
+          "type": "integer"
+        },
+        "batch_manifest_max_bytes": {
+          "default": 10485760,
+          "title": "Batch Manifest Max Bytes",
+          "type": "integer"
+        },
+        "max_image_bytes": {
+          "default": 5242880,
+          "title": "Max Image Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "RequestLimitsConfig",
+      "type": "object"
+    },
+    "RuntimePlaneConfig": {
+      "properties": {
+        "realtime_frame_buffer_size": {
+          "default": 2,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Realtime Frame Buffer Size",
+          "type": "integer"
+        },
+        "realtime_drop_policy": {
+          "default": "drop_oldest",
+          "enum": [
+            "drop_oldest",
+            "drop_newest"
+          ],
+          "title": "Realtime Drop Policy",
+          "type": "string"
+        },
+        "realtime_pipeline_max_inflight": {
+          "default": 2,
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Realtime Pipeline Max Inflight",
+          "type": "integer"
+        },
+        "realtime_target_latency_ms": {
+          "default": 250,
+          "maximum": 5000,
+          "minimum": 20,
+          "title": "Realtime Target Latency Ms",
+          "type": "integer"
+        },
+        "realtime_max_channels_per_executor": {
+          "default": 8,
+          "maximum": 128,
+          "minimum": 1,
+          "title": "Realtime Max Channels Per Executor",
+          "type": "integer"
+        },
+        "trigger_timeout_ms": {
+          "default": 2500,
+          "maximum": 30000,
+          "minimum": 50,
+          "title": "Trigger Timeout Ms",
+          "type": "integer"
+        },
+        "trigger_max_concurrency": {
+          "default": 4,
+          "maximum": 128,
+          "minimum": 1,
+          "title": "Trigger Max Concurrency",
+          "type": "integer"
+        },
+        "interval_min_period_ms": {
+          "default": 1000,
+          "maximum": 3600000,
+          "minimum": 100,
+          "title": "Interval Min Period Ms",
+          "type": "integer"
+        },
+        "executor_heartbeat_interval_seconds": {
+          "default": 3,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Executor Heartbeat Interval Seconds",
+          "type": "integer"
+        },
+        "executor_stale_after_seconds": {
+          "default": 15,
+          "maximum": 600,
+          "minimum": 2,
+          "title": "Executor Stale After Seconds",
+          "type": "integer"
+        },
+        "executor_stop_grace_period_seconds": {
+          "default": 15,
+          "maximum": 600,
+          "minimum": 2,
+          "title": "Executor Stop Grace Period Seconds",
+          "type": "integer"
+        },
+        "routing_cache_ttl_seconds": {
+          "default": 5,
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Routing Cache Ttl Seconds",
+          "type": "integer"
+        },
+        "model_capability_cache_ttl_seconds": {
+          "default": 10,
+          "maximum": 600,
+          "minimum": 1,
+          "title": "Model Capability Cache Ttl Seconds",
+          "type": "integer"
+        },
+        "capture_queue_name": {
+          "default": "runtime-capture",
+          "title": "Capture Queue Name",
+          "type": "string"
+        },
+        "connector_queue_name": {
+          "default": "runtime-connector",
+          "title": "Connector Queue Name",
+          "type": "string"
+        },
+        "capture_max_image_bytes": {
+          "default": 5242880,
+          "maximum": 104857600,
+          "minimum": 1024,
+          "title": "Capture Max Image Bytes",
+          "type": "integer"
+        },
+        "capture_default_rate_per_minute": {
+          "default": 60,
+          "maximum": 60000,
+          "minimum": 1,
+          "title": "Capture Default Rate Per Minute",
+          "type": "integer"
+        },
+        "capture_storage_max_bytes": {
+          "default": 107374182400,
+          "maximum": 10995116277760,
+          "minimum": 1073741824,
+          "title": "Capture Storage Max Bytes",
+          "type": "integer"
+        },
+        "capture_min_free_bytes": {
+          "default": 21474836480,
+          "maximum": 1099511627776,
+          "minimum": 1073741824,
+          "title": "Capture Min Free Bytes",
+          "type": "integer"
+        },
+        "capture_storage_usage_cache_seconds": {
+          "default": 60,
+          "maximum": 3600,
+          "minimum": 5,
+          "title": "Capture Storage Usage Cache Seconds",
+          "type": "integer"
+        },
+        "temporal_sample_spool_queue_capacity": {
+          "default": 512,
+          "maximum": 10000,
+          "minimum": 8,
+          "title": "Temporal Sample Spool Queue Capacity",
+          "type": "integer"
+        },
+        "label_studio_submission_mode": {
+          "default": "local_file_url",
+          "enum": [
+            "api_upload",
+            "local_file_url"
+          ],
+          "title": "Label Studio Submission Mode",
+          "type": "string"
+        },
+        "plugin_entrypoint_group": {
+          "default": "cv_platform.runtime_nodes",
+          "title": "Plugin Entrypoint Group",
+          "type": "string"
+        },
+        "plugin_allowlist": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Plugin Allowlist",
+          "type": "array"
+        },
+        "inference_gateway_realtime_url": {
+          "default": "http://inference-gateway-rt:8087",
+          "title": "Inference Gateway Realtime Url",
+          "type": "string"
+        },
+        "inference_gateway_bearer_token_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inference Gateway Bearer Token File"
+        },
+        "result_endpoint_auth_required": {
+          "default": false,
+          "title": "Result Endpoint Auth Required",
+          "type": "boolean"
+        },
+        "stream_auth_enabled": {
+          "default": false,
+          "title": "Stream Auth Enabled",
+          "type": "boolean"
+        },
+        "stream_access_policy": {
+          "default": "unauthenticated_lan",
+          "enum": [
+            "unauthenticated_lan",
+            "session",
+            "token",
+            "internal_only"
+          ],
+          "title": "Stream Access Policy",
+          "type": "string"
+        },
+        "stream_media_server_kind": {
+          "const": "mediamtx",
+          "default": "mediamtx",
+          "title": "Stream Media Server Kind",
+          "type": "string"
+        },
+        "stream_mediamtx_api_url": {
+          "default": "http://127.0.0.1:9997",
+          "title": "Stream Mediamtx Api Url",
+          "type": "string"
+        },
+        "stream_public_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stream Public Host"
+        },
+        "stream_rtsp_port": {
+          "default": 8554,
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Stream Rtsp Port",
+          "type": "integer"
+        },
+        "stream_webrtc_port": {
+          "default": 8889,
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Stream Webrtc Port",
+          "type": "integer"
+        },
+        "stream_webrtc_ice_tcp_port": {
+          "default": 8189,
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Stream Webrtc Ice Tcp Port",
+          "type": "integer"
+        },
+        "stream_rtsp_publish_host": {
+          "default": "127.0.0.1",
+          "title": "Stream Rtsp Publish Host",
+          "type": "string"
+        },
+        "stream_gstreamer_python_bin": {
+          "default": "/usr/bin/python3",
+          "title": "Stream Gstreamer Python Bin",
+          "type": "string"
+        },
+        "stream_bitrate_override_kbps": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 128,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stream Bitrate Override Kbps"
+        },
+        "stream_auto_bitrate_bits_per_pixel": {
+          "default": 0.12,
+          "maximum": 2.0,
+          "minimum": 0.01,
+          "title": "Stream Auto Bitrate Bits Per Pixel",
+          "type": "number"
+        },
+        "stream_auto_bitrate_min_kbps": {
+          "default": 2000,
+          "maximum": 100000,
+          "minimum": 128,
+          "title": "Stream Auto Bitrate Min Kbps",
+          "type": "integer"
+        },
+        "stream_auto_bitrate_max_kbps": {
+          "default": 20000,
+          "maximum": 100000,
+          "minimum": 128,
+          "title": "Stream Auto Bitrate Max Kbps",
+          "type": "integer"
+        },
+        "stream_publisher_restart_backoff_initial_seconds": {
+          "default": 0.25,
+          "maximum": 30.0,
+          "minimum": 0.05,
+          "title": "Stream Publisher Restart Backoff Initial Seconds",
+          "type": "number"
+        },
+        "stream_publisher_restart_backoff_max_seconds": {
+          "default": 10.0,
+          "maximum": 300.0,
+          "minimum": 0.1,
+          "title": "Stream Publisher Restart Backoff Max Seconds",
+          "type": "number"
+        },
+        "camera_media_runtime_dir": {
+          "default": "/run/ybb-camera-media",
+          "title": "Camera Media Runtime Dir",
+          "type": "string"
+        },
+        "camera_media_frame_slots": {
+          "default": 4,
+          "maximum": 16,
+          "minimum": 2,
+          "title": "Camera Media Frame Slots",
+          "type": "integer"
+        },
+        "camera_media_reconcile_interval_seconds": {
+          "default": 0.5,
+          "maximum": 10.0,
+          "minimum": 0.1,
+          "title": "Camera Media Reconcile Interval Seconds",
+          "type": "number"
+        },
+        "camera_media_heartbeat_interval_seconds": {
+          "default": 1.0,
+          "maximum": 30.0,
+          "minimum": 0.25,
+          "title": "Camera Media Heartbeat Interval Seconds",
+          "type": "number"
+        },
+        "camera_media_stale_after_seconds": {
+          "default": 10.0,
+          "maximum": 300.0,
+          "minimum": 1.0,
+          "title": "Camera Media Stale After Seconds",
+          "type": "number"
+        },
+        "camera_media_source_retry_seconds": {
+          "default": 1.0,
+          "maximum": 60.0,
+          "minimum": 0.1,
+          "title": "Camera Media Source Retry Seconds",
+          "type": "number"
+        },
+        "plc_writes_allowed": {
+          "default": false,
+          "title": "Plc Writes Allowed",
+          "type": "boolean"
+        }
+      },
+      "title": "RuntimePlaneConfig",
+      "type": "object"
+    },
+    "ServiceRuntimeConfig": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "host": {
+          "default": "0.0.0.0",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 8080,
+          "title": "Port",
+          "type": "integer"
+        },
+        "public_base_url": {
+          "default": "http://localhost:8080",
+          "title": "Public Base Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ServiceRuntimeConfig",
+      "type": "object"
+    },
+    "SessionConfig": {
+      "properties": {
+        "cookie_name": {
+          "default": "cv_session",
+          "title": "Cookie Name",
+          "type": "string"
+        },
+        "csrf_cookie_name": {
+          "default": "cv_csrf",
+          "title": "Csrf Cookie Name",
+          "type": "string"
+        },
+        "csrf_header_name": {
+          "default": "X-CSRF-Token",
+          "title": "Csrf Header Name",
+          "type": "string"
+        },
+        "secure_cookie": {
+          "default": false,
+          "title": "Secure Cookie",
+          "type": "boolean"
+        },
+        "same_site": {
+          "default": "lax",
+          "enum": [
+            "lax",
+            "strict"
+          ],
+          "title": "Same Site",
+          "type": "string"
+        },
+        "max_age_seconds": {
+          "default": 43200,
+          "title": "Max Age Seconds",
+          "type": "integer"
+        },
+        "secret_file": {
+          "default": "/run/secrets/session_secret",
+          "title": "Secret File",
+          "type": "string"
+        },
+        "bootstrap_admin_username": {
+          "default": "admin",
+          "title": "Bootstrap Admin Username",
+          "type": "string"
+        },
+        "bootstrap_admin_role": {
+          "default": "platform_admin",
+          "title": "Bootstrap Admin Role",
+          "type": "string"
+        },
+        "bootstrap_admin_password_hash_file": {
+          "default": "/run/secrets/bootstrap_admin_password_hash",
+          "title": "Bootstrap Admin Password Hash File",
+          "type": "string"
+        }
+      },
+      "title": "SessionConfig",
+      "type": "object"
+    },
+    "StorageRoots": {
+      "properties": {
+        "state_root": {
+          "default": ".local/state",
+          "title": "State Root",
+          "type": "string"
+        },
+        "training_root": {
+          "default": ".local/state/training",
+          "title": "Training Root",
+          "type": "string"
+        },
+        "serving_root": {
+          "default": ".local/state/serving",
+          "title": "Serving Root",
+          "type": "string"
+        },
+        "audit_root": {
+          "default": ".local/state/audit",
+          "title": "Audit Root",
+          "type": "string"
+        },
+        "logs_root": {
+          "default": ".local/state/logs",
+          "title": "Logs Root",
+          "type": "string"
+        }
+      },
+      "title": "StorageRoots",
+      "type": "object"
+    },
+    "TlsConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "cert_path": {
+          "default": "/run/secrets/tls_cert.pem",
+          "title": "Cert Path",
+          "type": "string"
+        },
+        "key_path": {
+          "default": "/run/secrets/tls_key.pem",
+          "title": "Key Path",
+          "type": "string"
+        }
+      },
+      "title": "TlsConfig",
+      "type": "object"
+    },
+    "TrainingRuntimeConfig": {
+      "properties": {
+        "max_parallel_jobs": {
+          "default": 1,
+          "title": "Max Parallel Jobs",
+          "type": "integer"
+        },
+        "heartbeat_interval_seconds": {
+          "default": 5,
+          "title": "Heartbeat Interval Seconds",
+          "type": "integer"
+        },
+        "stale_after_seconds": {
+          "default": 30,
+          "title": "Stale After Seconds",
+          "type": "integer"
+        },
+        "checkpoint_interval_steps": {
+          "default": 25,
+          "title": "Checkpoint Interval Steps",
+          "type": "integer"
+        },
+        "safe_retry_limit": {
+          "default": 2,
+          "title": "Safe Retry Limit",
+          "type": "integer"
+        },
+        "job_timeout_seconds": {
+          "default": 86400,
+          "title": "Job Timeout Seconds",
+          "type": "integer"
+        },
+        "gpu_devices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Gpu Devices",
+          "type": "array"
+        },
+        "trainer_mode": {
+          "default": "real",
+          "enum": [
+            "real",
+            "simulation"
+          ],
+          "title": "Trainer Mode",
+          "type": "string"
+        },
+        "default_backend": {
+          "default": "openmmlab-mmyolo",
+          "title": "Default Backend",
+          "type": "string"
+        },
+        "simulation_mode_enabled": {
+          "default": true,
+          "title": "Simulation Mode Enabled",
+          "type": "boolean"
+        },
+        "allow_simulation_deployment": {
+          "default": false,
+          "title": "Allow Simulation Deployment",
+          "type": "boolean"
+        },
+        "allow_onnx_deployment_fallback": {
+          "default": false,
+          "title": "Allow Onnx Deployment Fallback",
+          "type": "boolean"
+        },
+        "engine_build_stage": {
+          "default": "deployment",
+          "enum": [
+            "deployment",
+            "training"
+          ],
+          "title": "Engine Build Stage",
+          "type": "string"
+        },
+        "export_opset_version": {
+          "default": 13,
+          "title": "Export Opset Version",
+          "type": "integer"
+        },
+        "checkpoint_keep_count": {
+          "default": 5,
+          "title": "Checkpoint Keep Count",
+          "type": "integer"
+        },
+        "registration_hook": {
+          "default": "postgres_model_registry",
+          "title": "Registration Hook",
+          "type": "string"
+        },
+        "log_tail_limit": {
+          "default": 250,
+          "title": "Log Tail Limit",
+          "type": "integer"
+        },
+        "default_step_duration_ms": {
+          "default": 25,
+          "title": "Default Step Duration Ms",
+          "type": "integer"
+        },
+        "cleanup_temp_on_failure": {
+          "default": true,
+          "title": "Cleanup Temp On Failure",
+          "type": "boolean"
+        },
+        "resume_from_latest_good_checkpoint": {
+          "default": true,
+          "title": "Resume From Latest Good Checkpoint",
+          "type": "boolean"
+        }
+      },
+      "title": "TrainingRuntimeConfig",
+      "type": "object"
+    },
+    "TritonConfig": {
+      "properties": {
+        "realtime": {
+          "$ref": "#/$defs/TritonEndpointConfig"
+        },
+        "batch": {
+          "$ref": "#/$defs/TritonEndpointConfig"
+        }
+      },
+      "title": "TritonConfig",
+      "type": "object"
+    },
+    "TritonEndpointConfig": {
+      "properties": {
+        "grpc_url": {
+          "default": "triton-rt:8001",
+          "title": "Grpc Url",
+          "type": "string"
+        },
+        "http_url": {
+          "default": "http://triton-rt:8000",
+          "title": "Http Url",
+          "type": "string"
+        },
+        "timeout_seconds": {
+          "default": 10,
+          "title": "Timeout Seconds",
+          "type": "integer"
+        },
+        "gpu_profile": {
+          "default": "nvidia-rtx-4500-ada",
+          "title": "Gpu Profile",
+          "type": "string"
+        },
+        "cuda_version": {
+          "default": "12.4",
+          "title": "Cuda Version",
+          "type": "string"
+        },
+        "tensorrt_version": {
+          "default": "10.0",
+          "title": "Tensorrt Version",
+          "type": "string"
+        },
+        "instance_group_count": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Instance Group Count",
+          "type": "integer"
+        }
+      },
+      "title": "TritonEndpointConfig",
+      "type": "object"
+    },
+    "UploadSecurityConfig": {
+      "properties": {
+        "allowed_extensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Extensions",
+          "type": "array"
+        },
+        "allowed_mime_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Mime Types",
+          "type": "array"
+        },
+        "max_files_per_session": {
+          "default": 50000,
+          "title": "Max Files Per Session",
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "default": 268435456000,
+          "title": "Max Total Bytes",
+          "type": "integer"
+        },
+        "max_file_name_length": {
+          "default": 160,
+          "title": "Max File Name Length",
+          "type": "integer"
+        }
+      },
+      "title": "UploadSecurityConfig",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "env": {
+      "$ref": "#/$defs/EnvironmentName",
+      "default": "dev"
+    },
+    "service": {
+      "$ref": "#/$defs/ServiceRuntimeConfig"
+    },
+    "database": {
+      "$ref": "#/$defs/DatabaseConfig"
+    },
+    "redis": {
+      "$ref": "#/$defs/RedisConfig"
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageRoots"
+    },
+    "label_studio": {
+      "$ref": "#/$defs/LabelStudioConfig"
+    },
+    "dataset_workflow": {
+      "$ref": "#/$defs/DatasetWorkflowConfig"
+    },
+    "mlflow": {
+      "$ref": "#/$defs/MlflowConfig"
+    },
+    "dvc": {
+      "$ref": "#/$defs/DvcConfig"
+    },
+    "gpu": {
+      "$ref": "#/$defs/GpuGuardrailsConfig"
+    },
+    "training": {
+      "$ref": "#/$defs/TrainingRuntimeConfig"
+    },
+    "triton": {
+      "$ref": "#/$defs/TritonConfig"
+    },
+    "inference_limits": {
+      "$ref": "#/$defs/InferenceLimitsConfig"
+    },
+    "runtime": {
+      "$ref": "#/$defs/RuntimePlaneConfig"
+    },
+    "session": {
+      "$ref": "#/$defs/SessionConfig"
+    },
+    "api_keys": {
+      "$ref": "#/$defs/ApiKeyConfig"
+    },
+    "cors": {
+      "$ref": "#/$defs/CorsConfig"
+    },
+    "request_limits": {
+      "$ref": "#/$defs/RequestLimitsConfig"
+    },
+    "uploads": {
+      "$ref": "#/$defs/UploadSecurityConfig"
+    },
+    "tls": {
+      "$ref": "#/$defs/TlsConfig"
+    },
+    "log_retention": {
+      "$ref": "#/$defs/LogRetentionConfig"
+    },
+    "artifact_retention": {
+      "$ref": "#/$defs/ArtifactRetentionConfig"
+    },
+    "backup": {
+      "$ref": "#/$defs/BackupConfig"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityThresholdsConfig"
+    }
+  },
+  "required": [
+    "service"
+  ],
+  "title": "PlatformSettings",
+  "type": "object"
+}

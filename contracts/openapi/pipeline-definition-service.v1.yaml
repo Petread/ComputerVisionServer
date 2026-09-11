@@ -1,0 +1,1701 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Pipeline Definition Service
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/runtime/boundary:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Runtime Boundary
+      operationId: get_runtime_boundary_api_v1_runtime_boundary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBoundaryResponse'
+  /api/v1/runtime/node-types:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Node Types
+      operationId: get_node_types_api_v1_runtime_node_types_get
+      parameters:
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeNodeCategory'
+          - type: 'null'
+          title: Category
+      - name: mode
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeMode'
+          - type: 'null'
+          title: Mode
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeNodeTypeCatalogResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/model-capabilities:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Model Capabilities
+      operationId: get_model_capabilities_api_v1_runtime_model_capabilities_get
+      parameters:
+      - name: task_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/TaskType'
+          - type: 'null'
+          title: Task Type
+      - name: target_path
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/TargetPath'
+          - type: 'null'
+          title: Target Path
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeModelCapabilityListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-definitions:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Pipeline Definitions
+      operationId: get_pipeline_definitions_api_v1_runtime_pipeline_definitions_get
+      parameters:
+      - name: include_templates
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Include Templates
+      - name: templates_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Templates Only
+      - name: scope
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - template
+            - channel_instance
+            type: string
+          - type: 'null'
+          title: Scope
+      - name: owner_channel_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Owner Channel Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineDefinitionListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - runtime-boundary
+      summary: Create Definition
+      operationId: create_definition_api_v1_runtime_pipeline_definitions_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimePipelineDefinitionCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineDefinitionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-definitions/{pipeline_definition_id}:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Definition
+      operationId: get_definition_api_v1_runtime_pipeline_definitions__pipeline_definition_id__get
+      parameters:
+      - name: pipeline_definition_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pipeline Definition Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineDefinitionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - runtime-boundary
+      summary: Delete Definition
+      operationId: delete_definition_api_v1_runtime_pipeline_definitions__pipeline_definition_id__delete
+      parameters:
+      - name: pipeline_definition_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pipeline Definition Id
+      - name: reason
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Reason
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineDefinitionSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-definitions/{pipeline_definition_id}/versions:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Create Definition Version
+      operationId: create_definition_version_api_v1_runtime_pipeline_definitions__pipeline_definition_id__versions_post
+      parameters:
+      - name: pipeline_definition_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pipeline Definition Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimePipelineVersionCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineVersionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-templates/{template_id}:instantiate:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Instantiate Template
+      operationId: instantiate_template_api_v1_runtime_pipeline_templates__template_id__instantiate_post
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimePipelineTemplateInstantiateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineDefinitionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-versions:validate:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Validate Graph
+      operationId: validate_graph_api_v1_runtime_pipeline_versions_validate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimePipelineValidationRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineValidationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-versions/{pipeline_version_id}:validate:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Validate Version
+      operationId: validate_version_api_v1_runtime_pipeline_versions__pipeline_version_id__validate_post
+      parameters:
+      - name: pipeline_version_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pipeline Version Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineVersionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/pipeline-versions/{pipeline_version_id}:publish:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Publish Version
+      operationId: publish_version_api_v1_runtime_pipeline_versions__pipeline_version_id__publish_post
+      parameters:
+      - name: pipeline_version_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pipeline Version Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimePipelineVersionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RuntimeAuthoringNodeSpec:
+      properties:
+        node_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: Node Key
+        node_type:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
+          title: Node Type
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+        logical_model_ref:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeLogicalModelRef'
+          - type: 'null'
+        position:
+          additionalProperties:
+            type: number
+          type: object
+          title: Position
+      additionalProperties: false
+      type: object
+      required:
+      - node_key
+      - node_type
+      title: RuntimeAuthoringNodeSpec
+    RuntimeBoundaryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.boundary.v1
+          title: Schema Version
+          default: runtime.boundary.v1
+        service_name:
+          type: string
+          title: Service Name
+        responsibilities:
+          items:
+            type: string
+          type: array
+          title: Responsibilities
+        non_responsibilities:
+          items:
+            type: string
+          type: array
+          title: Non Responsibilities
+      additionalProperties: false
+      type: object
+      required:
+      - service_name
+      title: RuntimeBoundaryResponse
+    RuntimeGraphEdge:
+      properties:
+        from_node_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: From Node Key
+        from_port:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: From Port
+        to_node_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: To Node Key
+        to_port:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: To Port
+      additionalProperties: false
+      type: object
+      required:
+      - from_node_key
+      - from_port
+      - to_node_key
+      - to_port
+      title: RuntimeGraphEdge
+    RuntimeLogicalModelRef:
+      properties:
+        model_family_slug:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
+          title: Model Family Slug
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+          default: realtime
+        contract_major:
+          type: integer
+          minimum: 1.0
+          title: Contract Major
+          default: 1
+        selection_policy:
+          type: string
+          enum:
+          - active_production
+          - staged_test
+          - explicit_release
+          title: Selection Policy
+          default: active_production
+        required_task_type:
+          $ref: '#/components/schemas/TaskType'
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+      additionalProperties: false
+      type: object
+      required:
+      - model_family_slug
+      - required_task_type
+      title: RuntimeLogicalModelRef
+    RuntimeMode:
+      type: string
+      enum:
+      - realtime
+      - trigger
+      - interval
+      title: RuntimeMode
+    RuntimeModelCapabilityListResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.model-capabilities.list.v1
+          title: Schema Version
+          default: runtime.model-capabilities.list.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeModelCapabilityOption'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeModelCapabilityListResponse
+    RuntimeModelCapabilityOption:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        display_name:
+          type: string
+          title: Display Name
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        model_version_id:
+          type: string
+          title: Model Version Id
+        version_label:
+          type: string
+          title: Version Label
+        deployment_status:
+          type: string
+          title: Deployment Status
+        architecture_family:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Architecture Family
+        architecture_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Architecture Version
+        architecture_size:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Architecture Size
+        architecture_display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Architecture Display Name
+        contract_major:
+          type: integer
+          minimum: 1.0
+          title: Contract Major
+        active:
+          type: boolean
+          title: Active
+          default: true
+        capability:
+          additionalProperties: true
+          type: object
+          title: Capability
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_release_id
+      - model_family_slug
+      - display_name
+      - target_path
+      - task_type
+      - model_version_id
+      - version_label
+      - deployment_status
+      - contract_major
+      title: RuntimeModelCapabilityOption
+    RuntimeNodeCategory:
+      type: string
+      enum:
+      - trigger
+      - source
+      - preprocessing
+      - computer_vision
+      - inference
+      - analysis
+      - capture
+      - output
+      title: RuntimeNodeCategory
+    RuntimeNodePort:
+      properties:
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: Key
+        data_type:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Data Type
+        required:
+          type: boolean
+          title: Required
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - data_type
+      title: RuntimeNodePort
+    RuntimeNodePropertyOption:
+      properties:
+        value:
+          type: string
+          title: Value
+        label:
+          type: string
+          title: Label
+      additionalProperties: false
+      type: object
+      required:
+      - value
+      - label
+      title: RuntimeNodePropertyOption
+    RuntimeNodePropertySpec:
+      properties:
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          title: Key
+        label:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Label
+        field_type:
+          type: string
+          enum:
+          - text
+          - number
+          - integer
+          - slider
+          - boolean
+          - select
+          - channel_ref
+          - image_upload
+          - model_ref
+          - zone_list
+          - roi
+          - label_project_list
+          - response_mapping
+          - result_projection_table
+          - expression
+          - edge_role_mapping
+          - measurement_rule_table
+          - clearance_rule_table
+          - cv_line_selection_rules
+          - metric_apply_to
+          - quality_rule_table
+          - spatial_rule_table
+          - color_profile_table
+          - direction_reference
+          - board_surface_calibration
+          - camera_intrinsic_calibration
+          - board_cut_class_rules
+          - plc_connection
+          - plc_write_mapping_table
+          title: Field Type
+        required:
+          type: boolean
+          title: Required
+          default: false
+        default_value:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Default Value
+        options:
+          items:
+            $ref: '#/components/schemas/RuntimeNodePropertyOption'
+          type: array
+          title: Options
+        min_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Min Value
+        max_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Value
+        step_value:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Step Value
+        section:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Section
+        help_text:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Help Text
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - label
+      - field_type
+      title: RuntimeNodePropertySpec
+    RuntimeNodeSpec:
+      properties:
+        node_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: Node Key
+        node_type:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
+          title: Node Type
+        node_category:
+          $ref: '#/components/schemas/RuntimeNodeCategory'
+        node_contract_version:
+          type: integer
+          minimum: 1.0
+          title: Node Contract Version
+          default: 1
+        input_ports:
+          items:
+            $ref: '#/components/schemas/RuntimeNodePort'
+          type: array
+          title: Input Ports
+        output_ports:
+          items:
+            $ref: '#/components/schemas/RuntimeNodePort'
+          type: array
+          title: Output Ports
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+        logical_model_ref:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeLogicalModelRef'
+          - type: 'null'
+        position:
+          additionalProperties:
+            type: number
+          type: object
+          title: Position
+      additionalProperties: false
+      type: object
+      required:
+      - node_key
+      - node_type
+      - node_category
+      title: RuntimeNodeSpec
+    RuntimeNodeTypeCatalogResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.node-types.catalog.v1
+          title: Schema Version
+          default: runtime.node-types.catalog.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeNodeTypeSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeNodeTypeCatalogResponse
+    RuntimeNodeTypeSummary:
+      properties:
+        node_type:
+          type: string
+          title: Node Type
+        node_category:
+          $ref: '#/components/schemas/RuntimeNodeCategory'
+        contract_version:
+          type: integer
+          minimum: 1.0
+          title: Contract Version
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          type: string
+          title: Description
+          default: ''
+        supported_modes:
+          items:
+            $ref: '#/components/schemas/RuntimeMode'
+          type: array
+          title: Supported Modes
+        input_ports:
+          items:
+            $ref: '#/components/schemas/RuntimeNodePort'
+          type: array
+          title: Input Ports
+        output_ports:
+          items:
+            $ref: '#/components/schemas/RuntimeNodePort'
+          type: array
+          title: Output Ports
+        config_schema_ref:
+          type: string
+          title: Config Schema Ref
+        property_schema:
+          items:
+            $ref: '#/components/schemas/RuntimeNodePropertySpec'
+          type: array
+          title: Property Schema
+        default_config:
+          additionalProperties: true
+          type: object
+          title: Default Config
+        runtime_handler_ref:
+          type: string
+          title: Runtime Handler Ref
+        compatibility_constraints:
+          additionalProperties: true
+          type: object
+          title: Compatibility Constraints
+      additionalProperties: false
+      type: object
+      required:
+      - node_type
+      - node_category
+      - contract_version
+      - display_name
+      - config_schema_ref
+      - runtime_handler_ref
+      title: RuntimeNodeTypeSummary
+    RuntimePipelineAuthoringGraph:
+      properties:
+        nodes:
+          items:
+            $ref: '#/components/schemas/RuntimeAuthoringNodeSpec'
+          type: array
+          title: Nodes
+        edges:
+          items:
+            $ref: '#/components/schemas/RuntimeGraphEdge'
+          type: array
+          title: Edges
+      additionalProperties: false
+      type: object
+      title: RuntimePipelineAuthoringGraph
+    RuntimePipelineDefinitionCreateRequest:
+      properties:
+        slug:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
+          - type: 'null'
+          title: Slug
+        name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Name
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        template:
+          type: boolean
+          title: Template
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: RuntimePipelineDefinitionCreateRequest
+    RuntimePipelineDefinitionDetail:
+      properties:
+        pipeline_definition_id:
+          type: string
+          title: Pipeline Definition Id
+        slug:
+          type: string
+          title: Slug
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        status:
+          $ref: '#/components/schemas/RuntimePipelineStatus'
+        latest_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Latest Version Id
+        latest_version_mode:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeMode'
+          - type: 'null'
+        published_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Published Version Id
+        published_version_mode:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeMode'
+          - type: 'null'
+        template:
+          type: boolean
+          title: Template
+          default: false
+        scope:
+          type: string
+          enum:
+          - template
+          - channel_instance
+          title: Scope
+          default: template
+        owner_channel_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Owner Channel Id
+        source_template_definition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Template Definition Id
+        version_count:
+          type: integer
+          minimum: 0.0
+          title: Version Count
+          default: 0
+        versions:
+          items:
+            $ref: '#/components/schemas/RuntimePipelineVersionSummary'
+          type: array
+          title: Versions
+        latest_version:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineVersionDetail'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - pipeline_definition_id
+      - slug
+      - name
+      - status
+      title: RuntimePipelineDefinitionDetail
+    RuntimePipelineDefinitionListResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.pipeline-definitions.list.v1
+          title: Schema Version
+          default: runtime.pipeline-definitions.list.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimePipelineDefinitionSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimePipelineDefinitionListResponse
+    RuntimePipelineDefinitionSummary:
+      properties:
+        pipeline_definition_id:
+          type: string
+          title: Pipeline Definition Id
+        slug:
+          type: string
+          title: Slug
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        status:
+          $ref: '#/components/schemas/RuntimePipelineStatus'
+        latest_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Latest Version Id
+        latest_version_mode:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeMode'
+          - type: 'null'
+        published_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Published Version Id
+        published_version_mode:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeMode'
+          - type: 'null'
+        template:
+          type: boolean
+          title: Template
+          default: false
+        scope:
+          type: string
+          enum:
+          - template
+          - channel_instance
+          title: Scope
+          default: template
+        owner_channel_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Owner Channel Id
+        source_template_definition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Template Definition Id
+        version_count:
+          type: integer
+          minimum: 0.0
+          title: Version Count
+          default: 0
+      additionalProperties: false
+      type: object
+      required:
+      - pipeline_definition_id
+      - slug
+      - name
+      - status
+      title: RuntimePipelineDefinitionSummary
+    RuntimePipelineGraph:
+      properties:
+        nodes:
+          items:
+            $ref: '#/components/schemas/RuntimeNodeSpec'
+          type: array
+          title: Nodes
+        edges:
+          items:
+            $ref: '#/components/schemas/RuntimeGraphEdge'
+          type: array
+          title: Edges
+      additionalProperties: false
+      type: object
+      title: RuntimePipelineGraph
+    RuntimePipelineOutputCatalog:
+      properties:
+        entries:
+          items:
+            $ref: '#/components/schemas/RuntimePipelineOutputCatalogEntry'
+          type: array
+          title: Entries
+        destinations:
+          items:
+            type: string
+            enum:
+            - response
+            - history
+            - live_view
+            - overlay
+            - plc
+            - connector
+          type: array
+          title: Destinations
+        aggregate_ops:
+          items:
+            type: string
+          type: array
+          title: Aggregate Ops
+      additionalProperties: false
+      type: object
+      title: RuntimePipelineOutputCatalog
+    RuntimePipelineOutputCatalogEntry:
+      properties:
+        node_key:
+          type: string
+          title: Node Key
+        node_type:
+          type: string
+          title: Node Type
+        output_port:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Port
+        payload_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payload Type
+        fields:
+          items:
+            type: string
+          type: array
+          title: Fields
+        field_options:
+          items:
+            $ref: '#/components/schemas/RuntimePipelineOutputCatalogField'
+          type: array
+          title: Field Options
+      additionalProperties: false
+      type: object
+      required:
+      - node_key
+      - node_type
+      title: RuntimePipelineOutputCatalogEntry
+    RuntimePipelineOutputCatalogField:
+      properties:
+        key:
+          type: string
+          maxLength: 240
+          minLength: 1
+          title: Key
+        label:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Label
+        value_type:
+          type: string
+          enum:
+          - auto
+          - scalar
+          - number
+          - boolean
+          - text
+          - object
+          - object_list
+          - list
+          - map
+          title: Value Type
+          default: auto
+        aggregate_ops:
+          items:
+            type: string
+          type: array
+          title: Aggregate Ops
+        filterable_fields:
+          items:
+            type: string
+          type: array
+          title: Filterable Fields
+        list_item_fields:
+          items:
+            type: string
+          type: array
+          title: List Item Fields
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - label
+      title: RuntimePipelineOutputCatalogField
+    RuntimePipelineStatus:
+      type: string
+      enum:
+      - draft
+      - validated
+      - published
+      - superseded
+      - archived
+      title: RuntimePipelineStatus
+    RuntimePipelineTemplateInstantiateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Name
+        slug:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
+          - type: 'null'
+          title: Slug
+        description:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Description
+        change_note:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Change Note
+          default: Created from template
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: RuntimePipelineTemplateInstantiateRequest
+    RuntimePipelineValidationIssue:
+      properties:
+        severity:
+          type: string
+          enum:
+          - error
+          - warning
+          title: Severity
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{2,119}$
+          title: Code
+        message:
+          type: string
+          maxLength: 500
+          minLength: 3
+          title: Message
+        node_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Node Key
+        edge_index:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Edge Index
+        field:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - severity
+      - code
+      - message
+      title: RuntimePipelineValidationIssue
+    RuntimePipelineValidationReport:
+      properties:
+        status:
+          type: string
+          enum:
+          - valid
+          - invalid
+          title: Status
+        checked_at:
+          type: string
+          title: Checked At
+        error_count:
+          type: integer
+          minimum: 0.0
+          title: Error Count
+        warning_count:
+          type: integer
+          minimum: 0.0
+          title: Warning Count
+        issues:
+          items:
+            $ref: '#/components/schemas/RuntimePipelineValidationIssue'
+          type: array
+          title: Issues
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - checked_at
+      - error_count
+      - warning_count
+      title: RuntimePipelineValidationReport
+    RuntimePipelineValidationRequest:
+      properties:
+        mode:
+          $ref: '#/components/schemas/RuntimeMode'
+        graph:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineGraph'
+          - type: 'null'
+        authoring_graph:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineAuthoringGraph'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - mode
+      title: RuntimePipelineValidationRequest
+    RuntimePipelineValidationResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.pipeline.validation.v1
+          title: Schema Version
+          default: runtime.pipeline.validation.v1
+        report:
+          $ref: '#/components/schemas/RuntimePipelineValidationReport'
+        normalized_graph:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineGraph'
+          - type: 'null'
+        output_catalog:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineOutputCatalog'
+          - type: 'null'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - report
+      - meta
+      title: RuntimePipelineValidationResponse
+    RuntimePipelineVersionCreateRequest:
+      properties:
+        mode:
+          $ref: '#/components/schemas/RuntimeMode'
+        graph:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineGraph'
+          - type: 'null'
+        authoring_graph:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineAuthoringGraph'
+          - type: 'null'
+        change_note:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Change Note
+      additionalProperties: false
+      type: object
+      required:
+      - mode
+      title: RuntimePipelineVersionCreateRequest
+    RuntimePipelineVersionDetail:
+      properties:
+        pipeline_version_id:
+          type: string
+          title: Pipeline Version Id
+        pipeline_definition_id:
+          type: string
+          title: Pipeline Definition Id
+        version_no:
+          type: integer
+          minimum: 1.0
+          title: Version No
+        status:
+          $ref: '#/components/schemas/RuntimePipelineStatus'
+        mode:
+          $ref: '#/components/schemas/RuntimeMode'
+        config_digest:
+          type: string
+          title: Config Digest
+        validation_status:
+          type: string
+          enum:
+          - valid
+          - invalid
+          title: Validation Status
+          default: invalid
+        error_count:
+          type: integer
+          minimum: 0.0
+          title: Error Count
+          default: 0
+        warning_count:
+          type: integer
+          minimum: 0.0
+          title: Warning Count
+          default: 0
+        change_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Change Note
+        created_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created At
+        published_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Published At
+        graph:
+          $ref: '#/components/schemas/RuntimePipelineGraph'
+        validation_report:
+          $ref: '#/components/schemas/RuntimePipelineValidationReport'
+        model_capability_constraints:
+          additionalProperties: true
+          type: object
+          title: Model Capability Constraints
+        node_contract_versions:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Node Contract Versions
+      additionalProperties: false
+      type: object
+      required:
+      - pipeline_version_id
+      - pipeline_definition_id
+      - version_no
+      - status
+      - mode
+      - config_digest
+      - graph
+      - validation_report
+      title: RuntimePipelineVersionDetail
+    RuntimePipelineVersionSummary:
+      properties:
+        pipeline_version_id:
+          type: string
+          title: Pipeline Version Id
+        pipeline_definition_id:
+          type: string
+          title: Pipeline Definition Id
+        version_no:
+          type: integer
+          minimum: 1.0
+          title: Version No
+        status:
+          $ref: '#/components/schemas/RuntimePipelineStatus'
+        mode:
+          $ref: '#/components/schemas/RuntimeMode'
+        config_digest:
+          type: string
+          title: Config Digest
+        validation_status:
+          type: string
+          enum:
+          - valid
+          - invalid
+          title: Validation Status
+          default: invalid
+        error_count:
+          type: integer
+          minimum: 0.0
+          title: Error Count
+          default: 0
+        warning_count:
+          type: integer
+          minimum: 0.0
+          title: Warning Count
+          default: 0
+        change_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Change Note
+        created_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created At
+        published_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Published At
+      additionalProperties: false
+      type: object
+      required:
+      - pipeline_version_id
+      - pipeline_definition_id
+      - version_no
+      - status
+      - mode
+      - config_digest
+      title: RuntimePipelineVersionSummary
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    TargetPath:
+      type: string
+      enum:
+      - realtime
+      - batch
+      title: TargetPath
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - detection
+      - oriented_detection
+      - segmentation
+      - anomaly
+      - temporal_sequence
+      title: TaskType
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

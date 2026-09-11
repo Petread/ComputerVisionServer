@@ -1,0 +1,14 @@
+{
+  "schema_version": "ybb.edge.golden-image.v1",
+  "platform": "windows_11",
+  "architecture": "x86_64",
+  "base_image": {
+    "os": "Windows 11 Enterprise",
+    "image_source": "organization-owned WIM/Autopilot baseline",
+    "image_version": "23H2 or newer",
+    "driver": "release-approved NVIDIA production driver"
+  },
+  "runtime": { "python": "3.12 full relocatable bundle with venv and pip", "cuda": "13.2", "tensorrt": "10.16", "deepstream": null },
+  "storage": { "system": "NTFS SSD/NVMe", "state_root": "C:\\ProgramData\\YBB\\Edge", "minimum_bytes": 128849018880 },
+  "validation": ["Windows build", "NVIDIA driver", "nvidia-smi", "python -m edge_agent.tensorrt_smoke", "service account", "firewall", "camera adapter inventory"]
+}

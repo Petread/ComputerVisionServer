@@ -1,0 +1,553 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Capture Service
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/runtime/boundary:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Runtime Boundary
+      operationId: get_runtime_boundary_api_v1_runtime_boundary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBoundaryResponse'
+  /api/v1/runtime/captures:
+    get:
+      tags:
+      - runtime-boundary
+      summary: List Capture History
+      operationId: list_capture_history_api_v1_runtime_captures_get
+      parameters:
+      - name: channel_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Channel Id
+      - name: source_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - manual
+            - pipeline
+            - temporal_sample
+            type: string
+          - type: 'null'
+          title: Source Type
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeCaptureHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/captures:drain:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Drain Captures
+      operationId: drain_captures_api_v1_runtime_captures_drain_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCaptureDrainRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeCaptureDrainResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RuntimeBoundaryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.boundary.v1
+          title: Schema Version
+          default: runtime.boundary.v1
+        service_name:
+          type: string
+          title: Service Name
+        responsibilities:
+          items:
+            type: string
+          type: array
+          title: Responsibilities
+        non_responsibilities:
+          items:
+            type: string
+          type: array
+          title: Non Responsibilities
+      additionalProperties: false
+      type: object
+      required:
+      - service_name
+      title: RuntimeBoundaryResponse
+    RuntimeCaptureDrainRequest:
+      properties:
+        limit:
+          type: integer
+          maximum: 500.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+      additionalProperties: false
+      type: object
+      title: RuntimeCaptureDrainRequest
+    RuntimeCaptureDrainResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.capture.drain.v1
+          title: Schema Version
+          default: runtime.capture.drain.v1
+        processed:
+          type: integer
+          minimum: 0.0
+          title: Processed
+          default: 0
+        delivered:
+          type: integer
+          minimum: 0.0
+          title: Delivered
+          default: 0
+        failed_retryable:
+          type: integer
+          minimum: 0.0
+          title: Failed Retryable
+          default: 0
+        failed_terminal:
+          type: integer
+          minimum: 0.0
+          title: Failed Terminal
+          default: 0
+        skipped_duplicate:
+          type: integer
+          minimum: 0.0
+          title: Skipped Duplicate
+          default: 0
+        rate_limited:
+          type: integer
+          minimum: 0.0
+          title: Rate Limited
+          default: 0
+        needs_attention:
+          type: integer
+          minimum: 0.0
+          title: Needs Attention
+          default: 0
+        enqueued_interval_captures:
+          type: integer
+          minimum: 0.0
+          title: Enqueued Interval Captures
+          default: 0
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeCaptureDrainResponse
+    RuntimeCaptureHistoryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.capture.history.v1
+          title: Schema Version
+          default: runtime.capture.history.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeCaptureRequestSummary'
+          type: array
+          title: Items
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+          default: 0
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeCaptureHistoryResponse
+    RuntimeCaptureRequestSummary:
+      properties:
+        capture_request_id:
+          type: string
+          title: Capture Request Id
+        channel_id:
+          type: string
+          title: Channel Id
+        capture_rule_id:
+          type: string
+          title: Capture Rule Id
+        result_record_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Result Record Id
+        manual_capture_session_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manual Capture Session Id
+        manual_capture_request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manual Capture Request Id
+        target_label_project_id:
+          type: string
+          title: Target Label Project Id
+        target_display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Display Name
+        label_studio_project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Label Studio Project Id
+        source_type:
+          type: string
+          enum:
+          - manual
+          - pipeline
+          - temporal_sample
+          title: Source Type
+        capture_mode:
+          type: string
+          enum:
+          - full_frame
+          - roi
+          - conditional
+          - multi_project
+          - full_image
+          - full_image_and_roi
+          - temporal_sequence
+          title: Capture Mode
+        status:
+          type: string
+          enum:
+          - queued
+          - processing
+          - rate_limited
+          - delivered
+          - predicted
+          - failed_retryable
+          - failed_terminal
+          - skipped_duplicate
+          - recorded
+          - skipped_not_released
+          - skipped_sampling
+          - needs_attention
+          title: Status
+        retry_count:
+          type: integer
+          minimum: 0.0
+          title: Retry Count
+          default: 0
+        max_attempts:
+          type: integer
+          minimum: 1.0
+          title: Max Attempts
+          default: 3
+        queued_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Queued At
+        claimed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Claimed At
+        submitted_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Submitted At
+        delivered_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Delivered At
+        next_attempt_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Attempt At
+        rate_limited_until:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rate Limited Until
+        asset_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Asset Uri
+        digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Digest
+        roi:
+          additionalProperties: true
+          type: object
+          title: Roi
+        label_studio_task_ids:
+          items:
+            type: integer
+          type: array
+          title: Label Studio Task Ids
+        duplicate_of_request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Duplicate Of Request Id
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+        created_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - capture_request_id
+      - channel_id
+      - capture_rule_id
+      - target_label_project_id
+      - source_type
+      - capture_mode
+      - status
+      title: RuntimeCaptureRequestSummary
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

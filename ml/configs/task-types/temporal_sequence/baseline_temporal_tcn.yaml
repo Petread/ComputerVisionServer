@@ -1,0 +1,37 @@
+recipe_name: baseline_temporal_tcn
+recipe_version: 1.0.0
+task_type: temporal_sequence
+framework: pytorch
+trainer_backend: pytorch-temporal-sequence
+epochs: 50
+batch_size: 16
+learning_rate: 0.001
+optimizer: AdamW
+checkpoint_interval_steps: 25
+best_metric_name: all_valid_mean_absolute_error_deg
+best_metric_mode: min
+export_opset_version: 17
+temporal:
+  feature_set_id: stem_orientation.frame_features.v1
+  require_angle_targets: true
+  seed: 20260804
+  hidden_dim: 64
+  dropout: 0.1
+  weight_decay: 0.0001
+  tcn_kernel_size: 3
+  tcn_levels: 3
+  direction_deadband_deg: 5.0
+  confidence_tolerance_deg: 15.0
+  confidence_bin_count: 10
+  roundtrip_tolerance: 0.000001
+  onnx_roundtrip_tolerance: 0.00001
+  exclude_bow_labels: [unclear]
+  exclude_target_visible_labels: [unclear]
+  prefix_augmentation:
+    enabled: false
+  loss_weights:
+    bow_relevance: 1.0
+    target_observed: 1.0
+    angle: 2.0
+    angle_confidence: 0.25
+    final_quality: 0.25

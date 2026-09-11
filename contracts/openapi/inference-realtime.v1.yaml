@@ -1,0 +1,2927 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Inference Gateway Realtime
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/health:
+    get:
+      tags:
+      - public-realtime-inference
+      summary: Public Health
+      operationId: public_health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/ready:
+    get:
+      tags:
+      - public-realtime-inference
+      summary: Public Ready
+      operationId: public_ready_api_v1_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/models:
+    get:
+      tags:
+      - public-realtime-inference
+      summary: List Models
+      operationId: list_models_api_v1_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicModelListResponse'
+  /api/v1/models/{model_id}:
+    get:
+      tags:
+      - public-realtime-inference
+      summary: Model Detail
+      operationId: model_detail_api_v1_models__model_id__get
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicModelDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/infer/classify:
+    post:
+      tags:
+      - public-realtime-inference
+      summary: Classify
+      operationId: classify_api_v1_infer_classify_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_classify_api_v1_infer_classify_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicClassificationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/infer/detect:
+    post:
+      tags:
+      - public-realtime-inference
+      summary: Detect
+      operationId: detect_api_v1_infer_detect_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_detect_api_v1_infer_detect_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDetectionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/infer/segment:
+    post:
+      tags:
+      - public-realtime-inference
+      summary: Segment
+      operationId: segment_api_v1_infer_segment_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_segment_api_v1_infer_segment_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSegmentationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/infer/anomaly:
+    post:
+      tags:
+      - public-realtime-inference
+      summary: Anomaly
+      operationId: anomaly_api_v1_infer_anomaly_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_anomaly_api_v1_infer_anomaly_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicAnomalyResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/classify:
+    post:
+      tags:
+      - realtime-inference
+      summary: Classify Realtime
+      operationId: classify_realtime_api_v1_realtime_classify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeClassifyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/classify-bytes:
+    post:
+      tags:
+      - realtime-inference
+      summary: Classify Realtime Bytes
+      operationId: classify_realtime_bytes_api_v1_realtime_classify_bytes_post
+      parameters:
+      - name: deployment_target
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 120
+          title: Deployment Target
+      - name: deployment_release_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Deployment Release Id
+      - name: timeout_ms
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 30000
+            minimum: 50
+          - type: 'null'
+          title: Timeout Ms
+      - name: top_k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 1
+          title: Top K
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/detect:
+    post:
+      tags:
+      - realtime-inference
+      summary: Detect Realtime
+      operationId: detect_realtime_api_v1_realtime_detect_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeDetectRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetectionInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/detect-bytes:
+    post:
+      tags:
+      - realtime-inference
+      summary: Detect Realtime Bytes
+      operationId: detect_realtime_bytes_api_v1_realtime_detect_bytes_post
+      parameters:
+      - name: deployment_target
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 120
+          title: Deployment Target
+      - name: deployment_release_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Deployment Release Id
+      - name: timeout_ms
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 30000
+            minimum: 50
+          - type: 'null'
+          title: Timeout Ms
+      - name: max_detections
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 100
+          title: Max Detections
+      - name: score_threshold
+        in: query
+        required: false
+        schema:
+          type: number
+          maximum: 1
+          minimum: 0
+          default: 0.35
+          title: Score Threshold
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetectionInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/segment:
+    post:
+      tags:
+      - realtime-inference
+      summary: Segment Realtime
+      operationId: segment_realtime_api_v1_realtime_segment_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeSegmentRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentationInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/segment-bytes:
+    post:
+      tags:
+      - realtime-inference
+      summary: Segment Realtime Bytes
+      operationId: segment_realtime_bytes_api_v1_realtime_segment_bytes_post
+      parameters:
+      - name: deployment_target
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 120
+          title: Deployment Target
+      - name: deployment_release_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Deployment Release Id
+      - name: timeout_ms
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 30000
+            minimum: 50
+          - type: 'null'
+          title: Timeout Ms
+      - name: max_segments
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 50
+          title: Max Segments
+      - name: score_threshold
+        in: query
+        required: false
+        schema:
+          type: number
+          maximum: 1
+          minimum: 0
+          default: 0.35
+          title: Score Threshold
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentationInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/anomaly:
+    post:
+      tags:
+      - realtime-inference
+      summary: Anomaly Realtime
+      operationId: anomaly_realtime_api_v1_realtime_anomaly_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeAnomalyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/anomaly-bytes:
+    post:
+      tags:
+      - realtime-inference
+      summary: Anomaly Realtime Bytes
+      operationId: anomaly_realtime_bytes_api_v1_realtime_anomaly_bytes_post
+      parameters:
+      - name: deployment_target
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 120
+          title: Deployment Target
+      - name: deployment_release_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Deployment Release Id
+      - name: timeout_ms
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 30000
+            minimum: 50
+          - type: 'null'
+          title: Timeout Ms
+      - name: threshold
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: number
+            maximum: 1
+            minimum: 0
+          - type: 'null'
+          title: Threshold
+      - name: return_mask
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Return Mask
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/predict:
+    post:
+      tags:
+      - realtime-inference
+      summary: Predict Realtime
+      operationId: predict_realtime_api_v1_realtime_predict_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeClassifyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/models/capabilities:
+    get:
+      tags:
+      - realtime-inference
+      summary: Realtime Capabilities
+      operationId: realtime_capabilities_api_v1_realtime_models_capabilities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelCapabilitiesResponse'
+  /api/v1/realtime/models/status:
+    get:
+      tags:
+      - realtime-inference
+      summary: Realtime Status
+      operationId: realtime_status_api_v1_realtime_models_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelStatusResponse'
+components:
+  schemas:
+    AnomalyHeatmap:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        min_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Min Value
+        max_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Value
+        colormap:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Colormap
+          default: turbo
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: AnomalyHeatmap
+    AnomalyInferenceResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.anomaly.response.v1
+          title: Schema Version
+          default: inference.anomaly.response.v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        warm_model:
+          type: boolean
+          title: Warm Model
+        timing:
+          $ref: '#/components/schemas/InferenceTiming'
+        anomaly_score:
+          type: number
+          minimum: 0.0
+          title: Anomaly Score
+        predicted_label:
+          type: string
+          enum:
+          - normal
+          - anomalous
+          title: Predicted Label
+        is_anomalous:
+          type: boolean
+          title: Is Anomalous
+        threshold:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Threshold
+        heatmap:
+          $ref: '#/components/schemas/AnomalyHeatmap'
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/AnomalyMask'
+          - type: 'null'
+        image_width:
+          type: integer
+          minimum: 1.0
+          title: Image Width
+        image_height:
+          type: integer
+          minimum: 1.0
+          title: Image Height
+        model_metadata:
+          additionalProperties: true
+          type: object
+          title: Model Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - deployment_target
+      - route
+      - architecture
+      - warm_model
+      - timing
+      - anomaly_score
+      - predicted_label
+      - is_anomalous
+      - threshold
+      - heatmap
+      - image_width
+      - image_height
+      title: AnomalyInferenceResponse
+    AnomalyMask:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        threshold:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Threshold
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      - threshold
+      title: AnomalyMask
+    Body_anomaly_api_v1_infer_anomaly_post:
+      properties:
+        model_id:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Model Id
+        image:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Image
+        threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Threshold
+        return_mask:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Return Mask
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+      type: object
+      required:
+      - model_id
+      - image
+      title: Body_anomaly_api_v1_infer_anomaly_post
+    Body_classify_api_v1_infer_classify_post:
+      properties:
+        model_id:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Model Id
+        image:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Image
+        top_k:
+          anyOf:
+          - type: integer
+            maximum: 20.0
+            minimum: 1.0
+          - type: 'null'
+          title: Top K
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+      type: object
+      required:
+      - model_id
+      - image
+      title: Body_classify_api_v1_infer_classify_post
+    Body_detect_api_v1_infer_detect_post:
+      properties:
+        model_id:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Model Id
+        image:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Image
+        threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Threshold
+        iou_threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Iou Threshold
+        max_detections:
+          anyOf:
+          - type: integer
+            maximum: 100.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Detections
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+      type: object
+      required:
+      - model_id
+      - image
+      title: Body_detect_api_v1_infer_detect_post
+    Body_segment_api_v1_infer_segment_post:
+      properties:
+        model_id:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Model Id
+        image:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Image
+        threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Threshold
+        max_segments:
+          anyOf:
+          - type: integer
+            maximum: 100.0
+            minimum: 1.0
+          - type: 'null'
+          title: Max Segments
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+      type: object
+      required:
+      - model_id
+      - image
+      title: Body_segment_api_v1_infer_segment_post
+    ClassificationInferenceResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.classification.response.v1
+          title: Schema Version
+          default: inference.classification.response.v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        warm_model:
+          type: boolean
+          title: Warm Model
+        timing:
+          $ref: '#/components/schemas/InferenceTiming'
+        labels:
+          items:
+            $ref: '#/components/schemas/ClassificationLabelScore'
+          type: array
+          title: Labels
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - deployment_target
+      - route
+      - architecture
+      - warm_model
+      - timing
+      title: ClassificationInferenceResponse
+    ClassificationLabelScore:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+        rank:
+          type: integer
+          minimum: 1.0
+          title: Rank
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      - rank
+      title: ClassificationLabelScore
+    DeploymentReleaseStatus:
+      type: string
+      enum:
+      - requested
+      - packaging
+      - repository_sync
+      - loading
+      - smoke_testing
+      - activated
+      - deactivated
+      - activation_failed
+      - rollback_requested
+      - rolled_back
+      - retired
+      title: DeploymentReleaseStatus
+    DetectionBox:
+      properties:
+        x_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Min
+        y_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Min
+        x_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Max
+        y_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Max
+      additionalProperties: false
+      type: object
+      required:
+      - x_min
+      - y_min
+      - x_max
+      - y_max
+      title: DetectionBox
+    DetectionInferenceResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.detection.response.v1
+          title: Schema Version
+          default: inference.detection.response.v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        warm_model:
+          type: boolean
+          title: Warm Model
+        timing:
+          $ref: '#/components/schemas/InferenceTiming'
+        detections:
+          items:
+            $ref: '#/components/schemas/DetectionPrediction'
+          type: array
+          title: Detections
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - deployment_target
+      - route
+      - architecture
+      - warm_model
+      - timing
+      title: DetectionInferenceResponse
+    DetectionPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: DetectionPoint
+    DetectionPrediction:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+        box:
+          $ref: '#/components/schemas/DetectionBox'
+        oriented_box:
+          anyOf:
+          - $ref: '#/components/schemas/OrientedDetectionBox'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      - box
+      title: DetectionPrediction
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    InferenceTiming:
+      properties:
+        received_at:
+          type: string
+          title: Received At
+        validation_ms:
+          type: number
+          minimum: 0.0
+          title: Validation Ms
+        routing_ms:
+          type: number
+          minimum: 0.0
+          title: Routing Ms
+        preprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Preprocessing Ms
+        inference_ms:
+          type: number
+          minimum: 0.0
+          title: Inference Ms
+        postprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Postprocessing Ms
+        total_ms:
+          type: number
+          minimum: 0.0
+          title: Total Ms
+        shared_memory_transport:
+          type: boolean
+          title: Shared Memory Transport
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - received_at
+      - validation_ms
+      - routing_ms
+      - preprocessing_ms
+      - inference_ms
+      - postprocessing_ms
+      - total_ms
+      title: InferenceTiming
+    LatencyQuantiles:
+      properties:
+        sample_count:
+          type: integer
+          minimum: 0.0
+          title: Sample Count
+          default: 0
+        p50_ms:
+          type: number
+          minimum: 0.0
+          title: P50 Ms
+          default: 0
+        p95_ms:
+          type: number
+          minimum: 0.0
+          title: P95 Ms
+          default: 0
+        p99_ms:
+          type: number
+          minimum: 0.0
+          title: P99 Ms
+          default: 0
+        throughput_per_second:
+          type: number
+          minimum: 0.0
+          title: Throughput Per Second
+          default: 0
+      additionalProperties: false
+      type: object
+      title: LatencyQuantiles
+    ModelArchitectureSummary:
+      properties:
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        family:
+          type: string
+          maxLength: 64
+          minLength: 2
+          title: Family
+        version:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Version
+        size:
+          type: string
+          maxLength: 16
+          minLength: 1
+          title: Size
+        display_name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Display Name
+        internal_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Internal Key
+      type: object
+      required:
+      - task_type
+      - family
+      - version
+      - size
+      - display_name
+      - internal_key
+      title: ModelArchitectureSummary
+    ModelCapabilitiesResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.model-capabilities.v1
+          title: Schema Version
+          default: inference.model-capabilities.v1
+        items:
+          items:
+            $ref: '#/components/schemas/ModelCapabilitySummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: ModelCapabilitiesResponse
+    ModelCapabilitySummary:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        active:
+          type: boolean
+          title: Active
+        rollback_candidate:
+          type: boolean
+          title: Rollback Candidate
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        model_version_id:
+          type: string
+          title: Model Version Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        contract_major:
+          type: integer
+          minimum: 1.0
+          title: Contract Major
+        input_schema_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Input Schema Ref
+        output_schema_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Schema Ref
+        class_labels:
+          items:
+            type: string
+          type: array
+          title: Class Labels
+        compatible_targets:
+          items:
+            $ref: '#/components/schemas/TargetPath'
+          type: array
+          title: Compatible Targets
+        max_batch_size:
+          type: integer
+          minimum: 1.0
+          title: Max Batch Size
+        confidence_threshold_default:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence Threshold Default
+        preprocessing:
+          additionalProperties: true
+          type: object
+          title: Preprocessing
+        postprocessing:
+          additionalProperties: true
+          type: object
+          title: Postprocessing
+        capabilities:
+          additionalProperties: true
+          type: object
+          title: Capabilities
+        anomaly:
+          additionalProperties: true
+          type: object
+          title: Anomaly
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_release_id
+      - target_path
+      - active
+      - rollback_candidate
+      - model_family_slug
+      - model_version_id
+      - task_type
+      - architecture
+      - contract_major
+      - max_batch_size
+      - confidence_threshold_default
+      title: ModelCapabilitySummary
+    ModelRouteRef:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        release_status:
+          $ref: '#/components/schemas/DeploymentReleaseStatus'
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        model_version_id:
+          type: string
+          title: Model Version Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        triton_model_name:
+          type: string
+          title: Triton Model Name
+        triton_model_version:
+          type: integer
+          minimum: 1.0
+          title: Triton Model Version
+        serving_artifact_format:
+          anyOf:
+          - type: string
+            enum:
+            - tensorrt_plan
+            - onnx
+          - type: 'null'
+          title: Serving Artifact Format
+        contract_major:
+          type: integer
+          minimum: 1.0
+          title: Contract Major
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_release_id
+      - target_path
+      - release_status
+      - model_family_slug
+      - model_version_id
+      - task_type
+      - triton_model_name
+      - triton_model_version
+      - contract_major
+      title: ModelRouteRef
+    ModelStatusResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.model-status.v1
+          title: Schema Version
+          default: inference.model-status.v1
+        items:
+          items:
+            $ref: '#/components/schemas/ModelStatusSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: ModelStatusResponse
+    ModelStatusSummary:
+      properties:
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        active:
+          type: boolean
+          title: Active
+        rollback_candidate:
+          type: boolean
+          title: Rollback Candidate
+        warm_model:
+          type: boolean
+          title: Warm Model
+        overloaded:
+          type: boolean
+          title: Overloaded
+        current_inflight:
+          type: integer
+          minimum: 0.0
+          title: Current Inflight
+        concurrency_limit:
+          type: integer
+          minimum: 1.0
+          title: Concurrency Limit
+        last_request_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Request At
+        latency:
+          $ref: '#/components/schemas/LatencyQuantiles'
+        backend_statistics:
+          additionalProperties:
+            anyOf:
+            - type: integer
+            - type: number
+          type: object
+          title: Backend Statistics
+      additionalProperties: false
+      type: object
+      required:
+      - route
+      - active
+      - rollback_candidate
+      - warm_model
+      - overloaded
+      - current_inflight
+      - concurrency_limit
+      title: ModelStatusSummary
+    OrientedDetectionBox:
+      properties:
+        points:
+          items:
+            $ref: '#/components/schemas/DetectionPoint'
+          type: array
+          maxItems: 4
+          minItems: 4
+          title: Points
+        rotation_degrees:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Rotation Degrees
+      additionalProperties: false
+      type: object
+      required:
+      - points
+      title: OrientedDetectionBox
+    PublicAnomalyHeatmap:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        min_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Min Value
+        max_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Value
+        colormap:
+          type: string
+          title: Colormap
+          default: turbo
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: PublicAnomalyHeatmap
+    PublicAnomalyMask:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Threshold
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: PublicAnomalyMask
+    PublicAnomalyResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        input:
+          $ref: '#/components/schemas/PublicImageMetadata'
+        timing:
+          $ref: '#/components/schemas/PublicInferenceTiming'
+        warnings:
+          items:
+            $ref: '#/components/schemas/PublicInferenceWarning'
+          type: array
+          title: Warnings
+        schema_version:
+          type: string
+          const: inference.public.anomaly-response.v1
+          title: Schema Version
+          default: inference.public.anomaly-response.v1
+        anomaly_score:
+          type: number
+          minimum: 0.0
+          title: Anomaly Score
+        predicted_label:
+          type: string
+          enum:
+          - normal
+          - anomalous
+          title: Predicted Label
+        is_anomalous:
+          type: boolean
+          title: Is Anomalous
+        threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Threshold
+        heatmap:
+          $ref: '#/components/schemas/PublicAnomalyHeatmap'
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/PublicAnomalyMask'
+          - type: 'null'
+        image_width:
+          type: integer
+          minimum: 1.0
+          title: Image Width
+        image_height:
+          type: integer
+          minimum: 1.0
+          title: Image Height
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - architecture
+      - input
+      - timing
+      - anomaly_score
+      - predicted_label
+      - is_anomalous
+      - heatmap
+      - image_width
+      - image_height
+      title: PublicAnomalyResponse
+    PublicBatchAvailability:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        timeout_default_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Default Seconds
+        timeout_max_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Max Seconds
+        idempotency_required:
+          type: boolean
+          title: Idempotency Required
+          default: true
+        resumable:
+          type: boolean
+          title: Resumable
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - available
+      title: PublicBatchAvailability
+    PublicBoundingBox:
+      properties:
+        x_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Min
+        y_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Min
+        x_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Max
+        y_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Max
+      additionalProperties: false
+      type: object
+      required:
+      - x_min
+      - y_min
+      - x_max
+      - y_max
+      title: PublicBoundingBox
+    PublicClassificationPrediction:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      title: PublicClassificationPrediction
+    PublicClassificationResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        input:
+          $ref: '#/components/schemas/PublicImageMetadata'
+        timing:
+          $ref: '#/components/schemas/PublicInferenceTiming'
+        warnings:
+          items:
+            $ref: '#/components/schemas/PublicInferenceWarning'
+          type: array
+          title: Warnings
+        schema_version:
+          type: string
+          const: inference.public.classification-response.v1
+          title: Schema Version
+          default: inference.public.classification-response.v1
+        predictions:
+          items:
+            $ref: '#/components/schemas/PublicClassificationPrediction'
+          type: array
+          title: Predictions
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - architecture
+      - input
+      - timing
+      title: PublicClassificationResponse
+    PublicCoordinateSystem:
+      properties:
+        name:
+          type: string
+          const: normalized_xyxy
+          title: Name
+          default: normalized_xyxy
+        origin:
+          type: string
+          const: top_left
+          title: Origin
+          default: top_left
+        normalized:
+          type: boolean
+          title: Normalized
+          default: true
+        description:
+          type: string
+          title: Description
+          default: Bounding box coordinates use x_min,y_min,x_max,y_max normalized
+            to [0,1]. Oriented detections additionally include four normalized corner
+            points.
+      additionalProperties: false
+      type: object
+      title: PublicCoordinateSystem
+    PublicDetection:
+      properties:
+        label:
+          type: string
+          title: Label
+        class_id:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Class Id
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+        bounding_box:
+          $ref: '#/components/schemas/PublicBoundingBox'
+        oriented_box:
+          anyOf:
+          - $ref: '#/components/schemas/PublicOrientedBoundingBox'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - confidence
+      - bounding_box
+      title: PublicDetection
+    PublicDetectionResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        input:
+          $ref: '#/components/schemas/PublicImageMetadata'
+        timing:
+          $ref: '#/components/schemas/PublicInferenceTiming'
+        warnings:
+          items:
+            $ref: '#/components/schemas/PublicInferenceWarning'
+          type: array
+          title: Warnings
+        schema_version:
+          type: string
+          const: inference.public.detection-response.v1
+          title: Schema Version
+          default: inference.public.detection-response.v1
+        coordinate_system:
+          $ref: '#/components/schemas/PublicCoordinateSystem'
+        detections:
+          items:
+            $ref: '#/components/schemas/PublicDetection'
+          type: array
+          title: Detections
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - architecture
+      - input
+      - timing
+      title: PublicDetectionResponse
+    PublicImageMetadata:
+      properties:
+        file_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: File Name
+        content_type:
+          type: string
+          title: Content Type
+        size_bytes:
+          type: integer
+          minimum: 0.0
+          title: Size Bytes
+        width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Width
+        height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Height
+        sha256:
+          type: string
+          title: Sha256
+      additionalProperties: false
+      type: object
+      required:
+      - content_type
+      - size_bytes
+      - sha256
+      title: PublicImageMetadata
+    PublicInferenceTiming:
+      properties:
+        received_at:
+          type: string
+          title: Received At
+        completed_at:
+          type: string
+          title: Completed At
+        validation_ms:
+          type: number
+          minimum: 0.0
+          title: Validation Ms
+        routing_ms:
+          type: number
+          minimum: 0.0
+          title: Routing Ms
+        preprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Preprocessing Ms
+        inference_ms:
+          type: number
+          minimum: 0.0
+          title: Inference Ms
+        postprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Postprocessing Ms
+        total_ms:
+          type: number
+          minimum: 0.0
+          title: Total Ms
+      additionalProperties: false
+      type: object
+      required:
+      - received_at
+      - completed_at
+      - validation_ms
+      - routing_ms
+      - preprocessing_ms
+      - inference_ms
+      - postprocessing_ms
+      - total_ms
+      title: PublicInferenceTiming
+    PublicInferenceWarning:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      title: PublicInferenceWarning
+    PublicInputConstraints:
+      properties:
+        canonical_form:
+          type: string
+          const: multipart/form-data
+          title: Canonical Form
+          default: multipart/form-data
+        supported_forms:
+          items:
+            type: string
+          type: array
+          title: Supported Forms
+        supported_content_types:
+          items:
+            type: string
+          type: array
+          title: Supported Content Types
+        max_images_per_request:
+          type: integer
+          minimum: 1.0
+          title: Max Images Per Request
+          default: 1
+        max_image_bytes:
+          type: integer
+          minimum: 1.0
+          title: Max Image Bytes
+        max_request_body_bytes:
+          type: integer
+          minimum: 1.0
+          title: Max Request Body Bytes
+      additionalProperties: false
+      type: object
+      required:
+      - max_image_bytes
+      - max_request_body_bytes
+      title: PublicInputConstraints
+    PublicModelAvailability:
+      properties:
+        realtime:
+          $ref: '#/components/schemas/PublicRealtimeAvailability'
+        batch:
+          $ref: '#/components/schemas/PublicBatchAvailability'
+      additionalProperties: false
+      type: object
+      required:
+      - realtime
+      - batch
+      title: PublicModelAvailability
+    PublicModelDetail:
+      properties:
+        model_id:
+          type: string
+          title: Model Id
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        model_family:
+          type: string
+          title: Model Family
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Model Version
+        availability:
+          $ref: '#/components/schemas/PublicModelAvailability'
+        input_constraints:
+          $ref: '#/components/schemas/PublicInputConstraints'
+        response_schema:
+          $ref: '#/components/schemas/PublicResponseSchema'
+        supported_parameters:
+          items:
+            $ref: '#/components/schemas/PublicParameterSpec'
+          type: array
+          title: Supported Parameters
+        class_labels:
+          items:
+            type: string
+          type: array
+          title: Class Labels
+      additionalProperties: false
+      type: object
+      required:
+      - model_id
+      - display_name
+      - model_family
+      - task_type
+      - architecture
+      - availability
+      - input_constraints
+      - response_schema
+      title: PublicModelDetail
+    PublicModelDetailResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.model-detail.v1
+          title: Schema Version
+          default: inference.public.model-detail.v1
+        item:
+          $ref: '#/components/schemas/PublicModelDetail'
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - item
+      title: PublicModelDetailResponse
+    PublicModelListResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.models.v1
+          title: Schema Version
+          default: inference.public.models.v1
+        items:
+          items:
+            $ref: '#/components/schemas/PublicModelSummary'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      title: PublicModelListResponse
+    PublicModelSummary:
+      properties:
+        model_id:
+          type: string
+          title: Model Id
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        model_family:
+          type: string
+          title: Model Family
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Model Version
+        availability:
+          $ref: '#/components/schemas/PublicModelAvailability'
+      additionalProperties: false
+      type: object
+      required:
+      - model_id
+      - display_name
+      - model_family
+      - task_type
+      - architecture
+      - availability
+      title: PublicModelSummary
+    PublicOrientedBoundingBox:
+      properties:
+        points:
+          items:
+            $ref: '#/components/schemas/PublicOrientedPoint'
+          type: array
+          maxItems: 4
+          minItems: 4
+          title: Points
+        rotation_degrees:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Rotation Degrees
+      additionalProperties: false
+      type: object
+      required:
+      - points
+      title: PublicOrientedBoundingBox
+    PublicOrientedPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: PublicOrientedPoint
+    PublicParameterSpec:
+      properties:
+        name:
+          type: string
+          title: Name
+        parameter_type:
+          type: string
+          enum:
+          - integer
+          - number
+          - string
+          - boolean
+          title: Parameter Type
+        required:
+          type: boolean
+          title: Required
+          default: false
+        default:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Default
+        minimum:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Minimum
+        maximum:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Maximum
+        description:
+          type: string
+          title: Description
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - parameter_type
+      - description
+      title: PublicParameterSpec
+    PublicRealtimeAvailability:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        timeout_default_ms:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Default Ms
+        timeout_max_ms:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Max Ms
+        queueing:
+          type: string
+          const: none
+          title: Queueing
+          default: none
+        overload_behavior:
+          type: string
+          const: reject
+          title: Overload Behavior
+          default: reject
+      additionalProperties: false
+      type: object
+      required:
+      - available
+      title: PublicRealtimeAvailability
+    PublicResponseSchema:
+      properties:
+        schema_id:
+          type: string
+          title: Schema Id
+        content_type:
+          type: string
+          const: application/json
+          title: Content Type
+          default: application/json
+      additionalProperties: false
+      type: object
+      required:
+      - schema_id
+      title: PublicResponseSchema
+    PublicSegmentation:
+      properties:
+        label:
+          type: string
+          title: Label
+        class_id:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Class Id
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+        polygon:
+          items:
+            $ref: '#/components/schemas/PublicSegmentationPoint'
+          type: array
+          title: Polygon
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - confidence
+      title: PublicSegmentation
+    PublicSegmentationPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: PublicSegmentationPoint
+    PublicSegmentationResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        input:
+          $ref: '#/components/schemas/PublicImageMetadata'
+        timing:
+          $ref: '#/components/schemas/PublicInferenceTiming'
+        warnings:
+          items:
+            $ref: '#/components/schemas/PublicInferenceWarning'
+          type: array
+          title: Warnings
+        schema_version:
+          type: string
+          const: inference.public.segmentation-response.v1
+          title: Schema Version
+          default: inference.public.segmentation-response.v1
+        image_width:
+          type: integer
+          minimum: 1.0
+          title: Image Width
+        image_height:
+          type: integer
+          minimum: 1.0
+          title: Image Height
+        segments:
+          items:
+            $ref: '#/components/schemas/PublicSegmentation'
+          type: array
+          title: Segments
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - architecture
+      - input
+      - timing
+      - image_width
+      - image_height
+      title: PublicSegmentationResponse
+    RealtimeAnomalyRequest:
+      properties:
+        deployment_target:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Deployment Target
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+        threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Threshold
+        return_mask:
+          type: boolean
+          title: Return Mask
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_target
+      - image_base64
+      title: RealtimeAnomalyRequest
+    RealtimeClassifyRequest:
+      properties:
+        deployment_target:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Deployment Target
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+        top_k:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Top K
+          default: 3
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_target
+      - image_base64
+      title: RealtimeClassifyRequest
+    RealtimeDetectRequest:
+      properties:
+        deployment_target:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Deployment Target
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+        max_detections:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Detections
+          default: 5
+        score_threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Score Threshold
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_target
+      - image_base64
+      title: RealtimeDetectRequest
+    RealtimeInferenceResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.response.v1
+          title: Schema Version
+          default: inference.response.v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        warm_model:
+          type: boolean
+          title: Warm Model
+        timing:
+          $ref: '#/components/schemas/InferenceTiming'
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        labels:
+          items:
+            $ref: '#/components/schemas/ClassificationLabelScore'
+          type: array
+          title: Labels
+        detections:
+          items:
+            $ref: '#/components/schemas/DetectionPrediction'
+          type: array
+          title: Detections
+        image_width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Image Width
+        image_height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Image Height
+        segments:
+          items:
+            $ref: '#/components/schemas/SegmentationPrediction'
+          type: array
+          title: Segments
+        anomaly_score:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Anomaly Score
+        predicted_label:
+          anyOf:
+          - type: string
+            enum:
+            - normal
+            - anomalous
+          - type: 'null'
+          title: Predicted Label
+        is_anomalous:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Anomalous
+        threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Threshold
+        heatmap:
+          anyOf:
+          - $ref: '#/components/schemas/AnomalyHeatmap'
+          - type: 'null'
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/AnomalyMask'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - deployment_target
+      - route
+      - architecture
+      - warm_model
+      - timing
+      - task_type
+      title: RealtimeInferenceResponse
+    RealtimeSegmentRequest:
+      properties:
+        deployment_target:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Deployment Target
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+        max_segments:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Segments
+          default: 5
+        score_threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Score Threshold
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_target
+      - image_base64
+      title: RealtimeSegmentRequest
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    SegmentationInferenceResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.segmentation.response.v1
+          title: Schema Version
+          default: inference.segmentation.response.v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        warm_model:
+          type: boolean
+          title: Warm Model
+        timing:
+          $ref: '#/components/schemas/InferenceTiming'
+        image_width:
+          type: integer
+          minimum: 1.0
+          title: Image Width
+        image_height:
+          type: integer
+          minimum: 1.0
+          title: Image Height
+        segments:
+          items:
+            $ref: '#/components/schemas/SegmentationPrediction'
+          type: array
+          title: Segments
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - deployment_target
+      - route
+      - architecture
+      - warm_model
+      - timing
+      - image_width
+      - image_height
+      title: SegmentationInferenceResponse
+    SegmentationPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: SegmentationPoint
+    SegmentationPrediction:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+        polygon:
+          items:
+            $ref: '#/components/schemas/SegmentationPoint'
+          type: array
+          title: Polygon
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      title: SegmentationPrediction
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    TargetPath:
+      type: string
+      enum:
+      - realtime
+      - batch
+      title: TargetPath
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - detection
+      - oriented_detection
+      - segmentation
+      - anomaly
+      - temporal_sequence
+      title: TaskType
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

@@ -1,0 +1,10 @@
+[Unit]
+Description=YBB edge runtime local health watchdog
+After=ybb-edge-agent.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ybb-edge/device.env
+ExecStart=/opt/ybb-edge/venv/bin/python /opt/ybb-edge/edge-watchdog.py
+ExecStartPost=/bin/sh -c 'rm -f /run/ybb-edge-watchdog.failures'
+OnFailure=ybb-edge-watchdog-recover.service

@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.8
+    hooks:
+      - id: ruff
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        additional_dependencies:
+          - prettier@3.3.3
+        files: "\\.(ts|tsx|js|json|css|md|yaml|yml)$"

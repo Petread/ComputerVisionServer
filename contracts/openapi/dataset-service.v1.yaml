@@ -1,0 +1,1435 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Dataset Service
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/datasets:
+    get:
+      tags:
+      - datasets
+      summary: Get Dataset List
+      operationId: get_dataset_list_api_v1_datasets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_DatasetSummary_'
+    post:
+      tags:
+      - datasets
+      summary: Create Dataset Record
+      operationId: create_dataset_record_api_v1_datasets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/label-projects:
+    get:
+      tags:
+      - label-projects
+      summary: Get Label Projects
+      operationId: get_label_projects_api_v1_label_projects_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_LabelProjectSummary_'
+    post:
+      tags:
+      - label-projects
+      summary: Map Label Project
+      operationId: map_label_project_api_v1_label_projects_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabelProjectMappingRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabelProjectSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/annotation-schemas:
+    get:
+      tags:
+      - label-projects
+      summary: Get Annotation Schemas
+      operationId: get_annotation_schemas_api_v1_annotation_schemas_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_AnnotationSchemaSummary_'
+  /api/v1/label-projects:provision:
+    post:
+      tags:
+      - label-projects
+      summary: Provision Label Project
+      operationId: provision_label_project_api_v1_label_projects_provision_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabelProjectProvisionRequest'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/label-projects/sync:
+    post:
+      tags:
+      - label-projects
+      summary: Sync Label Projects
+      operationId: sync_label_projects_api_v1_label_projects_sync_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+  /api/v1/datasets/{dataset_id}/snapshots:
+    get:
+      tags:
+      - dataset-snapshots
+      summary: Get Dataset Snapshots
+      operationId: get_dataset_snapshots_api_v1_datasets__dataset_id__snapshots_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_DatasetSnapshotSummary_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/dataset-snapshots:
+    post:
+      tags:
+      - dataset-snapshots
+      summary: Create Snapshot Request
+      operationId: create_snapshot_request_api_v1_dataset_snapshots_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetSnapshotCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/dataset-snapshots/{snapshot_id}:
+    get:
+      tags:
+      - dataset-snapshots
+      summary: Get Snapshot Detail
+      operationId: get_snapshot_detail_api_v1_dataset_snapshots__snapshot_id__get
+      parameters:
+      - name: snapshot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Snapshot Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetSnapshotDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/dataset-snapshots/{snapshot_id}/validation-report:
+    get:
+      tags:
+      - dataset-snapshots
+      summary: Get Snapshot Validation Report
+      operationId: get_snapshot_validation_report_api_v1_dataset_snapshots__snapshot_id__validation_report_get
+      parameters:
+      - name: snapshot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Snapshot Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationReport'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/datasets/{dataset_id}/annotation-statistics:
+    get:
+      tags:
+      - statistics
+      summary: Get Dataset Annotation Statistics
+      operationId: get_dataset_annotation_statistics_api_v1_datasets__dataset_id__annotation_statistics_get
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Dataset Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationStatistics'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/label-projects/{label_project_id}/annotation-statistics:
+    get:
+      tags:
+      - statistics
+      summary: Get Project Annotation Statistics
+      operationId: get_project_annotation_statistics_api_v1_label_projects__label_project_id__annotation_statistics_get
+      parameters:
+      - name: label_project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Label Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationStatistics'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AcceptedJob:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        queue:
+          $ref: '#/components/schemas/QueueName'
+        status:
+          type: string
+          title: Status
+        accepted_at:
+          type: string
+          title: Accepted At
+      type: object
+      required:
+      - job_id
+      - queue
+      - status
+      - accepted_at
+      title: AcceptedJob
+    AnnotationSchemaSummary:
+      properties:
+        annotation_schema_id:
+          type: string
+          title: Annotation Schema Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        target_builder_id:
+          type: string
+          title: Target Builder Id
+        target_builder_version:
+          type: string
+          title: Target Builder Version
+        label_config_sha256:
+          type: string
+          maxLength: 64
+          minLength: 64
+          title: Label Config Sha256
+        field_names:
+          items:
+            type: string
+          type: array
+          title: Field Names
+      type: object
+      required:
+      - annotation_schema_id
+      - task_type
+      - title
+      - description
+      - target_builder_id
+      - target_builder_version
+      - label_config_sha256
+      title: AnnotationSchemaSummary
+    AnnotationStatistics:
+      properties:
+        dataset_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dataset Id
+        label_project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Project Id
+        label_studio_project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Label Studio Project Id
+        task_count:
+          type: integer
+          title: Task Count
+          default: 0
+        annotated_task_count:
+          type: integer
+          title: Annotated Task Count
+          default: 0
+        annotation_count:
+          type: integer
+          title: Annotation Count
+          default: 0
+        skipped_annotation_count:
+          type: integer
+          title: Skipped Annotation Count
+          default: 0
+        unlabeled_task_count:
+          type: integer
+          title: Unlabeled Task Count
+          default: 0
+        draft_task_count:
+          type: integer
+          title: Draft Task Count
+          default: 0
+        eligible_task_count:
+          type: integer
+          title: Eligible Task Count
+          default: 0
+        submitted_labeled_task_count:
+          type: integer
+          title: Submitted Labeled Task Count
+          default: 0
+        submitted_background_task_count:
+          type: integer
+          title: Submitted Background Task Count
+          default: 0
+        invalid_task_count:
+          type: integer
+          title: Invalid Task Count
+          default: 0
+        class_distribution:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Class Distribution
+        snapshot_count:
+          type: integer
+          title: Snapshot Count
+          default: 0
+        last_activity_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Activity At
+      type: object
+      title: AnnotationStatistics
+    DatasetCreateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Name
+        slug:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{2,63}$
+          title: Slug
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        label_schema_version:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Label Schema Version
+      type: object
+      required:
+      - name
+      - slug
+      - task_type
+      - label_schema_version
+      title: DatasetCreateRequest
+    DatasetSnapshotCreateRequest:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        label_project_id:
+          type: string
+          title: Label Project Id
+        export_format:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Export Format
+          default: JSON
+        trigger:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Trigger
+          default: manual
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 280
+          - type: 'null'
+          title: Reason
+        idempotency_key:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Idempotency Key
+      type: object
+      required:
+      - dataset_id
+      - label_project_id
+      title: DatasetSnapshotCreateRequest
+    DatasetSnapshotDetail:
+      properties:
+        snapshot_id:
+          type: string
+          title: Snapshot Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        label_project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Project Id
+        source_label_studio_project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Label Studio Project Id
+        source_project_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Project Title
+        snapshot_no:
+          type: integer
+          title: Snapshot No
+        status:
+          $ref: '#/components/schemas/SnapshotStatus'
+        export_format:
+          type: string
+          title: Export Format
+        label_schema_version:
+          type: string
+          title: Label Schema Version
+        item_count:
+          type: integer
+          title: Item Count
+        annotation_count:
+          type: integer
+          title: Annotation Count
+        eligible_item_count:
+          type: integer
+          title: Eligible Item Count
+          default: 0
+        submitted_labeled_item_count:
+          type: integer
+          title: Submitted Labeled Item Count
+          default: 0
+        submitted_background_item_count:
+          type: integer
+          title: Submitted Background Item Count
+          default: 0
+        draft_item_count:
+          type: integer
+          title: Draft Item Count
+          default: 0
+        invalid_item_count:
+          type: integer
+          title: Invalid Item Count
+          default: 0
+        content_checksum:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content Checksum
+        validation_status:
+          anyOf:
+          - $ref: '#/components/schemas/ValidationStatus'
+          - type: 'null'
+        created_at:
+          type: string
+          title: Created At
+        manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manifest Uri
+        export_storage_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Export Storage Uri
+        dvc_rev:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dvc Rev
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created By
+        source_captured_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Captured At
+        statistics:
+          additionalProperties: true
+          type: object
+          title: Statistics
+        split_metadata:
+          $ref: '#/components/schemas/SplitMetadata'
+        validation_report:
+          $ref: '#/components/schemas/ValidationReport'
+        comparison:
+          anyOf:
+          - $ref: '#/components/schemas/SnapshotComparison'
+          - type: 'null'
+        processing_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Processing Error
+      type: object
+      required:
+      - snapshot_id
+      - dataset_id
+      - snapshot_no
+      - status
+      - export_format
+      - label_schema_version
+      - item_count
+      - annotation_count
+      - created_at
+      - split_metadata
+      - validation_report
+      title: DatasetSnapshotDetail
+    DatasetSnapshotSummary:
+      properties:
+        snapshot_id:
+          type: string
+          title: Snapshot Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        label_project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Project Id
+        source_label_studio_project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Label Studio Project Id
+        source_project_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Project Title
+        snapshot_no:
+          type: integer
+          title: Snapshot No
+        status:
+          $ref: '#/components/schemas/SnapshotStatus'
+        export_format:
+          type: string
+          title: Export Format
+        label_schema_version:
+          type: string
+          title: Label Schema Version
+        item_count:
+          type: integer
+          title: Item Count
+        annotation_count:
+          type: integer
+          title: Annotation Count
+        eligible_item_count:
+          type: integer
+          title: Eligible Item Count
+          default: 0
+        submitted_labeled_item_count:
+          type: integer
+          title: Submitted Labeled Item Count
+          default: 0
+        submitted_background_item_count:
+          type: integer
+          title: Submitted Background Item Count
+          default: 0
+        draft_item_count:
+          type: integer
+          title: Draft Item Count
+          default: 0
+        invalid_item_count:
+          type: integer
+          title: Invalid Item Count
+          default: 0
+        content_checksum:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content Checksum
+        validation_status:
+          anyOf:
+          - $ref: '#/components/schemas/ValidationStatus'
+          - type: 'null'
+        created_at:
+          type: string
+          title: Created At
+      type: object
+      required:
+      - snapshot_id
+      - dataset_id
+      - snapshot_no
+      - status
+      - export_format
+      - label_schema_version
+      - item_count
+      - annotation_count
+      - created_at
+      title: DatasetSnapshotSummary
+    DatasetStatus:
+      type: string
+      enum:
+      - draft
+      - uploading
+      - ready
+      - snapshotting
+      - snapshotted
+      - failed
+      title: DatasetStatus
+    DatasetSummary:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        name:
+          type: string
+          title: Name
+        slug:
+          type: string
+          title: Slug
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        status:
+          $ref: '#/components/schemas/DatasetStatus'
+        label_schema_version:
+          type: string
+          title: Label Schema Version
+        project_count:
+          type: integer
+          title: Project Count
+          default: 0
+        snapshot_count:
+          type: integer
+          title: Snapshot Count
+          default: 0
+        latest_snapshot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Latest Snapshot Id
+        latest_snapshot_status:
+          anyOf:
+          - $ref: '#/components/schemas/SnapshotStatus'
+          - type: 'null'
+        created_at:
+          type: string
+          title: Created At
+      type: object
+      required:
+      - dataset_id
+      - name
+      - slug
+      - task_type
+      - status
+      - label_schema_version
+      - created_at
+      title: DatasetSummary
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    LabelProjectMappingRequest:
+      properties:
+        dataset_id:
+          type: string
+          title: Dataset Id
+        label_studio_project_id:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Label Studio Project Id
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        training_pipeline_slug:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Training Pipeline Slug
+        auto_snapshot_enabled:
+          type: boolean
+          title: Auto Snapshot Enabled
+          default: false
+        minimum_annotation_count:
+          type: integer
+          minimum: 0.0
+          title: Minimum Annotation Count
+          default: 1
+        required_classes:
+          items:
+            type: string
+          type: array
+          title: Required Classes
+        train_ratio:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Train Ratio
+          default: 80
+        val_ratio:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Val Ratio
+          default: 10
+        test_ratio:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Test Ratio
+          default: 10
+        class_balance_strategy:
+          type: string
+          enum:
+          - none
+          - weighted_loss
+          - balanced_sampler
+          title: Class Balance Strategy
+          default: none
+        qualifying_actions:
+          items:
+            type: string
+          type: array
+          title: Qualifying Actions
+        label_config:
+          additionalProperties: true
+          type: object
+          title: Label Config
+      type: object
+      required:
+      - dataset_id
+      - label_studio_project_id
+      - title
+      - task_type
+      - training_pipeline_slug
+      title: LabelProjectMappingRequest
+    LabelProjectProvisionRequest:
+      properties:
+        dataset_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Dataset Id
+        title:
+          type: string
+          maxLength: 50
+          minLength: 3
+          title: Title
+        annotation_schema_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Annotation Schema Id
+        training_pipeline_slug:
+          type: string
+          maxLength: 120
+          minLength: 1
+          pattern: ^[a-z0-9][a-z0-9-]{0,119}$
+          title: Training Pipeline Slug
+        auto_sync_enabled:
+          type: boolean
+          title: Auto Sync Enabled
+          default: true
+        auto_snapshot_enabled:
+          type: boolean
+          title: Auto Snapshot Enabled
+          default: false
+        minimum_annotation_count:
+          type: integer
+          minimum: 0.0
+          title: Minimum Annotation Count
+          default: 1
+        train_ratio:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Train Ratio
+          default: 80
+        val_ratio:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Val Ratio
+          default: 10
+        test_ratio:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Test Ratio
+          default: 10
+        class_balance_strategy:
+          type: string
+          enum:
+          - none
+          - weighted_loss
+          - balanced_sampler
+          title: Class Balance Strategy
+          default: none
+        idempotency_key:
+          anyOf:
+          - type: string
+            maxLength: 128
+            minLength: 1
+          - type: 'null'
+          title: Idempotency Key
+      type: object
+      required:
+      - dataset_id
+      - title
+      - annotation_schema_id
+      - training_pipeline_slug
+      title: LabelProjectProvisionRequest
+    LabelProjectStatus:
+      type: string
+      enum:
+      - discovered
+      - mapped
+      - active
+      - needs_attention
+      - archived
+      title: LabelProjectStatus
+    LabelProjectSummary:
+      properties:
+        label_project_id:
+          type: string
+          title: Label Project Id
+        label_studio_project_id:
+          type: integer
+          title: Label Studio Project Id
+        title:
+          type: string
+          title: Title
+        dataset_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dataset Id
+        dataset_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dataset Name
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        status:
+          $ref: '#/components/schemas/LabelProjectStatus'
+        label_schema_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Schema Version
+        label_config_sha256:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Config Sha256
+        training_pipeline_slug:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Training Pipeline Slug
+        auto_sync_enabled:
+          type: boolean
+          title: Auto Sync Enabled
+          default: true
+        auto_snapshot_enabled:
+          type: boolean
+          title: Auto Snapshot Enabled
+        minimum_annotation_count:
+          type: integer
+          title: Minimum Annotation Count
+        required_classes:
+          items:
+            type: string
+          type: array
+          title: Required Classes
+        qualifying_actions:
+          items:
+            type: string
+          type: array
+          title: Qualifying Actions
+        label_config:
+          additionalProperties: true
+          type: object
+          title: Label Config
+        train_ratio:
+          type: integer
+          title: Train Ratio
+        val_ratio:
+          type: integer
+          title: Val Ratio
+        test_ratio:
+          type: integer
+          title: Test Ratio
+        class_balance_strategy:
+          type: string
+          enum:
+          - none
+          - weighted_loss
+          - balanced_sampler
+          title: Class Balance Strategy
+          default: none
+        task_count:
+          type: integer
+          title: Task Count
+          default: 0
+        annotated_task_count:
+          type: integer
+          title: Annotated Task Count
+          default: 0
+        annotation_count:
+          type: integer
+          title: Annotation Count
+          default: 0
+        skipped_annotation_count:
+          type: integer
+          title: Skipped Annotation Count
+          default: 0
+        class_distribution:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Class Distribution
+        last_activity_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Activity At
+        created_at:
+          type: string
+          title: Created At
+      type: object
+      required:
+      - label_project_id
+      - label_studio_project_id
+      - title
+      - task_type
+      - status
+      - auto_snapshot_enabled
+      - minimum_annotation_count
+      - train_ratio
+      - val_ratio
+      - test_ratio
+      - created_at
+      title: LabelProjectSummary
+    ListResponse_AnnotationSchemaSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AnnotationSchemaSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[AnnotationSchemaSummary]
+    ListResponse_DatasetSnapshotSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DatasetSnapshotSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[DatasetSnapshotSummary]
+    ListResponse_DatasetSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DatasetSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[DatasetSummary]
+    ListResponse_LabelProjectSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/LabelProjectSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[LabelProjectSummary]
+    QueueName:
+      type: string
+      enum:
+      - webhook
+      - dataset
+      - training
+      - deploy
+      - batch
+      - runtime-control
+      - runtime-capture
+      - runtime-connector
+      - maintenance
+      title: QueueName
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    SnapshotComparison:
+      properties:
+        previous_snapshot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Previous Snapshot Id
+        annotation_delta:
+          type: integer
+          title: Annotation Delta
+          default: 0
+        item_delta:
+          type: integer
+          title: Item Delta
+          default: 0
+        checksum_changed:
+          type: boolean
+          title: Checksum Changed
+          default: false
+        schema_changed:
+          type: boolean
+          title: Schema Changed
+          default: false
+        split_changed:
+          type: boolean
+          title: Split Changed
+          default: false
+      type: object
+      title: SnapshotComparison
+    SnapshotStatus:
+      type: string
+      enum:
+      - requested
+      - exporting
+      - materializing
+      - validating
+      - ready
+      - failed
+      - superseded
+      title: SnapshotStatus
+    SplitMetadata:
+      properties:
+        strategy:
+          type: string
+          title: Strategy
+        train_ratio:
+          type: integer
+          title: Train Ratio
+        val_ratio:
+          type: integer
+          title: Val Ratio
+        test_ratio:
+          type: integer
+          title: Test Ratio
+        train_count:
+          type: integer
+          title: Train Count
+        val_count:
+          type: integer
+          title: Val Count
+        test_count:
+          type: integer
+          title: Test Count
+      type: object
+      required:
+      - strategy
+      - train_ratio
+      - val_ratio
+      - test_ratio
+      - train_count
+      - val_count
+      - test_count
+      title: SplitMetadata
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - detection
+      - oriented_detection
+      - segmentation
+      - anomaly
+      - temporal_sequence
+      title: TaskType
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationIssue:
+      properties:
+        severity:
+          type: string
+          title: Severity
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        item_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Item Ref
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      type: object
+      required:
+      - severity
+      - code
+      - message
+      title: ValidationIssue
+    ValidationReport:
+      properties:
+        status:
+          $ref: '#/components/schemas/ValidationStatus'
+        checked_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Checked At
+        checks:
+          additionalProperties:
+            type: boolean
+          type: object
+          title: Checks
+        issues:
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+          type: array
+          title: Issues
+        warning_count:
+          type: integer
+          title: Warning Count
+          default: 0
+        error_count:
+          type: integer
+          title: Error Count
+          default: 0
+      type: object
+      required:
+      - status
+      title: ValidationReport
+    ValidationStatus:
+      type: string
+      enum:
+      - pending
+      - passed
+      - failed
+      title: ValidationStatus

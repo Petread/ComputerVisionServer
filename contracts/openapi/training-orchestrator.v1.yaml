@@ -1,0 +1,1349 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Training Orchestrator
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/training-jobs:
+    get:
+      tags:
+      - training
+      summary: Get Training Jobs
+      operationId: get_training_jobs_api_v1_training_jobs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_TrainingJobSummary_'
+    post:
+      tags:
+      - training
+      summary: Request Training Job
+      operationId: request_training_job_api_v1_training_jobs_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingJobCreateRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/compare:
+    get:
+      tags:
+      - training
+      summary: Compare Training Jobs
+      operationId: compare_training_jobs_api_v1_training_jobs_compare_get
+      parameters:
+      - name: job_ids
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+          title: Job Ids
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingRunComparison'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{training_job_id}:
+    get:
+      tags:
+      - training
+      summary: Get Training Job
+      operationId: get_training_job_api_v1_training_jobs__training_job_id__get
+      parameters:
+      - name: training_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Training Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingJobDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{training_job_id}:cancel:
+    post:
+      tags:
+      - training
+      summary: Cancel Training Job
+      operationId: cancel_training_job_api_v1_training_jobs__training_job_id__cancel_post
+      parameters:
+      - name: training_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Training Job Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingJobCommandRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/training-jobs/{training_job_id}:resume:
+    post:
+      tags:
+      - training
+      summary: Resume Training Job
+      operationId: resume_training_job_api_v1_training_jobs__training_job_id__resume_post
+      parameters:
+      - name: training_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Training Job Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingJobCommandRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AcceptedJob:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        queue:
+          $ref: '#/components/schemas/QueueName'
+        status:
+          type: string
+          title: Status
+        accepted_at:
+          type: string
+          title: Accepted At
+      type: object
+      required:
+      - job_id
+      - queue
+      - status
+      - accepted_at
+      title: AcceptedJob
+    BestCheckpointRule:
+      properties:
+        metric_name:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Metric Name
+        mode:
+          type: string
+          enum:
+          - max
+          - min
+          title: Mode
+          default: max
+        phase:
+          type: string
+          enum:
+          - training
+          - validation
+          - evaluation
+          title: Phase
+          default: evaluation
+        minimum_epoch:
+          type: integer
+          maximum: 10000.0
+          minimum: 1.0
+          title: Minimum Epoch
+          default: 1
+      type: object
+      required:
+      - metric_name
+      title: BestCheckpointRule
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ListResponse_TrainingJobSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/TrainingJobSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[TrainingJobSummary]
+    ModelArchitectureSummary:
+      properties:
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        family:
+          type: string
+          maxLength: 64
+          minLength: 2
+          title: Family
+        version:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Version
+        size:
+          type: string
+          maxLength: 16
+          minLength: 1
+          title: Size
+        display_name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Display Name
+        internal_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Internal Key
+      type: object
+      required:
+      - task_type
+      - family
+      - version
+      - size
+      - display_name
+      - internal_key
+      title: ModelArchitectureSummary
+    PromotionCriteriaPolicy:
+      properties:
+        criteria:
+          items:
+            $ref: '#/components/schemas/PromotionCriterion'
+          type: array
+          minItems: 1
+          title: Criteria
+        allow_model_override:
+          type: boolean
+          title: Allow Model Override
+          default: true
+      type: object
+      title: PromotionCriteriaPolicy
+    PromotionCriterion:
+      properties:
+        metric_name:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Metric Name
+        comparison:
+          type: string
+          enum:
+          - gte
+          - lte
+          title: Comparison
+        threshold:
+          type: number
+          title: Threshold
+        phase:
+          type: string
+          enum:
+          - validation
+          - evaluation
+          title: Phase
+          default: evaluation
+      type: object
+      required:
+      - metric_name
+      - comparison
+      - threshold
+      title: PromotionCriterion
+    PromotionCriterionResult:
+      properties:
+        metric_name:
+          type: string
+          title: Metric Name
+        comparison:
+          type: string
+          enum:
+          - gte
+          - lte
+          title: Comparison
+        threshold:
+          type: number
+          title: Threshold
+        phase:
+          type: string
+          enum:
+          - validation
+          - evaluation
+          title: Phase
+        actual_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Actual Value
+        passed:
+          type: boolean
+          title: Passed
+          default: false
+      type: object
+      required:
+      - metric_name
+      - comparison
+      - threshold
+      - phase
+      title: PromotionCriterionResult
+    QueueName:
+      type: string
+      enum:
+      - webhook
+      - dataset
+      - training
+      - deploy
+      - batch
+      - runtime-control
+      - runtime-capture
+      - runtime-connector
+      - maintenance
+      title: QueueName
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - detection
+      - oriented_detection
+      - segmentation
+      - anomaly
+      - temporal_sequence
+      title: TaskType
+    TrainingCheckpointSummary:
+      properties:
+        checkpoint_id:
+          type: string
+          title: Checkpoint Id
+        training_job_id:
+          type: string
+          title: Training Job Id
+        step_no:
+          type: integer
+          title: Step No
+        epoch_no:
+          type: integer
+          title: Epoch No
+        metric_primary:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Metric Primary
+        checkpoint_kind:
+          type: string
+          title: Checkpoint Kind
+        storage_uri:
+          type: string
+          title: Storage Uri
+        sha256:
+          type: string
+          title: Sha256
+        resume_safe:
+          type: boolean
+          title: Resume Safe
+          default: true
+        is_best:
+          type: boolean
+          title: Is Best
+          default: false
+        metrics:
+          additionalProperties:
+            type: number
+          type: object
+          title: Metrics
+        created_at:
+          type: string
+          title: Created At
+      type: object
+      required:
+      - checkpoint_id
+      - training_job_id
+      - step_no
+      - epoch_no
+      - checkpoint_kind
+      - storage_uri
+      - sha256
+      - created_at
+      title: TrainingCheckpointSummary
+    TrainingDefaults:
+      properties:
+        epochs:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Epochs
+          default: 40
+        learning_rate:
+          type: number
+          maximum: 10.0
+          exclusiveMinimum: 0.0
+          title: Learning Rate
+          default: 0.001
+        image_size:
+          anyOf:
+          - type: integer
+            multipleOf: 32.0
+            maximum: 4096.0
+            minimum: 32.0
+          - type: 'null'
+          title: Image Size
+          default: 640
+        batch_size:
+          anyOf:
+          - type: integer
+            maximum: 4096.0
+            minimum: 1.0
+          - type: 'null'
+          title: Batch Size
+          default: 8
+        optimizer:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 2
+          - type: 'null'
+          title: Optimizer
+          default: auto
+        optimizer_settings:
+          additionalProperties: true
+          type: object
+          title: Optimizer Settings
+        checkpoint_interval_steps:
+          type: integer
+          maximum: 100000.0
+          minimum: 1.0
+          title: Checkpoint Interval Steps
+          default: 25
+      type: object
+      title: TrainingDefaults
+    TrainingEvaluationSummary:
+      properties:
+        primary_metric_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Primary Metric Name
+        primary_metric_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Primary Metric Value
+        metrics:
+          additionalProperties:
+            type: number
+          type: object
+          title: Metrics
+        promotion_ready:
+          type: boolean
+          title: Promotion Ready
+          default: false
+        promotion_results:
+          items:
+            $ref: '#/components/schemas/PromotionCriterionResult'
+          type: array
+          title: Promotion Results
+        best_checkpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Best Checkpoint Id
+        best_checkpoint_metric:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Best Checkpoint Metric
+      type: object
+      title: TrainingEvaluationSummary
+    TrainingJobCommandRequest:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Reason
+        idempotency_key:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Idempotency Key
+        force:
+          type: boolean
+          title: Force
+          default: false
+      type: object
+      title: TrainingJobCommandRequest
+    TrainingJobCreateRequest:
+      properties:
+        model_family_slug:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Model Family Slug
+        dataset_snapshot_id:
+          type: string
+          maxLength: 64
+          minLength: 10
+          title: Dataset Snapshot Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_template_key:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Model Template Key
+        model_template_version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Model Template Version
+        recipe_name:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Recipe Name
+        recipe_version:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Recipe Version
+        max_epochs:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Max Epochs
+          default: 10
+        learning_rate:
+          type: number
+          maximum: 10.0
+          exclusiveMinimum: 0.0
+          title: Learning Rate
+          default: 0.001
+        image_size:
+          anyOf:
+          - type: integer
+            multipleOf: 32.0
+            maximum: 4096.0
+            minimum: 32.0
+          - type: 'null'
+          title: Image Size
+        batch_size:
+          anyOf:
+          - type: integer
+            maximum: 4096.0
+            minimum: 1.0
+          - type: 'null'
+          title: Batch Size
+        optimizer:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 2
+          - type: 'null'
+          title: Optimizer
+        optimizer_settings:
+          additionalProperties: true
+          type: object
+          title: Optimizer Settings
+        checkpoint_interval_steps:
+          type: integer
+          maximum: 100000.0
+          minimum: 1.0
+          title: Checkpoint Interval Steps
+          default: 25
+        parameter_overrides:
+          additionalProperties: true
+          type: object
+          title: Parameter Overrides
+        resolved_training_defaults:
+          $ref: '#/components/schemas/TrainingDefaults'
+        best_checkpoint_rule:
+          $ref: '#/components/schemas/BestCheckpointRule'
+        promotion_criteria:
+          items:
+            $ref: '#/components/schemas/PromotionCriterion'
+          type: array
+          minItems: 1
+          title: Promotion Criteria
+        promotion_policy:
+          anyOf:
+          - $ref: '#/components/schemas/PromotionCriteriaPolicy'
+          - type: 'null'
+        allow_duplicate_snapshot_training:
+          type: boolean
+          title: Allow Duplicate Snapshot Training
+          default: false
+        idempotency_key:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Idempotency Key
+      type: object
+      required:
+      - model_family_slug
+      - dataset_snapshot_id
+      - task_type
+      - architecture
+      - recipe_name
+      - recipe_version
+      - best_checkpoint_rule
+      title: TrainingJobCreateRequest
+    TrainingJobDetail:
+      properties:
+        training_job_id:
+          type: string
+          title: Training Job Id
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        dataset_snapshot_id:
+          type: string
+          title: Dataset Snapshot Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_template_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Template Key
+        model_template_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Model Template Version
+        recipe_name:
+          type: string
+          title: Recipe Name
+        recipe_version:
+          type: string
+          title: Recipe Version
+        queue_name:
+          $ref: '#/components/schemas/QueueName'
+        status:
+          $ref: '#/components/schemas/TrainingJobStatus'
+        progress_percent:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Progress Percent
+          default: 0
+        current_epoch:
+          type: integer
+          title: Current Epoch
+          default: 0
+        current_step:
+          type: integer
+          title: Current Step
+          default: 0
+        total_epochs:
+          type: integer
+          title: Total Epochs
+          default: 0
+        latest_checkpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Latest Checkpoint Id
+        worker_instance_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Worker Instance Id
+        gpu_device:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gpu Device
+        trainer_mode:
+          anyOf:
+          - type: string
+            enum:
+            - real
+            - simulation
+          - type: 'null'
+          title: Trainer Mode
+        trainer_backend:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trainer Backend
+        promotion_ready:
+          type: boolean
+          title: Promotion Ready
+          default: false
+        created_at:
+          type: string
+          title: Created At
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+        requested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requested By
+        idempotency_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency Key
+        allow_duplicate_snapshot_training:
+          type: boolean
+          title: Allow Duplicate Snapshot Training
+          default: false
+        cancel_requested:
+          type: boolean
+          title: Cancel Requested
+          default: false
+        cancel_requested_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cancel Requested At
+        best_checkpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Best Checkpoint Id
+        artifact_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Artifact Manifest Uri
+        model_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version Id
+        retry_count:
+          type: integer
+          title: Retry Count
+          default: 0
+        resume_count:
+          type: integer
+          title: Resume Count
+          default: 0
+        failure_class:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Failure Class
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        progress:
+          additionalProperties: true
+          type: object
+          title: Progress
+        parameter_overrides:
+          additionalProperties: true
+          type: object
+          title: Parameter Overrides
+        resolved_training_defaults:
+          $ref: '#/components/schemas/TrainingDefaults'
+        best_checkpoint_rule:
+          $ref: '#/components/schemas/BestCheckpointRule'
+        promotion_criteria:
+          items:
+            $ref: '#/components/schemas/PromotionCriterion'
+          type: array
+          title: Promotion Criteria
+        promotion_policy:
+          anyOf:
+          - $ref: '#/components/schemas/PromotionCriteriaPolicy'
+          - type: 'null'
+        evaluation_summary:
+          $ref: '#/components/schemas/TrainingEvaluationSummary'
+        metrics_summary:
+          additionalProperties:
+            type: number
+          type: object
+          title: Metrics Summary
+        runtime_metadata:
+          additionalProperties: true
+          type: object
+          title: Runtime Metadata
+        artifact_validation:
+          additionalProperties: true
+          type: object
+          title: Artifact Validation
+        logs:
+          items:
+            $ref: '#/components/schemas/TrainingJobLogEntry'
+          type: array
+          title: Logs
+        checkpoints:
+          items:
+            $ref: '#/components/schemas/TrainingCheckpointSummary'
+          type: array
+          title: Checkpoints
+        metrics:
+          items:
+            $ref: '#/components/schemas/TrainingMetricRecord'
+          type: array
+          title: Metrics
+        events:
+          items:
+            $ref: '#/components/schemas/TrainingJobEventSummary'
+          type: array
+          title: Events
+      type: object
+      required:
+      - training_job_id
+      - model_family_slug
+      - dataset_snapshot_id
+      - task_type
+      - architecture
+      - recipe_name
+      - recipe_version
+      - queue_name
+      - status
+      - created_at
+      - best_checkpoint_rule
+      title: TrainingJobDetail
+    TrainingJobEventSummary:
+      properties:
+        event_id:
+          type: string
+          title: Event Id
+        event_type:
+          type: string
+          title: Event Type
+        sequence_no:
+          type: integer
+          minimum: 1.0
+          title: Sequence No
+        source_service:
+          type: string
+          title: Source Service
+        actor_type:
+          type: string
+          title: Actor Type
+        actor_id:
+          type: string
+          title: Actor Id
+        occurred_at:
+          type: string
+          title: Occurred At
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - event_id
+      - event_type
+      - sequence_no
+      - source_service
+      - actor_type
+      - actor_id
+      - occurred_at
+      title: TrainingJobEventSummary
+    TrainingJobLogEntry:
+      properties:
+        sequence_no:
+          type: integer
+          minimum: 1.0
+          title: Sequence No
+        level:
+          type: string
+          title: Level
+        event_type:
+          type: string
+          title: Event Type
+        message:
+          type: string
+          title: Message
+        occurred_at:
+          type: string
+          title: Occurred At
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - sequence_no
+      - level
+      - event_type
+      - message
+      - occurred_at
+      title: TrainingJobLogEntry
+    TrainingJobStatus:
+      type: string
+      enum:
+      - queued
+      - waiting_for_gpu
+      - preparing_data
+      - validating_snapshot
+      - initializing
+      - training
+      - checkpointing
+      - evaluating
+      - exporting
+      - registering
+      - resuming
+      - cancel_requested
+      - completed
+      - failed
+      - cancelled
+      - rolled_back_if_needed
+      title: TrainingJobStatus
+    TrainingJobSummary:
+      properties:
+        training_job_id:
+          type: string
+          title: Training Job Id
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        dataset_snapshot_id:
+          type: string
+          title: Dataset Snapshot Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_template_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Template Key
+        model_template_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Model Template Version
+        recipe_name:
+          type: string
+          title: Recipe Name
+        recipe_version:
+          type: string
+          title: Recipe Version
+        queue_name:
+          $ref: '#/components/schemas/QueueName'
+        status:
+          $ref: '#/components/schemas/TrainingJobStatus'
+        progress_percent:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Progress Percent
+          default: 0
+        current_epoch:
+          type: integer
+          title: Current Epoch
+          default: 0
+        current_step:
+          type: integer
+          title: Current Step
+          default: 0
+        total_epochs:
+          type: integer
+          title: Total Epochs
+          default: 0
+        latest_checkpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Latest Checkpoint Id
+        worker_instance_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Worker Instance Id
+        gpu_device:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gpu Device
+        trainer_mode:
+          anyOf:
+          - type: string
+            enum:
+            - real
+            - simulation
+          - type: 'null'
+          title: Trainer Mode
+        trainer_backend:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trainer Backend
+        promotion_ready:
+          type: boolean
+          title: Promotion Ready
+          default: false
+        created_at:
+          type: string
+          title: Created At
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+      type: object
+      required:
+      - training_job_id
+      - model_family_slug
+      - dataset_snapshot_id
+      - task_type
+      - architecture
+      - recipe_name
+      - recipe_version
+      - queue_name
+      - status
+      - created_at
+      title: TrainingJobSummary
+    TrainingMetricComparison:
+      properties:
+        metric_name:
+          type: string
+          title: Metric Name
+        values:
+          additionalProperties:
+            anyOf:
+            - type: number
+            - type: 'null'
+          type: object
+          title: Values
+      type: object
+      required:
+      - metric_name
+      title: TrainingMetricComparison
+    TrainingMetricRecord:
+      properties:
+        metric_id:
+          type: string
+          title: Metric Id
+        training_job_id:
+          type: string
+          title: Training Job Id
+        phase:
+          type: string
+          title: Phase
+        metric_name:
+          type: string
+          title: Metric Name
+        metric_value:
+          type: number
+          title: Metric Value
+        epoch_no:
+          type: integer
+          title: Epoch No
+          default: 0
+        step_no:
+          type: integer
+          title: Step No
+          default: 0
+        is_primary:
+          type: boolean
+          title: Is Primary
+          default: false
+        checkpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Checkpoint Id
+        recorded_at:
+          type: string
+          title: Recorded At
+      type: object
+      required:
+      - metric_id
+      - training_job_id
+      - phase
+      - metric_name
+      - metric_value
+      - recorded_at
+      title: TrainingMetricRecord
+    TrainingRunComparison:
+      properties:
+        jobs:
+          items:
+            $ref: '#/components/schemas/TrainingJobSummary'
+          type: array
+          title: Jobs
+        metrics:
+          items:
+            $ref: '#/components/schemas/TrainingMetricComparison'
+          type: array
+          title: Metrics
+        recommended_job_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recommended Job Id
+      type: object
+      required:
+      - jobs
+      - metrics
+      title: TrainingRunComparison
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

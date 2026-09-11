@@ -1,0 +1,13 @@
+{
+  "name": "@cv-platform/ui-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.tsx",
+  "devDependencies": {
+    "@types/react": "^18.3.5"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  }
+}

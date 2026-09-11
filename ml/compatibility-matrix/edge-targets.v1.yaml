@@ -1,0 +1,33 @@
+schema_version: ybb.edge-targets.v1
+profiles:
+  jetson-orin-nano-jp72:
+    platform: jetson_orin_nano
+    architecture: aarch64
+    operating_system: Jetson Linux
+    jetpack: "7.2"
+    l4t: "39.2"
+    cuda: "13.2"
+    tensorrt: "10.16"
+    deepstream: "9.1"
+    storage:
+      type: nvme
+      minimum_gib: 128
+      recommended_gib: 256
+    network:
+      identity: fixed_ipv4
+      trust_profile: isolated_vlan_fixed_ip
+      control_port_tcp: 9443
+      plant_api_port_tcp: 9444
+      rtsp_port_tcp: 8554
+    inference:
+      portable_input: onnx
+      engine_build_location: edge
+      precisions:
+        - fp16
+        - fp32
+    acceptance:
+      capture_profile: 1080p30
+      live_latency_p95_ms: 100
+      trigger_latency_p95_ms: 500
+      warmup_minutes: 5
+      measurement_minutes: 30

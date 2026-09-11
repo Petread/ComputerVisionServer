@@ -1,0 +1,410 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Webhook Receiver
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/webhooks/label-studio:
+    post:
+      tags:
+      - webhooks
+      summary: Receive Label Studio Webhook
+      operationId: receive_label_studio_webhook_api_v1_webhooks_label_studio_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAckResponse'
+  /api/v1/webhook-events:
+    get:
+      tags:
+      - webhooks
+      summary: Get Webhook Event List
+      operationId: get_webhook_event_list_api_v1_webhook_events_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_WebhookEventSummary_'
+  /api/v1/webhook-events/{event_id}:
+    get:
+      tags:
+      - webhooks
+      summary: Get Webhook Event
+      operationId: get_webhook_event_api_v1_webhook_events__event_id__get
+      parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Event Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEventDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ListResponse_WebhookEventSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/WebhookEventSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[WebhookEventSummary]
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WebhookAckResponse:
+      properties:
+        event_id:
+          type: string
+          title: Event Id
+        accepted:
+          type: boolean
+          title: Accepted
+        duplicate:
+          type: boolean
+          title: Duplicate
+          default: false
+        received_at:
+          type: string
+          title: Received At
+      type: object
+      required:
+      - event_id
+      - accepted
+      - received_at
+      title: WebhookAckResponse
+    WebhookEventDetail:
+      properties:
+        event_id:
+          type: string
+          title: Event Id
+        source:
+          type: string
+          title: Source
+        source_event_key:
+          type: string
+          title: Source Event Key
+        action:
+          type: string
+          title: Action
+        label_studio_project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Label Studio Project Id
+        label_project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Project Id
+        signature_valid:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Signature Valid
+        internal_event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Internal Event Type
+        processing_status:
+          $ref: '#/components/schemas/WebhookProcessingStatus'
+        received_at:
+          type: string
+          title: Received At
+        processed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Processed At
+        remote_addr:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Remote Addr
+        headers:
+          additionalProperties:
+            type: string
+          type: object
+          title: Headers
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+        processing_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Processing Error
+      type: object
+      required:
+      - event_id
+      - source
+      - source_event_key
+      - action
+      - processing_status
+      - received_at
+      title: WebhookEventDetail
+    WebhookEventSummary:
+      properties:
+        event_id:
+          type: string
+          title: Event Id
+        source:
+          type: string
+          title: Source
+        source_event_key:
+          type: string
+          title: Source Event Key
+        action:
+          type: string
+          title: Action
+        label_studio_project_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Label Studio Project Id
+        label_project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label Project Id
+        signature_valid:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Signature Valid
+        internal_event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Internal Event Type
+        processing_status:
+          $ref: '#/components/schemas/WebhookProcessingStatus'
+        received_at:
+          type: string
+          title: Received At
+        processed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Processed At
+      type: object
+      required:
+      - event_id
+      - source
+      - source_event_key
+      - action
+      - processing_status
+      - received_at
+      title: WebhookEventSummary
+    WebhookProcessingStatus:
+      type: string
+      enum:
+      - accepted
+      - processing
+      - processed
+      - failed
+      - duplicate
+      - ignored
+      title: WebhookProcessingStatus

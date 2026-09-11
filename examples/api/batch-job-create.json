@@ -1,0 +1,17 @@
+{
+  "deployment_target": "widget-inspection-batch",
+  "inputs": [
+    {
+      "item_id": "img-1",
+      "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg==",
+      "external_ref": "img-1.png",
+      "metadata": {}
+    },
+    {
+      "item_id": "img-2",
+      "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg==",
+      "external_ref": "img-2.png",
+      "metadata": {}
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.pyc
+
+# Node
+node_modules/
+dist/
+dist-demo/
+coverage/
+
+# Local runtime state
+.local/
+.runtime/
+.cache/
+.tmp/
+.test-tmp/
+.ruf_cache/
+_crashlogs_/
+tmp/
+/cache/
+/temp/
+/logs/
+/uploads/
+/data/
+/datasets/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local secret/token material
+infra/secrets/*
+!infra/secrets/README.md
+*.jwt
+*.token
+*.secret
+eyJ*
+
+# Artifacts
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.bundle
+
+# Generated/local deployment files
+/deployment/YBB-Deployment-UI.exe
+/deployment/app.config.ps1
+
+# ML/training artifacts
+/runs/
+/mlruns/
+/artifacts/
+/outputs/
+/checkpoints/
+/weights/
+/models/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.engine
+*.tflite
+*.h5
+*.hdf5
+*.safetensors
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+*.parquet
+*.arrow

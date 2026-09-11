@@ -1,0 +1,144 @@
+{
+  auto_https disable_redirects
+  servers {
+    protocols h1 h2
+  }
+}
+
+(cv_platform_routes) {
+  encode gzip zstd
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "same-origin"
+    X-Frame-Options "SAMEORIGIN"
+    -Alt-Svc
+    -Server
+  }
+
+  @blocked_control_paths {
+    path /datasets-service* /training-orchestrator* /model-registry* /deployment-controller* /webhook-receiver* /channel-service* /pipeline-definition-service* /runtime-admin-api* /runtime-orchestrator* /realtime-executor* /trigger-executor* /overlay-service* /capture-service* /result-service* /connector-service*
+  }
+  respond @blocked_control_paths 404
+
+  @blocked_batch_internal {
+    path /inference-batch/api/v1/batch/internal/*
+  }
+  respond @blocked_batch_internal 404
+
+  handle /health/* {
+    reverse_proxy admin-api:8080
+  }
+
+  handle /api/* {
+    reverse_proxy admin-api:8080
+  }
+
+  handle_path /inference-rt/* {
+    uri strip_prefix /inference-rt
+    reverse_proxy inference-gateway-rt:8087
+  }
+
+  handle_path /inference-batch/* {
+    uri strip_prefix /inference-batch
+    reverse_proxy inference-gateway-batch:8088
+  }
+
+  handle_path /runtime-api/* {
+    uri strip_prefix /runtime-api
+    reverse_proxy runtime-admin-api:8090
+  }
+
+  handle_path /stream-webrtc/* {
+    uri strip_prefix /stream-webrtc
+    reverse_proxy mediamtx:8889 {
+      header_down Location ^/ /stream-webrtc/
+    }
+  }
+
+  handle_path /runtime-trigger/* {
+    uri strip_prefix /runtime-trigger
+    reverse_proxy trigger-executor:8095
+  }
+
+  handle_path /runtime-overlay/* {
+    uri strip_prefix /runtime-overlay
+    reverse_proxy overlay-service:8096
+  }
+
+  handle_path /runtime-results/* {
+    uri strip_prefix /runtime-results
+    reverse_proxy result-service:8098
+  }
+
+  @label_studio_prefixed_local_files path /label-studio/data/local-files /label-studio/data/local-files/ /label-studio/data/local-files/*
+  handle @label_studio_prefixed_local_files {
+    root * /srv/cv-platform
+    rewrite * /{query.d}
+    header Access-Control-Allow-Origin "*"
+    file_server
+  }
+
+  @label_studio_local_files path /data/local-files /data/local-files/ /data/local-files/*
+  handle @label_studio_local_files {
+    root * /srv/cv-platform
+    rewrite * /{query.d}
+    header Access-Control-Allow-Origin "*"
+    file_server
+  }
+
+  handle /data/upload/* {
+    reverse_proxy label-studio:8080
+  }
+
+  # Label Studio serves frontend assets on absolute paths even when HOST uses /label-studio.
+  handle /static/* {
+    reverse_proxy label-studio:8080
+  }
+
+  handle /react-app/* {
+    reverse_proxy label-studio:8080
+  }
+
+  redir /label-studio /label-studio/ 308
+  handle /label-studio/ {
+    uri strip_prefix /label-studio
+    reverse_proxy label-studio:8080
+  }
+
+  handle_path /label-studio/* {
+    reverse_proxy label-studio:8080
+  }
+
+  redir /mlflow /mlflow/ 308
+  handle_path /mlflow/* {
+    uri strip_prefix /mlflow
+    reverse_proxy mlflow:5000
+  }
+
+  redir / /frontend/ 308
+  redir /frontend /frontend/ 308
+  handle /frontend/assets/* {
+    uri strip_prefix /frontend
+    header Cache-Control "public, max-age=31536000, immutable"
+    reverse_proxy admin-web:4173
+  }
+
+  handle_path /frontend/* {
+    header Cache-Control "no-store"
+    reverse_proxy admin-web:4173
+  }
+
+  handle {
+    header Cache-Control "no-store"
+    reverse_proxy admin-web:4173
+  }
+}
+
+:80 {
+  redir https://{host}{uri} 308
+}
+
+:443 {
+  tls /run/secrets/tls_cert.pem /run/secrets/tls_key.pem
+  import cv_platform_routes
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": "stem.projection-observations.v1",
+  "reference_phase_deg": 0.0,
+  "description": "Synthetic metric fixed-axis replay with three circular slices.",
+  "observations": [
+    {"x_mm": 0.0, "phase_deg": 0.0, "projected_center_mm": 10.0, "visible_width_mm": 200.0, "quality": 0.95},
+    {"x_mm": 0.0, "phase_deg": 30.0, "projected_center_mm": 11.160254, "visible_width_mm": 200.0, "quality": 0.95},
+    {"x_mm": 0.0, "phase_deg": 60.0, "projected_center_mm": 9.330127, "visible_width_mm": 200.0, "quality": 0.95},
+    {"x_mm": 0.0, "phase_deg": 90.0, "projected_center_mm": 5.0, "visible_width_mm": 200.0, "quality": 0.95},
+    {"x_mm": 0.0, "phase_deg": 120.0, "projected_center_mm": -0.669873, "visible_width_mm": 200.0, "quality": 0.95},
+    {"x_mm": 0.0, "phase_deg": 150.0, "projected_center_mm": -6.160254, "visible_width_mm": 200.0, "quality": 0.95},
+    {"x_mm": 0.0, "phase_deg": 180.0, "projected_center_mm": -10.0, "visible_width_mm": 200.0, "quality": 0.95},
+
+    {"x_mm": 50.0, "phase_deg": 0.0, "projected_center_mm": 12.0, "visible_width_mm": 190.0, "quality": 0.94},
+    {"x_mm": 50.0, "phase_deg": 30.0, "projected_center_mm": 8.392305, "visible_width_mm": 190.0, "quality": 0.94},
+    {"x_mm": 50.0, "phase_deg": 60.0, "projected_center_mm": 2.535898, "visible_width_mm": 190.0, "quality": 0.94},
+    {"x_mm": 50.0, "phase_deg": 90.0, "projected_center_mm": -4.0, "visible_width_mm": 190.0, "quality": 0.94},
+    {"x_mm": 50.0, "phase_deg": 120.0, "projected_center_mm": -9.464102, "visible_width_mm": 190.0, "quality": 0.94},
+    {"x_mm": 50.0, "phase_deg": 150.0, "projected_center_mm": -12.392305, "visible_width_mm": 190.0, "quality": 0.94},
+    {"x_mm": 50.0, "phase_deg": 180.0, "projected_center_mm": -12.0, "visible_width_mm": 190.0, "quality": 0.94},
+
+    {"x_mm": 100.0, "phase_deg": 0.0, "projected_center_mm": 5.0, "visible_width_mm": 180.0, "quality": 0.93},
+    {"x_mm": 100.0, "phase_deg": 30.0, "projected_center_mm": -0.669873, "visible_width_mm": 180.0, "quality": 0.93},
+    {"x_mm": 100.0, "phase_deg": 60.0, "projected_center_mm": -6.160254, "visible_width_mm": 180.0, "quality": 0.93},
+    {"x_mm": 100.0, "phase_deg": 90.0, "projected_center_mm": -10.0, "visible_width_mm": 180.0, "quality": 0.93},
+    {"x_mm": 100.0, "phase_deg": 120.0, "projected_center_mm": -11.160254, "visible_width_mm": 180.0, "quality": 0.93},
+    {"x_mm": 100.0, "phase_deg": 150.0, "projected_center_mm": -9.330127, "visible_width_mm": 180.0, "quality": 0.93},
+    {"x_mm": 100.0, "phase_deg": 180.0, "projected_center_mm": -5.0, "visible_width_mm": 180.0, "quality": 0.93}
+  ]
+}

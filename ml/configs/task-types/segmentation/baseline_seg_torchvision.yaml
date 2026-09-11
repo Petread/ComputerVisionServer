@@ -1,0 +1,31 @@
+task_type: segmentation
+recipe_name: baseline_seg_torchvision
+recipe_version: 1.2.0
+framework: torchvision
+trainer_backend: torchvision-segmentation
+backbone: auto
+image_size: 512
+epochs: 45
+batch_size: 4
+optimizer: adamw
+optimizer_settings:
+  weight_decay: 0.0001
+learning_rate: 0.0005
+checkpoint_interval_steps: 25
+early_stopping_patience: 30
+early_stopping_min_delta: 0.0
+best_metric_name: mask_map_50_95
+best_metric_mode: max
+max_keep_ckpts: 5
+pretrained: auto
+pretrained_checkpoint: auto
+scratch_training_min_items: 2000
+onnx_opset: 13
+normalize:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+postprocessing:
+  confidence_threshold_default: 0.5
+  output_type: semantic_mask
+  background_class_index: 0
+nms_enabled: false

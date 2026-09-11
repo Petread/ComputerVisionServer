@@ -1,0 +1,66 @@
+service:
+  public_base_url: https://127.0.0.1
+cors:
+  allowed_origins:
+    - https://127.0.0.1
+label_studio:
+  local_files_root: /srv/cv-platform
+  local_files_url_prefix: /data/local-files/?d=
+storage:
+  state_root: /srv/cv-platform
+  training_root: /srv/cv-platform/training
+  serving_root: /srv/cv-platform/serving
+  audit_root: /srv/cv-platform/audit
+  logs_root: /srv/cv-platform/logs
+training:
+  heartbeat_interval_seconds: 5
+  stale_after_seconds: 45
+  job_timeout_seconds: 86400
+  trainer_mode: real
+  allow_onnx_deployment_fallback: false
+runtime:
+  realtime_frame_buffer_size: 2
+  realtime_target_latency_ms: 250
+  realtime_max_channels_per_executor: 8
+  trigger_timeout_ms: 2500
+  trigger_max_concurrency: 4
+  executor_heartbeat_interval_seconds: 3
+  executor_stale_after_seconds: 15
+  inference_gateway_bearer_token_file: /run/secrets/internal_inference_gateway_bearer_token
+  capture_default_rate_per_minute: 120
+  capture_storage_max_bytes: 107374182400
+  capture_min_free_bytes: 21474836480
+  capture_storage_usage_cache_seconds: 60
+  plc_writes_allowed: false
+session:
+  secure_cookie: true
+api_keys:
+  enabled: true
+tls:
+  enabled: true
+log_retention:
+  operational_days: 30
+  audit_days: 3650
+artifact_retention:
+  checkpoints_days: 30
+  training_workspace_days: 7
+  exports_days: 45
+  batch_outputs_days: 21
+  quarantine_days: 14
+  runtime_operational_result_minutes: 60
+  runtime_result_prune_batch_size: 1000
+  runtime_delivery_metadata_days: 7
+  runtime_capture_metadata_days: 30
+backup:
+  enabled: true
+  metadata_retention_days: 60
+observability:
+  queue_depth_warning: 50
+  queue_depth_critical: 250
+  queue_oldest_age_warning_seconds: 120
+  queue_oldest_age_critical_seconds: 600
+  worker_heartbeat_stale_seconds: 120
+  disk_usage_warning_percent: 75
+  disk_usage_critical_percent: 85
+  gpu_memory_warning_percent: 80
+  gpu_memory_critical_percent: 92

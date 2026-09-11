@@ -1,0 +1,5 @@
+{
+  "model_version_id": "mvr_example",
+  "target_path": "realtime",
+  "requested_state": "production"
+}

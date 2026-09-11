@@ -1,0 +1,6 @@
+[Unit]
+Description=Recover an unhealthy YBB edge runtime
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'n=$$(cat /run/ybb-edge-watchdog.failures 2>/dev/null || echo 0); n=$$((n+1)); echo $$n > /run/ybb-edge-watchdog.failures; if [ $$n -ge 3 ]; then rm -f /run/ybb-edge-watchdog.failures; systemctl restart ybb-edge-agent.service; fi'

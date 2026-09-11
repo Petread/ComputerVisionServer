@@ -1,0 +1,719 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Connector Service
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/runtime/boundary:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Runtime Boundary
+      operationId: get_runtime_boundary_api_v1_runtime_boundary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBoundaryResponse'
+  /api/v1/runtime/output-connectors/types:
+    get:
+      tags:
+      - runtime-boundary
+      summary: List Connector Types
+      operationId: list_connector_types_api_v1_runtime_output_connectors_types_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOutputConnectorTypeCatalogResponse'
+  /api/v1/runtime/output-connectors:
+    get:
+      tags:
+      - runtime-boundary
+      summary: List Output Connectors
+      operationId: list_output_connectors_api_v1_runtime_output_connectors_get
+      parameters:
+      - name: channel_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Channel Id
+      - name: connector_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 120
+          - type: 'null'
+          title: Connector Type
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOutputConnectorListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/connector-deliveries:
+    get:
+      tags:
+      - runtime-boundary
+      summary: List Connector Deliveries
+      operationId: list_connector_deliveries_api_v1_runtime_connector_deliveries_get
+      parameters:
+      - name: channel_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Channel Id
+      - name: output_connector_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 64
+          - type: 'null'
+          title: Output Connector Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConnectorDeliveryHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/connector-deliveries:drain:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Drain Connector Deliveries
+      operationId: drain_connector_deliveries_api_v1_runtime_connector_deliveries_drain_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeConnectorDrainRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConnectorDrainResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RuntimeBoundaryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.boundary.v1
+          title: Schema Version
+          default: runtime.boundary.v1
+        service_name:
+          type: string
+          title: Service Name
+        responsibilities:
+          items:
+            type: string
+          type: array
+          title: Responsibilities
+        non_responsibilities:
+          items:
+            type: string
+          type: array
+          title: Non Responsibilities
+      additionalProperties: false
+      type: object
+      required:
+      - service_name
+      title: RuntimeBoundaryResponse
+    RuntimeConnectorDeliveryHistoryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.connector-deliveries.history.v1
+          title: Schema Version
+          default: runtime.connector-deliveries.history.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeConnectorDeliverySummary'
+          type: array
+          title: Items
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+          default: 0
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeConnectorDeliveryHistoryResponse
+    RuntimeConnectorDeliverySummary:
+      properties:
+        connector_delivery_id:
+          type: string
+          title: Connector Delivery Id
+        output_connector_id:
+          type: string
+          title: Output Connector Id
+        channel_id:
+          type: string
+          title: Channel Id
+        result_record_id:
+          type: string
+          title: Result Record Id
+        connector_type:
+          type: string
+          title: Connector Type
+        connector_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Connector Name
+        source_node_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Node Key
+        status:
+          type: string
+          enum:
+          - queued
+          - processing
+          - delivered
+          - failed_retryable
+          - failed_terminal
+          - skipped_no_payload
+          title: Status
+        retry_count:
+          type: integer
+          minimum: 0.0
+          title: Retry Count
+          default: 0
+        max_attempts:
+          type: integer
+          minimum: 1.0
+          title: Max Attempts
+          default: 3
+        queued_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Queued At
+        claimed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Claimed At
+        delivered_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Delivered At
+        completed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Completed At
+        next_attempt_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Attempt At
+        request_payload:
+          additionalProperties: true
+          type: object
+          title: Request Payload
+        response_payload:
+          additionalProperties: true
+          type: object
+          title: Response Payload
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        created_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - connector_delivery_id
+      - output_connector_id
+      - channel_id
+      - result_record_id
+      - connector_type
+      - status
+      title: RuntimeConnectorDeliverySummary
+    RuntimeConnectorDrainRequest:
+      properties:
+        limit:
+          type: integer
+          maximum: 500.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+      additionalProperties: false
+      type: object
+      title: RuntimeConnectorDrainRequest
+    RuntimeConnectorDrainResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.connector-deliveries.drain.v1
+          title: Schema Version
+          default: runtime.connector-deliveries.drain.v1
+        processed:
+          type: integer
+          minimum: 0.0
+          title: Processed
+          default: 0
+        delivered:
+          type: integer
+          minimum: 0.0
+          title: Delivered
+          default: 0
+        failed_retryable:
+          type: integer
+          minimum: 0.0
+          title: Failed Retryable
+          default: 0
+        failed_terminal:
+          type: integer
+          minimum: 0.0
+          title: Failed Terminal
+          default: 0
+        skipped_no_payload:
+          type: integer
+          minimum: 0.0
+          title: Skipped No Payload
+          default: 0
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeConnectorDrainResponse
+    RuntimeOutputConnectorDeliveryPolicy:
+      properties:
+        max_attempts:
+          type: integer
+          maximum: 10.0
+          minimum: 1.0
+          title: Max Attempts
+          default: 3
+        retry_backoff_seconds:
+          items:
+            type: integer
+          type: array
+          title: Retry Backoff Seconds
+      additionalProperties: false
+      type: object
+      title: RuntimeOutputConnectorDeliveryPolicy
+    RuntimeOutputConnectorListResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.output-connectors.list.v1
+          title: Schema Version
+          default: runtime.output-connectors.list.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeOutputConnectorSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeOutputConnectorListResponse
+    RuntimeOutputConnectorSummary:
+      properties:
+        channel_id:
+          type: string
+          maxLength: 64
+          minLength: 3
+          title: Channel Id
+        connector_type:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
+          title: Connector Type
+        name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Name
+        source_node_key:
+          anyOf:
+          - type: string
+            pattern: ^[a-z][a-z0-9_]{1,63}$
+          - type: 'null'
+          title: Source Node Key
+        enabled:
+          type: boolean
+          title: Enabled
+          default: true
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+        secret_refs:
+          additionalProperties:
+            type: string
+          type: object
+          title: Secret Refs
+        delivery_policy:
+          $ref: '#/components/schemas/RuntimeOutputConnectorDeliveryPolicy'
+        output_connector_id:
+          type: string
+          title: Output Connector Id
+        status:
+          $ref: '#/components/schemas/RuntimeResourceStatus'
+        pipeline_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pipeline Version Id
+        last_delivery_status:
+          anyOf:
+          - type: string
+            enum:
+            - queued
+            - processing
+            - delivered
+            - failed_retryable
+            - failed_terminal
+            - skipped_no_payload
+          - type: 'null'
+          title: Last Delivery Status
+        last_delivery_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Delivery At
+        last_success_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Success At
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        created_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Created At
+        updated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - channel_id
+      - connector_type
+      - name
+      - output_connector_id
+      - status
+      title: RuntimeOutputConnectorSummary
+    RuntimeOutputConnectorTypeCatalogResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.output-connector-types.catalog.v1
+          title: Schema Version
+          default: runtime.output-connector-types.catalog.v1
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeOutputConnectorTypeSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: RuntimeOutputConnectorTypeCatalogResponse
+    RuntimeOutputConnectorTypeSummary:
+      properties:
+        connector_type:
+          type: string
+          title: Connector Type
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          type: string
+          title: Description
+        config_schema:
+          additionalProperties: true
+          type: object
+          title: Config Schema
+        default_config:
+          additionalProperties: true
+          type: object
+          title: Default Config
+        default_delivery_policy:
+          $ref: '#/components/schemas/RuntimeOutputConnectorDeliveryPolicy'
+        supports_secrets:
+          type: boolean
+          title: Supports Secrets
+          default: false
+        retryable:
+          type: boolean
+          title: Retryable
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - connector_type
+      - display_name
+      - description
+      title: RuntimeOutputConnectorTypeSummary
+    RuntimeResourceStatus:
+      type: string
+      enum:
+      - draft
+      - active
+      - degraded
+      - disabled
+      - failed
+      title: RuntimeResourceStatus
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

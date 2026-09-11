@@ -1,0 +1,16 @@
+[project]
+name = "cv-contracts"
+version = "0.1.0"
+description = "Typed DTOs shared across backend services and frontend code generation"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.8.2,<3",
+  "cv-status",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cv_contracts"]

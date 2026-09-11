@@ -1,0 +1,19 @@
+[project]
+name = "model-registry-service"
+version = "0.1.0"
+description = "Model family and model version catalog service"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0,<1",
+  "uvicorn[standard]>=0.30.6,<1",
+  "cv-core",
+  "cv-contracts",
+  "cv-db",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/model_registry_service"]

@@ -1,0 +1,218 @@
+service:
+  host: 0.0.0.0
+  port: 8080
+  public_base_url: http://localhost:8080
+database:
+  host: postgres
+  port: 5432
+  database: cv_platform
+  user: cv_platform
+  password_file: /run/secrets/postgres_app_password
+  pool_size: 10
+redis:
+  host: redis
+  port: 6379
+  database: 0
+storage:
+  state_root: .local/state
+  training_root: .local/state/training
+  serving_root: .local/state/serving
+  audit_root: .local/state/audit
+  logs_root: .local/state/logs
+label_studio:
+  base_url: http://label-studio:8080
+  token_file: /run/secrets/labelstudio_api_token
+  ml_backend_adapter_url: http://label-studio-ml-adapter:8089
+  ml_backend_timeout_seconds: 60
+mlflow:
+  base_url: http://mlflow:5000
+  tracking_uri: http://mlflow:5000
+dvc:
+  repo_root: /workspace/.local/dvc
+  remote_name: local
+  remote_url: /workspace/.local/dvc-remote
+gpu:
+  realtime_reserved_memory_gb: 8
+  allow_training_start: true
+  pause_training_on_slo_pressure: true
+training:
+  max_parallel_jobs: 1
+  heartbeat_interval_seconds: 5
+  stale_after_seconds: 30
+  checkpoint_interval_steps: 25
+  safe_retry_limit: 2
+  job_timeout_seconds: 86400
+  gpu_devices:
+    - cuda:0
+  trainer_mode: real
+  default_backend: openmmlab-mmyolo
+  simulation_mode_enabled: true
+  allow_simulation_deployment: false
+  engine_build_stage: deployment
+  export_opset_version: 13
+  checkpoint_keep_count: 5
+  registration_hook: postgres_model_registry
+  log_tail_limit: 250
+  default_step_duration_ms: 25
+  cleanup_temp_on_failure: true
+  resume_from_latest_good_checkpoint: true
+triton:
+  realtime:
+    grpc_url: triton-rt:8001
+    http_url: http://triton-rt:8000
+    timeout_seconds: 10
+    instance_group_count: 2
+  batch:
+    grpc_url: triton-batch:8001
+    http_url: http://triton-batch:8000
+    timeout_seconds: 30
+    instance_group_count: 2
+inference_limits:
+  realtime_timeout_ms: 1500
+  batch_timeout_seconds: 300
+  batch_chunk_size: 64
+  realtime_max_concurrency: 4
+  realtime_per_release_max_concurrency: 2
+  batch_max_concurrency: 2
+  batch_per_release_max_concurrency: 1
+  realtime_requests_per_minute: 240
+  batch_requests_per_minute: 60
+  metrics_window_size: 200
+  routing_cache_ttl_seconds: 5
+  warm_ttl_seconds: 120
+runtime:
+  realtime_frame_buffer_size: 2
+  realtime_drop_policy: drop_oldest
+  realtime_pipeline_max_inflight: 2
+  realtime_target_latency_ms: 250
+  realtime_max_channels_per_executor: 8
+  trigger_timeout_ms: 2500
+  trigger_max_concurrency: 4
+  interval_min_period_ms: 1000
+  executor_heartbeat_interval_seconds: 3
+  executor_stale_after_seconds: 15
+  executor_stop_grace_period_seconds: 15
+  routing_cache_ttl_seconds: 5
+  model_capability_cache_ttl_seconds: 10
+  capture_queue_name: runtime-capture
+  connector_queue_name: runtime-connector
+  capture_max_image_bytes: 5242880
+  capture_default_rate_per_minute: 60
+  capture_storage_max_bytes: 107374182400
+  capture_min_free_bytes: 21474836480
+  capture_storage_usage_cache_seconds: 60
+  label_studio_submission_mode: local_file_url
+  plugin_entrypoint_group: cv_platform.runtime_nodes
+  plugin_allowlist: []
+  inference_gateway_realtime_url: http://inference-gateway-rt:8087
+  inference_gateway_bearer_token_file: null
+  result_endpoint_auth_required: false
+  stream_auth_enabled: false
+  stream_access_policy: unauthenticated_lan
+  stream_media_server_kind: mediamtx
+  stream_mediamtx_api_url: http://127.0.0.1:9997
+  stream_public_host: null
+  stream_rtsp_port: 8554
+  stream_webrtc_port: 8889
+  stream_webrtc_ice_tcp_port: 8189
+  stream_rtsp_publish_host: 127.0.0.1
+  stream_gstreamer_python_bin: /usr/bin/python3
+  stream_bitrate_override_kbps: null
+  stream_auto_bitrate_bits_per_pixel: 0.12
+  stream_auto_bitrate_min_kbps: 2000
+  stream_auto_bitrate_max_kbps: 20000
+  stream_publisher_restart_backoff_initial_seconds: 0.25
+  stream_publisher_restart_backoff_max_seconds: 10.0
+  camera_media_runtime_dir: /run/ybb-camera-media
+  camera_media_frame_slots: 4
+  camera_media_reconcile_interval_seconds: 0.5
+  camera_media_heartbeat_interval_seconds: 1.0
+  camera_media_stale_after_seconds: 10.0
+  camera_media_source_retry_seconds: 1.0
+  plc_writes_allowed: false
+session:
+  cookie_name: cv_session
+  csrf_cookie_name: cv_csrf
+  csrf_header_name: X-CSRF-Token
+  secure_cookie: false
+  same_site: lax
+  max_age_seconds: 43200
+  secret_file: /run/secrets/session_secret
+  bootstrap_admin_username: admin
+  bootstrap_admin_role: platform_admin
+  bootstrap_admin_password_hash_file: /run/secrets/bootstrap_admin_password_hash
+api_keys:
+  enabled: true
+  authorization_header_name: Authorization
+  legacy_header_name: X-API-Key
+  bootstrap_keys: []
+cors:
+  allowed_origins: []
+  allow_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  allow_headers:
+    - Authorization
+    - Content-Type
+    - Idempotency-Key
+    - X-CSRF-Token
+    - X-Request-ID
+    - X-Correlation-ID
+  allow_credentials: true
+request_limits:
+  default_timeout_seconds: 30
+  upload_timeout_seconds: 120
+  default_body_limit_bytes: 1048576
+  inference_body_limit_bytes: 3145728
+  upload_body_limit_bytes: 33554432
+  camera_calibration_body_limit_bytes: 67108864
+  batch_manifest_max_bytes: 10485760
+  max_image_bytes: 5242880
+uploads:
+  allowed_extensions:
+    - .jpg
+    - .jpeg
+    - .png
+    - .bmp
+    - .webp
+  allowed_mime_types:
+    - image/jpeg
+    - image/png
+    - image/bmp
+    - image/webp
+  max_files_per_session: 50000
+  max_total_bytes: 268435456000
+  max_file_name_length: 160
+tls:
+  enabled: false
+  cert_path: /run/secrets/tls_cert.pem
+  key_path: /run/secrets/tls_key.pem
+log_retention:
+  operational_days: 14
+  audit_days: 365
+artifact_retention:
+  checkpoints_days: 30
+  training_workspace_days: 7
+  exports_days: 30
+  batch_outputs_days: 14
+  quarantine_days: 7
+  runtime_operational_result_minutes: 60
+  runtime_result_prune_batch_size: 1000
+  runtime_delivery_metadata_days: 7
+  runtime_capture_metadata_days: 30
+backup:
+  enabled: true
+  metadata_retention_days: 30
+observability:
+  queue_depth_warning: 100
+  queue_depth_critical: 500
+  queue_oldest_age_warning_seconds: 300
+  queue_oldest_age_critical_seconds: 1800
+  worker_heartbeat_stale_seconds: 90
+  disk_usage_warning_percent: 80
+  disk_usage_critical_percent: 90
+  gpu_memory_warning_percent: 85
+  gpu_memory_critical_percent: 95

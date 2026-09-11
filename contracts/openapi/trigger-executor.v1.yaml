@@ -1,0 +1,415 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Trigger Executor
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/runtime/boundary:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Runtime Boundary
+      operationId: get_runtime_boundary_api_v1_runtime_boundary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBoundaryResponse'
+  /api/v1/runtime/triggers/{endpoint_slug}:
+    put:
+      tags:
+      - runtime-boundary
+      summary: Execute Trigger
+      operationId: execute_trigger_api_v1_runtime_triggers__endpoint_slug__put
+      security:
+      - {}
+      - TriggerBearer: []
+      - TriggerApiKey: []
+      parameters:
+      - name: endpoint_slug
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Endpoint Slug
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeTriggerExecutionResponse'
+        '401':
+          description: Trigger authentication failed.
+        '404':
+          description: Trigger endpoint was not found.
+        '409':
+          description: Trigger endpoint is disabled.
+        '422':
+          description: Trigger endpoint or request is invalid.
+        '429':
+          description: Trigger endpoint is rate-limited or busy.
+        '503':
+          description: Runtime instance is not ready.
+        '504':
+          description: Trigger timed out.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeTriggerExecutionResponse'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trigger_id:
+                  type: string
+                timeout_ms:
+                  type: integer
+                payload:
+                  type: object
+                image_base64:
+                  type: string
+                mime_type:
+                  type: string
+                board_format:
+                  type: object
+                  additionalProperties: false
+                  required:
+                  - format_id
+                  - format_version
+                  - width_mm
+                  - thickness_mm
+                  properties:
+                    format_id:
+                      type: string
+                    format_version:
+                      type: string
+                    width_mm:
+                      type: number
+                      exclusiveMinimum: 0
+                      maximum: 10000
+                    thickness_mm:
+                      type: number
+                      exclusiveMinimum: 0
+                      maximum: 2000
+                images_by_role:
+                  type: object
+                  properties:
+                    upper:
+                      type: object
+                    lower:
+                      type: object
+                    end_face:
+                      type: object
+components:
+  schemas:
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RuntimeBoundaryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.boundary.v1
+          title: Schema Version
+          default: runtime.boundary.v1
+        service_name:
+          type: string
+          title: Service Name
+        responsibilities:
+          items:
+            type: string
+          type: array
+          title: Responsibilities
+        non_responsibilities:
+          items:
+            type: string
+          type: array
+          title: Non Responsibilities
+      additionalProperties: false
+      type: object
+      required:
+      - service_name
+      title: RuntimeBoundaryResponse
+    RuntimeTriggerExecutionResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.trigger.execution-response.v1
+          title: Schema Version
+          default: runtime.trigger.execution-response.v1
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          - skipped
+          - timeout
+          - rejected
+          title: Status
+        trigger_endpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Endpoint Id
+        endpoint_slug:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Endpoint Slug
+        channel_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Id
+        pipeline_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pipeline Version Id
+        runtime_execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Execution Id
+        trigger_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        final_response:
+          additionalProperties: true
+          type: object
+          title: Final Response
+        execution_result:
+          additionalProperties: true
+          type: object
+          title: Execution Result
+        overlay_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Overlay Outputs
+        capture_intents:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Capture Intents
+        http_trigger_responses:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Http Trigger Responses
+        persisted_results:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Persisted Results
+        plc_write_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Plc Write Outputs
+        projected_results:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Projected Results
+        errors:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Errors
+        timing:
+          additionalProperties: true
+          type: object
+          title: Timing
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Code
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+        retryable:
+          type: boolean
+          title: Retryable
+          default: false
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - meta
+      title: RuntimeTriggerExecutionResponse
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+  securitySchemes:
+    TriggerBearer:
+      type: http
+      scheme: bearer
+    TriggerApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

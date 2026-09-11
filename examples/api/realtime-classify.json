@@ -1,0 +1,5 @@
+{
+  "deployment_target": "widget-inspection-rt",
+  "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg==",
+  "top_k": 3
+}

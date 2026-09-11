@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "data": {
+      "image": "/data/local-files/?d=control/uploads/dts_example/assets/ab/example.png"
+    },
+    "annotations": [
+      {
+        "id": 11,
+        "result": [
+          {
+            "value": {
+              "choices": [
+                "accepted"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

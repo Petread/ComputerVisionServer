@@ -1,0 +1,29 @@
+{
+  "schema_version": "ybb.edge.platform-profile.v1",
+  "platform": "jetson_orin_nano",
+  "display_name": "NVIDIA Jetson Orin Nano",
+  "architecture": "aarch64",
+  "archive_format": "tar.gz",
+  "base_os": "Jetson Linux 39.2",
+  "jetpack_version": "7.2",
+  "l4t_version": "39.2",
+  "cuda_version": "13.2",
+  "tensorrt_version": "10.16",
+  "deepstream_version": "9.1",
+  "python_version": "3.12",
+  "python_tag": "312",
+  "python_abi": "cp312",
+  "pip_platforms": ["manylinux_2_31_aarch64", "manylinux_2_28_aarch64", "manylinux2014_aarch64"],
+  "system_python": true,
+  "minimum_nvme_bytes": 128849018880,
+  "performance_profile": "MAXN_SUPER",
+  "approved_camera_adapters": [
+    "rtsp",
+    "usb_opencv",
+    "gstreamer",
+    "aravis_gige",
+    "basler_pylon",
+    "flir_spinnaker"
+  ],
+  "required_distributions": ["edge-agent", "cv-status", "cv-contracts", "cv-runtime", "cv-edge", "cv-utils", "python-snap7", "fastapi", "uvicorn", "uvloop", "numpy", "pillow", "cuda-python"]
+}

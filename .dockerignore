@@ -1,0 +1,12 @@
+node_modules
+frontend/**/node_modules
+.git
+.local
+.runtime
+runs
+.venv
+.pytest_cache
+.ruff_cache
+frontend/apps/admin-web/dist
+*.pt
+*.pth

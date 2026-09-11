@@ -1,0 +1,2704 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Inference Gateway Batch
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/health:
+    get:
+      tags:
+      - public-batch-inference
+      summary: Public Health
+      operationId: public_health_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/ready:
+    get:
+      tags:
+      - public-batch-inference
+      summary: Public Ready
+      operationId: public_ready_api_v1_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/models:
+    get:
+      tags:
+      - public-batch-inference
+      summary: List Models
+      operationId: list_models_api_v1_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicModelListResponse'
+  /api/v1/models/{model_id}:
+    get:
+      tags:
+      - public-batch-inference
+      summary: Model Detail
+      operationId: model_detail_api_v1_models__model_id__get
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicModelDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/jobs:
+    post:
+      tags:
+      - public-batch-inference
+      summary: Submit Batch Job
+      operationId: submit_batch_job_api_v1_batch_jobs_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicBatchJobCreateRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBatchJobSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/jobs/{job_id}:
+    get:
+      tags:
+      - public-batch-inference
+      summary: Batch Job Detail
+      operationId: batch_job_detail_api_v1_batch_jobs__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBatchJobDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - public-batch-inference
+      summary: Delete Batch Job
+      operationId: delete_batch_job_api_v1_batch_jobs__job_id__delete
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBatchJobMutationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/jobs/{job_id}/results:
+    get:
+      tags:
+      - public-batch-inference
+      summary: Batch Job Results
+      operationId: batch_job_results_api_v1_batch_jobs__job_id__results_get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBatchResultsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/internal/jobs:
+    post:
+      tags:
+      - batch-inference
+      summary: Submit Batch Job
+      operationId: submit_batch_job_api_v1_batch_internal_jobs_post
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchJobCreateRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchJobSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - batch-inference
+      summary: List Jobs
+      operationId: list_jobs_api_v1_batch_internal_jobs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_BatchJobSummary_'
+  /api/v1/batch/internal/jobs/{batch_job_id}:
+    get:
+      tags:
+      - batch-inference
+      summary: Batch Job Status
+      operationId: batch_job_status_api_v1_batch_internal_jobs__batch_job_id__get
+      parameters:
+      - name: batch_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchJobDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/internal/jobs/{batch_job_id}/results:
+    get:
+      tags:
+      - batch-inference
+      summary: Batch Job Results
+      operationId: batch_job_results_api_v1_batch_internal_jobs__batch_job_id__results_get
+      parameters:
+      - name: batch_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResultResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/internal/jobs/{batch_job_id}/download:
+    get:
+      tags:
+      - batch-inference
+      summary: Batch Job Download
+      operationId: batch_job_download_api_v1_batch_internal_jobs__batch_job_id__download_get
+      parameters:
+      - name: batch_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/internal/chunks/{batch_job_id}/{chunk_no}:execute:
+    post:
+      tags:
+      - batch-inference
+      summary: Execute Chunk
+      operationId: execute_chunk_api_v1_batch_internal_chunks__batch_job_id___chunk_no__execute_post
+      parameters:
+      - name: batch_job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Job Id
+      - name: chunk_no
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Chunk No
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Execute Chunk Api V1 Batch Internal Chunks  Batch
+                  Job Id   Chunk No  Execute Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/batch/models/capabilities:
+    get:
+      tags:
+      - batch-inference
+      summary: Batch Capabilities
+      operationId: batch_capabilities_api_v1_batch_models_capabilities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelCapabilitiesResponse'
+  /api/v1/batch/models/status:
+    get:
+      tags:
+      - batch-inference
+      summary: Batch Status
+      operationId: batch_status_api_v1_batch_models_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelStatusResponse'
+components:
+  schemas:
+    AnomalyHeatmap:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        min_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Min Value
+        max_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Value
+        colormap:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Colormap
+          default: turbo
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: AnomalyHeatmap
+    AnomalyMask:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        threshold:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Threshold
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      - threshold
+      title: AnomalyMask
+    BatchArtifactSummary:
+      properties:
+        manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manifest Uri
+        results_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Results Uri
+        jsonl_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jsonl Uri
+        bundle_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bundle Uri
+        download_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Download Path
+        recoverable:
+          type: boolean
+          title: Recoverable
+          default: false
+        incomplete_chunk_nos:
+          items:
+            type: integer
+          type: array
+          title: Incomplete Chunk Nos
+      additionalProperties: false
+      type: object
+      title: BatchArtifactSummary
+    BatchChunkStatus:
+      type: string
+      enum:
+      - queued
+      - running
+      - completed
+      - failed
+      title: BatchChunkStatus
+    BatchChunkSummary:
+      properties:
+        chunk_id:
+          type: string
+          title: Chunk Id
+        chunk_no:
+          type: integer
+          minimum: 0.0
+          title: Chunk No
+        status:
+          $ref: '#/components/schemas/BatchChunkStatus'
+        retry_count:
+          type: integer
+          minimum: 0.0
+          title: Retry Count
+        input_uri:
+          type: string
+          title: Input Uri
+        output_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Uri
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+      additionalProperties: false
+      type: object
+      required:
+      - chunk_id
+      - chunk_no
+      - status
+      - retry_count
+      - input_uri
+      title: BatchChunkSummary
+    BatchInputItem:
+      properties:
+        item_id:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Item Id
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        external_ref:
+          anyOf:
+          - type: string
+            maxLength: 512
+          - type: 'null'
+          title: External Ref
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - item_id
+      - image_base64
+      title: BatchInputItem
+    BatchJobCreateRequest:
+      properties:
+        deployment_target:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Deployment Target
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+        input_manifest_uri:
+          anyOf:
+          - type: string
+            maxLength: 512
+            minLength: 3
+          - type: 'null'
+          title: Input Manifest Uri
+        inputs:
+          items:
+            $ref: '#/components/schemas/BatchInputItem'
+          type: array
+          title: Inputs
+        chunk_size:
+          anyOf:
+          - type: integer
+            maximum: 1024.0
+            minimum: 1.0
+          - type: 'null'
+          title: Chunk Size
+        timeout_seconds:
+          anyOf:
+          - type: integer
+            maximum: 3600.0
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Seconds
+        idempotency_key:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 3
+          - type: 'null'
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_target
+      title: BatchJobCreateRequest
+    BatchJobDetail:
+      properties:
+        schema_version:
+          type: string
+          const: inference.batch.job-summary.v1
+          title: Schema Version
+          default: inference.batch.job-summary.v1
+        batch_job_id:
+          type: string
+          title: Batch Job Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        created_at:
+          type: string
+          title: Created At
+        progress:
+          $ref: '#/components/schemas/BatchJobProgress'
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        input_manifest_uri:
+          type: string
+          title: Input Manifest Uri
+        output_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Manifest Uri
+        submitted_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Submitted By
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+        resumable:
+          type: boolean
+          title: Resumable
+          default: true
+        chunks:
+          items:
+            $ref: '#/components/schemas/BatchChunkSummary'
+          type: array
+          title: Chunks
+        artifacts:
+          $ref: '#/components/schemas/BatchArtifactSummary'
+        metrics:
+          $ref: '#/components/schemas/LatencyQuantiles'
+      additionalProperties: false
+      type: object
+      required:
+      - batch_job_id
+      - deployment_target
+      - deployment_release_id
+      - status
+      - created_at
+      - progress
+      - route
+      - input_manifest_uri
+      title: BatchJobDetail
+    BatchJobProgress:
+      properties:
+        total_items:
+          type: integer
+          minimum: 0.0
+          title: Total Items
+        completed_items:
+          type: integer
+          minimum: 0.0
+          title: Completed Items
+        failed_items:
+          type: integer
+          minimum: 0.0
+          title: Failed Items
+        total_chunks:
+          type: integer
+          minimum: 0.0
+          title: Total Chunks
+        queued_chunks:
+          type: integer
+          minimum: 0.0
+          title: Queued Chunks
+        running_chunks:
+          type: integer
+          minimum: 0.0
+          title: Running Chunks
+        completed_chunks:
+          type: integer
+          minimum: 0.0
+          title: Completed Chunks
+        failed_chunks:
+          type: integer
+          minimum: 0.0
+          title: Failed Chunks
+        progress_percent:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Progress Percent
+      additionalProperties: false
+      type: object
+      required:
+      - total_items
+      - completed_items
+      - failed_items
+      - total_chunks
+      - queued_chunks
+      - running_chunks
+      - completed_chunks
+      - failed_chunks
+      - progress_percent
+      title: BatchJobProgress
+    BatchJobStatus:
+      type: string
+      enum:
+      - accepted
+      - queued
+      - running
+      - completed
+      - failed
+      - canceled
+      title: BatchJobStatus
+    BatchJobSummary:
+      properties:
+        schema_version:
+          type: string
+          const: inference.batch.job-summary.v1
+          title: Schema Version
+          default: inference.batch.job-summary.v1
+        batch_job_id:
+          type: string
+          title: Batch Job Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        created_at:
+          type: string
+          title: Created At
+        progress:
+          $ref: '#/components/schemas/BatchJobProgress'
+      additionalProperties: false
+      type: object
+      required:
+      - batch_job_id
+      - deployment_target
+      - deployment_release_id
+      - status
+      - created_at
+      - progress
+      title: BatchJobSummary
+    BatchResultRecord:
+      properties:
+        item_id:
+          type: string
+          title: Item Id
+        external_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Ref
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          title: Status
+        labels:
+          items:
+            $ref: '#/components/schemas/ClassificationLabelScore'
+          type: array
+          title: Labels
+        detections:
+          items:
+            $ref: '#/components/schemas/DetectionPrediction'
+          type: array
+          title: Detections
+        image_width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Image Width
+        image_height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Image Height
+        segments:
+          items:
+            $ref: '#/components/schemas/SegmentationPrediction'
+          type: array
+          title: Segments
+        anomaly_score:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Anomaly Score
+        predicted_label:
+          anyOf:
+          - type: string
+            enum:
+            - normal
+            - anomalous
+          - type: 'null'
+          title: Predicted Label
+        is_anomalous:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Anomalous
+        threshold:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Threshold
+        heatmap:
+          anyOf:
+          - $ref: '#/components/schemas/AnomalyHeatmap'
+          - type: 'null'
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/AnomalyMask'
+          - type: 'null'
+        timing:
+          anyOf:
+          - $ref: '#/components/schemas/InferenceTiming'
+          - type: 'null'
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      additionalProperties: false
+      type: object
+      required:
+      - item_id
+      - status
+      title: BatchResultRecord
+    BatchResultResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.batch.results.v1
+          title: Schema Version
+          default: inference.batch.results.v1
+        batch_job_id:
+          type: string
+          title: Batch Job Id
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        items:
+          items:
+            $ref: '#/components/schemas/BatchResultRecord'
+          type: array
+          title: Items
+        artifacts:
+          $ref: '#/components/schemas/BatchArtifactSummary'
+        metrics:
+          $ref: '#/components/schemas/LatencyQuantiles'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - batch_job_id
+      - route
+      - status
+      - meta
+      title: BatchResultResponse
+    ClassificationLabelScore:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+        rank:
+          type: integer
+          minimum: 1.0
+          title: Rank
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      - rank
+      title: ClassificationLabelScore
+    DeploymentReleaseStatus:
+      type: string
+      enum:
+      - requested
+      - packaging
+      - repository_sync
+      - loading
+      - smoke_testing
+      - activated
+      - deactivated
+      - activation_failed
+      - rollback_requested
+      - rolled_back
+      - retired
+      title: DeploymentReleaseStatus
+    DetectionBox:
+      properties:
+        x_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Min
+        y_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Min
+        x_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Max
+        y_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Max
+      additionalProperties: false
+      type: object
+      required:
+      - x_min
+      - y_min
+      - x_max
+      - y_max
+      title: DetectionBox
+    DetectionPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: DetectionPoint
+    DetectionPrediction:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+        box:
+          $ref: '#/components/schemas/DetectionBox'
+        oriented_box:
+          anyOf:
+          - $ref: '#/components/schemas/OrientedDetectionBox'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      - box
+      title: DetectionPrediction
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    InferenceTiming:
+      properties:
+        received_at:
+          type: string
+          title: Received At
+        validation_ms:
+          type: number
+          minimum: 0.0
+          title: Validation Ms
+        routing_ms:
+          type: number
+          minimum: 0.0
+          title: Routing Ms
+        preprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Preprocessing Ms
+        inference_ms:
+          type: number
+          minimum: 0.0
+          title: Inference Ms
+        postprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Postprocessing Ms
+        total_ms:
+          type: number
+          minimum: 0.0
+          title: Total Ms
+        shared_memory_transport:
+          type: boolean
+          title: Shared Memory Transport
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - received_at
+      - validation_ms
+      - routing_ms
+      - preprocessing_ms
+      - inference_ms
+      - postprocessing_ms
+      - total_ms
+      title: InferenceTiming
+    LatencyQuantiles:
+      properties:
+        sample_count:
+          type: integer
+          minimum: 0.0
+          title: Sample Count
+          default: 0
+        p50_ms:
+          type: number
+          minimum: 0.0
+          title: P50 Ms
+          default: 0
+        p95_ms:
+          type: number
+          minimum: 0.0
+          title: P95 Ms
+          default: 0
+        p99_ms:
+          type: number
+          minimum: 0.0
+          title: P99 Ms
+          default: 0
+        throughput_per_second:
+          type: number
+          minimum: 0.0
+          title: Throughput Per Second
+          default: 0
+      additionalProperties: false
+      type: object
+      title: LatencyQuantiles
+    ListResponse_BatchJobSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/BatchJobSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[BatchJobSummary]
+    ModelArchitectureSummary:
+      properties:
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        family:
+          type: string
+          maxLength: 64
+          minLength: 2
+          title: Family
+        version:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Version
+        size:
+          type: string
+          maxLength: 16
+          minLength: 1
+          title: Size
+        display_name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Display Name
+        internal_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Internal Key
+      type: object
+      required:
+      - task_type
+      - family
+      - version
+      - size
+      - display_name
+      - internal_key
+      title: ModelArchitectureSummary
+    ModelCapabilitiesResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.model-capabilities.v1
+          title: Schema Version
+          default: inference.model-capabilities.v1
+        items:
+          items:
+            $ref: '#/components/schemas/ModelCapabilitySummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: ModelCapabilitiesResponse
+    ModelCapabilitySummary:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        active:
+          type: boolean
+          title: Active
+        rollback_candidate:
+          type: boolean
+          title: Rollback Candidate
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        model_version_id:
+          type: string
+          title: Model Version Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        contract_major:
+          type: integer
+          minimum: 1.0
+          title: Contract Major
+        input_schema_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Input Schema Ref
+        output_schema_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Schema Ref
+        class_labels:
+          items:
+            type: string
+          type: array
+          title: Class Labels
+        compatible_targets:
+          items:
+            $ref: '#/components/schemas/TargetPath'
+          type: array
+          title: Compatible Targets
+        max_batch_size:
+          type: integer
+          minimum: 1.0
+          title: Max Batch Size
+        confidence_threshold_default:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence Threshold Default
+        preprocessing:
+          additionalProperties: true
+          type: object
+          title: Preprocessing
+        postprocessing:
+          additionalProperties: true
+          type: object
+          title: Postprocessing
+        capabilities:
+          additionalProperties: true
+          type: object
+          title: Capabilities
+        anomaly:
+          additionalProperties: true
+          type: object
+          title: Anomaly
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_release_id
+      - target_path
+      - active
+      - rollback_candidate
+      - model_family_slug
+      - model_version_id
+      - task_type
+      - architecture
+      - contract_major
+      - max_batch_size
+      - confidence_threshold_default
+      title: ModelCapabilitySummary
+    ModelRouteRef:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        release_status:
+          $ref: '#/components/schemas/DeploymentReleaseStatus'
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        model_version_id:
+          type: string
+          title: Model Version Id
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        triton_model_name:
+          type: string
+          title: Triton Model Name
+        triton_model_version:
+          type: integer
+          minimum: 1.0
+          title: Triton Model Version
+        serving_artifact_format:
+          anyOf:
+          - type: string
+            enum:
+            - tensorrt_plan
+            - onnx
+          - type: 'null'
+          title: Serving Artifact Format
+        contract_major:
+          type: integer
+          minimum: 1.0
+          title: Contract Major
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_release_id
+      - target_path
+      - release_status
+      - model_family_slug
+      - model_version_id
+      - task_type
+      - triton_model_name
+      - triton_model_version
+      - contract_major
+      title: ModelRouteRef
+    ModelStatusResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.model-status.v1
+          title: Schema Version
+          default: inference.model-status.v1
+        items:
+          items:
+            $ref: '#/components/schemas/ModelStatusSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - meta
+      title: ModelStatusResponse
+    ModelStatusSummary:
+      properties:
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        active:
+          type: boolean
+          title: Active
+        rollback_candidate:
+          type: boolean
+          title: Rollback Candidate
+        warm_model:
+          type: boolean
+          title: Warm Model
+        overloaded:
+          type: boolean
+          title: Overloaded
+        current_inflight:
+          type: integer
+          minimum: 0.0
+          title: Current Inflight
+        concurrency_limit:
+          type: integer
+          minimum: 1.0
+          title: Concurrency Limit
+        last_request_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Request At
+        latency:
+          $ref: '#/components/schemas/LatencyQuantiles'
+        backend_statistics:
+          additionalProperties:
+            anyOf:
+            - type: integer
+            - type: number
+          type: object
+          title: Backend Statistics
+      additionalProperties: false
+      type: object
+      required:
+      - route
+      - active
+      - rollback_candidate
+      - warm_model
+      - overloaded
+      - current_inflight
+      - concurrency_limit
+      title: ModelStatusSummary
+    OrientedDetectionBox:
+      properties:
+        points:
+          items:
+            $ref: '#/components/schemas/DetectionPoint'
+          type: array
+          maxItems: 4
+          minItems: 4
+          title: Points
+        rotation_degrees:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Rotation Degrees
+      additionalProperties: false
+      type: object
+      required:
+      - points
+      title: OrientedDetectionBox
+    PublicAnomalyHeatmap:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        min_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Min Value
+        max_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Value
+        colormap:
+          type: string
+          title: Colormap
+          default: turbo
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: PublicAnomalyHeatmap
+    PublicAnomalyMask:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          minimum: 1.0
+          title: Height
+        threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Threshold
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: PublicAnomalyMask
+    PublicBatchAvailability:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        timeout_default_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Default Seconds
+        timeout_max_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Max Seconds
+        idempotency_required:
+          type: boolean
+          title: Idempotency Required
+          default: true
+        resumable:
+          type: boolean
+          title: Resumable
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - available
+      title: PublicBatchAvailability
+    PublicBatchChunkSummary:
+      properties:
+        chunk_no:
+          type: integer
+          minimum: 0.0
+          title: Chunk No
+        status:
+          type: string
+          title: Status
+        retry_count:
+          type: integer
+          minimum: 0.0
+          title: Retry Count
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+      additionalProperties: false
+      type: object
+      required:
+      - chunk_no
+      - status
+      - retry_count
+      title: PublicBatchChunkSummary
+    PublicBatchInputItem:
+      properties:
+        item_id:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Item Id
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        external_ref:
+          anyOf:
+          - type: string
+            maxLength: 512
+          - type: 'null'
+          title: External Ref
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - item_id
+      - image_base64
+      title: PublicBatchInputItem
+    PublicBatchJobCreateRequest:
+      properties:
+        model_id:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Model Id
+        inputs:
+          items:
+            $ref: '#/components/schemas/PublicBatchInputItem'
+          type: array
+          title: Inputs
+        input_manifest_uri:
+          anyOf:
+          - type: string
+            maxLength: 512
+            minLength: 3
+          - type: 'null'
+          title: Input Manifest Uri
+        timeout_seconds:
+          anyOf:
+          - type: integer
+            maximum: 86400.0
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Seconds
+      additionalProperties: false
+      type: object
+      required:
+      - model_id
+      title: PublicBatchJobCreateRequest
+    PublicBatchJobDetail:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.batch-job.v1
+          title: Schema Version
+          default: inference.public.batch-job.v1
+        job_id:
+          type: string
+          title: Job Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        submitted_at:
+          type: string
+          title: Submitted At
+        progress:
+          $ref: '#/components/schemas/PublicBatchProgress'
+        result_package:
+          $ref: '#/components/schemas/PublicBatchResultPackage'
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+        resumable:
+          type: boolean
+          title: Resumable
+          default: true
+        chunks:
+          items:
+            $ref: '#/components/schemas/PublicBatchChunkSummary'
+          type: array
+          title: Chunks
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - job_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - status
+      - submitted_at
+      - progress
+      title: PublicBatchJobDetail
+    PublicBatchJobMutationResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.batch-job-mutation.v1
+          title: Schema Version
+          default: inference.public.batch-job-mutation.v1
+        job_id:
+          type: string
+          title: Job Id
+        action:
+          type: string
+          enum:
+          - canceled
+          - cleared
+          title: Action
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        detail:
+          type: string
+          title: Detail
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - job_id
+      - action
+      - status
+      - detail
+      title: PublicBatchJobMutationResponse
+    PublicBatchJobSummary:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.batch-job.v1
+          title: Schema Version
+          default: inference.public.batch-job.v1
+        job_id:
+          type: string
+          title: Job Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        submitted_at:
+          type: string
+          title: Submitted At
+        progress:
+          $ref: '#/components/schemas/PublicBatchProgress'
+        result_package:
+          $ref: '#/components/schemas/PublicBatchResultPackage'
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - job_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - status
+      - submitted_at
+      - progress
+      title: PublicBatchJobSummary
+    PublicBatchProgress:
+      properties:
+        total_items:
+          type: integer
+          minimum: 0.0
+          title: Total Items
+        completed_items:
+          type: integer
+          minimum: 0.0
+          title: Completed Items
+        failed_items:
+          type: integer
+          minimum: 0.0
+          title: Failed Items
+        total_chunks:
+          type: integer
+          minimum: 0.0
+          title: Total Chunks
+        queued_chunks:
+          type: integer
+          minimum: 0.0
+          title: Queued Chunks
+        running_chunks:
+          type: integer
+          minimum: 0.0
+          title: Running Chunks
+        completed_chunks:
+          type: integer
+          minimum: 0.0
+          title: Completed Chunks
+        failed_chunks:
+          type: integer
+          minimum: 0.0
+          title: Failed Chunks
+        progress_percent:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Progress Percent
+      additionalProperties: false
+      type: object
+      required:
+      - total_items
+      - completed_items
+      - failed_items
+      - total_chunks
+      - queued_chunks
+      - running_chunks
+      - completed_chunks
+      - failed_chunks
+      - progress_percent
+      title: PublicBatchProgress
+    PublicBatchResultItem:
+      properties:
+        item_id:
+          type: string
+          title: Item Id
+        external_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Ref
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          title: Status
+        predictions:
+          items:
+            $ref: '#/components/schemas/PublicClassificationPrediction'
+          type: array
+          title: Predictions
+        detections:
+          items:
+            $ref: '#/components/schemas/PublicDetection'
+          type: array
+          title: Detections
+        image_width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Image Width
+        image_height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Image Height
+        segments:
+          items:
+            $ref: '#/components/schemas/PublicSegmentation'
+          type: array
+          title: Segments
+        anomaly_score:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Anomaly Score
+        predicted_label:
+          anyOf:
+          - type: string
+            enum:
+            - normal
+            - anomalous
+          - type: 'null'
+          title: Predicted Label
+        is_anomalous:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Anomalous
+        threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Threshold
+        heatmap:
+          anyOf:
+          - $ref: '#/components/schemas/PublicAnomalyHeatmap'
+          - type: 'null'
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/PublicAnomalyMask'
+          - type: 'null'
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Code
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+        timing:
+          anyOf:
+          - $ref: '#/components/schemas/PublicInferenceTiming'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - item_id
+      - status
+      title: PublicBatchResultItem
+    PublicBatchResultPackage:
+      properties:
+        manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manifest Uri
+        jsonl_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jsonl Uri
+        bundle_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bundle Uri
+        result_schema:
+          type: string
+          title: Result Schema
+          default: inference.public.batch-results.v1
+        recoverable:
+          type: boolean
+          title: Recoverable
+          default: false
+        incomplete_chunk_nos:
+          items:
+            type: integer
+          type: array
+          title: Incomplete Chunk Nos
+      additionalProperties: false
+      type: object
+      title: PublicBatchResultPackage
+    PublicBatchResultsResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.batch-results.v1
+          title: Schema Version
+          default: inference.public.batch-results.v1
+        job_id:
+          type: string
+          title: Job Id
+        model_id:
+          type: string
+          title: Model Id
+        model_family:
+          type: string
+          title: Model Family
+        model_version:
+          type: integer
+          minimum: 1.0
+          title: Model Version
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        status:
+          $ref: '#/components/schemas/BatchJobStatus'
+        progress:
+          $ref: '#/components/schemas/PublicBatchProgress'
+        result_package:
+          $ref: '#/components/schemas/PublicBatchResultPackage'
+        items:
+          items:
+            $ref: '#/components/schemas/PublicBatchResultItem'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - job_id
+      - model_id
+      - model_family
+      - model_version
+      - task_type
+      - status
+      - progress
+      title: PublicBatchResultsResponse
+    PublicBoundingBox:
+      properties:
+        x_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Min
+        y_min:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Min
+        x_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X Max
+        y_max:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y Max
+      additionalProperties: false
+      type: object
+      required:
+      - x_min
+      - y_min
+      - x_max
+      - y_max
+      title: PublicBoundingBox
+    PublicClassificationPrediction:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      title: PublicClassificationPrediction
+    PublicDetection:
+      properties:
+        label:
+          type: string
+          title: Label
+        class_id:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Class Id
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+        bounding_box:
+          $ref: '#/components/schemas/PublicBoundingBox'
+        oriented_box:
+          anyOf:
+          - $ref: '#/components/schemas/PublicOrientedBoundingBox'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - confidence
+      - bounding_box
+      title: PublicDetection
+    PublicInferenceTiming:
+      properties:
+        received_at:
+          type: string
+          title: Received At
+        completed_at:
+          type: string
+          title: Completed At
+        validation_ms:
+          type: number
+          minimum: 0.0
+          title: Validation Ms
+        routing_ms:
+          type: number
+          minimum: 0.0
+          title: Routing Ms
+        preprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Preprocessing Ms
+        inference_ms:
+          type: number
+          minimum: 0.0
+          title: Inference Ms
+        postprocessing_ms:
+          type: number
+          minimum: 0.0
+          title: Postprocessing Ms
+        total_ms:
+          type: number
+          minimum: 0.0
+          title: Total Ms
+      additionalProperties: false
+      type: object
+      required:
+      - received_at
+      - completed_at
+      - validation_ms
+      - routing_ms
+      - preprocessing_ms
+      - inference_ms
+      - postprocessing_ms
+      - total_ms
+      title: PublicInferenceTiming
+    PublicInputConstraints:
+      properties:
+        canonical_form:
+          type: string
+          const: multipart/form-data
+          title: Canonical Form
+          default: multipart/form-data
+        supported_forms:
+          items:
+            type: string
+          type: array
+          title: Supported Forms
+        supported_content_types:
+          items:
+            type: string
+          type: array
+          title: Supported Content Types
+        max_images_per_request:
+          type: integer
+          minimum: 1.0
+          title: Max Images Per Request
+          default: 1
+        max_image_bytes:
+          type: integer
+          minimum: 1.0
+          title: Max Image Bytes
+        max_request_body_bytes:
+          type: integer
+          minimum: 1.0
+          title: Max Request Body Bytes
+      additionalProperties: false
+      type: object
+      required:
+      - max_image_bytes
+      - max_request_body_bytes
+      title: PublicInputConstraints
+    PublicModelAvailability:
+      properties:
+        realtime:
+          $ref: '#/components/schemas/PublicRealtimeAvailability'
+        batch:
+          $ref: '#/components/schemas/PublicBatchAvailability'
+      additionalProperties: false
+      type: object
+      required:
+      - realtime
+      - batch
+      title: PublicModelAvailability
+    PublicModelDetail:
+      properties:
+        model_id:
+          type: string
+          title: Model Id
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        model_family:
+          type: string
+          title: Model Family
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Model Version
+        availability:
+          $ref: '#/components/schemas/PublicModelAvailability'
+        input_constraints:
+          $ref: '#/components/schemas/PublicInputConstraints'
+        response_schema:
+          $ref: '#/components/schemas/PublicResponseSchema'
+        supported_parameters:
+          items:
+            $ref: '#/components/schemas/PublicParameterSpec'
+          type: array
+          title: Supported Parameters
+        class_labels:
+          items:
+            type: string
+          type: array
+          title: Class Labels
+      additionalProperties: false
+      type: object
+      required:
+      - model_id
+      - display_name
+      - model_family
+      - task_type
+      - architecture
+      - availability
+      - input_constraints
+      - response_schema
+      title: PublicModelDetail
+    PublicModelDetailResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.model-detail.v1
+          title: Schema Version
+          default: inference.public.model-detail.v1
+        item:
+          $ref: '#/components/schemas/PublicModelDetail'
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - item
+      title: PublicModelDetailResponse
+    PublicModelListResponse:
+      properties:
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+          default: v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        schema_version:
+          type: string
+          const: inference.public.models.v1
+          title: Schema Version
+          default: inference.public.models.v1
+        items:
+          items:
+            $ref: '#/components/schemas/PublicModelSummary'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      title: PublicModelListResponse
+    PublicModelSummary:
+      properties:
+        model_id:
+          type: string
+          title: Model Id
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        model_family:
+          type: string
+          title: Model Family
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        model_version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Model Version
+        availability:
+          $ref: '#/components/schemas/PublicModelAvailability'
+      additionalProperties: false
+      type: object
+      required:
+      - model_id
+      - display_name
+      - model_family
+      - task_type
+      - architecture
+      - availability
+      title: PublicModelSummary
+    PublicOrientedBoundingBox:
+      properties:
+        points:
+          items:
+            $ref: '#/components/schemas/PublicOrientedPoint'
+          type: array
+          maxItems: 4
+          minItems: 4
+          title: Points
+        rotation_degrees:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Rotation Degrees
+      additionalProperties: false
+      type: object
+      required:
+      - points
+      title: PublicOrientedBoundingBox
+    PublicOrientedPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: PublicOrientedPoint
+    PublicParameterSpec:
+      properties:
+        name:
+          type: string
+          title: Name
+        parameter_type:
+          type: string
+          enum:
+          - integer
+          - number
+          - string
+          - boolean
+          title: Parameter Type
+        required:
+          type: boolean
+          title: Required
+          default: false
+        default:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Default
+        minimum:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Minimum
+        maximum:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Maximum
+        description:
+          type: string
+          title: Description
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - parameter_type
+      - description
+      title: PublicParameterSpec
+    PublicRealtimeAvailability:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        timeout_default_ms:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Default Ms
+        timeout_max_ms:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Timeout Max Ms
+        queueing:
+          type: string
+          const: none
+          title: Queueing
+          default: none
+        overload_behavior:
+          type: string
+          const: reject
+          title: Overload Behavior
+          default: reject
+      additionalProperties: false
+      type: object
+      required:
+      - available
+      title: PublicRealtimeAvailability
+    PublicResponseSchema:
+      properties:
+        schema_id:
+          type: string
+          title: Schema Id
+        content_type:
+          type: string
+          const: application/json
+          title: Content Type
+          default: application/json
+      additionalProperties: false
+      type: object
+      required:
+      - schema_id
+      title: PublicResponseSchema
+    PublicSegmentation:
+      properties:
+        label:
+          type: string
+          title: Label
+        class_id:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Class Id
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+        polygon:
+          items:
+            $ref: '#/components/schemas/PublicSegmentationPoint'
+          type: array
+          title: Polygon
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - confidence
+      title: PublicSegmentation
+    PublicSegmentationPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: PublicSegmentationPoint
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    SegmentationPoint:
+      properties:
+        x:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: X
+        y:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Y
+      additionalProperties: false
+      type: object
+      required:
+      - x
+      - y
+      title: SegmentationPoint
+    SegmentationPrediction:
+      properties:
+        label:
+          type: string
+          title: Label
+        score:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Score
+        polygon:
+          items:
+            $ref: '#/components/schemas/SegmentationPoint'
+          type: array
+          title: Polygon
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - score
+      title: SegmentationPrediction
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    TargetPath:
+      type: string
+      enum:
+      - realtime
+      - batch
+      title: TargetPath
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - detection
+      - oriented_detection
+      - segmentation
+      - anomaly
+      - temporal_sequence
+      title: TaskType
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

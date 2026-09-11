@@ -1,0 +1,14 @@
+{
+  "schema_version": "ybb.edge.golden-image.v1",
+  "platform": "jetson_orin_nano",
+  "architecture": "aarch64",
+  "base_image": {
+    "os": "Jetson Linux",
+    "image_source": "NVIDIA SDK Manager / initrd flash",
+    "image_version": "L4T 39.2 / JetPack 7.2",
+    "board": "Jetson Orin Nano Developer Kit"
+  },
+  "runtime": { "python": "3.12", "cuda": "13.2", "tensorrt": "10.16", "deepstream": "9.1", "installer_ui": "python3-tk or whiptail" },
+  "storage": { "system": "preformatted ext4 NVMe", "state_root": "/var/lib/ybb-edge", "minimum_bytes": 128849018880 },
+  "validation": ["nv_tegra_release", "nvidia-jetpack", "nvcc", "trtexec", "deepstream-app", "NVMe mount", "installer UI", "camera adapter inventory"]
+}

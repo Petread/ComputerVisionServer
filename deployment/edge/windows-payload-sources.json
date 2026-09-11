@@ -1,0 +1,46 @@
+{
+  "schema_version": "ybb.edge.windows-payload-sources.v2",
+  "python_runtime": {
+    "version": "3.12.13+20260728",
+    "python_version": "3.12",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260728/cpython-3.12.13%2B20260728-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "242b94b37682ac55f9bf9eb624348dc8d17c64f74f56028104545ea3ffe35e26",
+    "archive_format": "tar.gz"
+  },
+  "winsw": {
+    "version": "2.12.0",
+    "url": "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe",
+    "sha256": "05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da"
+  },
+  "cuda_toolkit": {
+    "version": "13.2.1",
+    "profile_version": "13.2",
+    "file_name": "cuda_13.2.1_windows.exe",
+    "url": "https://developer.download.nvidia.com/compute/cuda/13.2.1/local_installers/cuda_13.2.1_windows.exe",
+    "size_bytes": 2497041560,
+    "sha256": "378f7c46e4617175a4315639d570b4417f4e5ee8f5a90dfb0bc68add1347afdc"
+  },
+  "tensorrt": {
+    "version": "10.16.1.11",
+    "cuda_major": 13,
+    "frontend": {
+      "file_name": "tensorrt_cu13-10.16.1.11.tar.gz",
+      "wheel_file_name": "tensorrt_cu13-10.16.1.11-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/7c/9a/dfe6c293faa625457563c293d165f8948532d71b29a490e4f59773edf2aa/tensorrt_cu13-10.16.1.11.tar.gz",
+      "size_bytes": 17916,
+      "sha256": "5d34203a92f38851b150c4eddd32b9b55c01fd40fc4d19bff83e8dfef1d8f69e"
+    },
+    "runtime": {
+      "file_name": "tensorrt_cu13_libs-10.16.1.11-py3-none-win_amd64.whl",
+      "url": "https://pypi.nvidia.com/tensorrt-cu13-libs/tensorrt_cu13_libs-10.16.1.11-py3-none-win_amd64.whl",
+      "size_bytes": 1911173812,
+      "sha256": "96262c3e8c64a45abd29aa3482d99480fac6845bd420b6de125699bb1ae365ff"
+    },
+    "bindings": {
+      "file_name": "tensorrt_cu13_bindings-10.16.1.11-cp312-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/e9/a8/dfda48ab992050f40d0b2da7a795f16db403f48ee89e6a526cbd00133445/tensorrt_cu13_bindings-10.16.1.11-cp312-none-win_amd64.whl",
+      "size_bytes": 964883,
+      "sha256": "70ca2d73301ff427104d7986c26d5fa56f6a91578242d20e82b37c139be14ec0"
+    }
+  }
+}

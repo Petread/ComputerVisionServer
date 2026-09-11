@@ -1,0 +1,22 @@
+[project]
+name = "training-worker"
+version = "0.1.0"
+description = "Single-concurrency GPU training worker"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "redis>=5.0.8,<6",
+  "rq>=1.16.2,<2",
+  "cv-contracts",
+  "cv-core",
+  "cv-deploy",
+  "cv-db",
+  "cv-training",
+  "cv-utils",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/training_worker"]

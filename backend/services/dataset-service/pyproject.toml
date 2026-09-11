@@ -1,0 +1,24 @@
+[project]
+name = "dataset-service"
+version = "0.1.0"
+description = "Dataset and upload-session control service"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0,<1",
+  "redis>=5.0.8,<6",
+  "rq>=1.16.2,<2",
+  "sqlalchemy>=2.0.34,<3",
+  "uvicorn[standard]>=0.30.6,<1",
+  "cv-core",
+  "cv-contracts",
+  "cv-db",
+  "cv-status",
+  "cv-utils",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dataset_service"]

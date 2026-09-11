@@ -1,0 +1,24 @@
+[Unit]
+Description=YBB durable edge runtime agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ybb-edge
+Group=ybb-edge
+EnvironmentFile=/etc/ybb-edge/device.env
+WorkingDirectory=/var/lib/ybb-edge
+ExecStart=/opt/ybb-edge/venv/bin/python /opt/ybb-edge/edge-runtime-launcher.py
+Restart=always
+RestartSec=3
+TimeoutStopSec=70
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ybb-edge
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

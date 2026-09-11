@@ -1,0 +1,2327 @@
+openapi: 3.1.0
+info:
+  title: YBB Edge Agent
+  version: 0.8.0
+paths:
+  /edge/v1/identity:
+    get:
+      summary: Identity
+      operationId: identity_edge_v1_identity_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeviceIdentity'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/health:
+    get:
+      summary: Health
+      operationId: health_edge_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeviceHealth'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/capabilities:
+    get:
+      summary: Capabilities
+      operationId: capabilities_edge_v1_capabilities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeCapabilitySnapshot'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/runtime:
+    get:
+      summary: Runtime Status
+      operationId: runtime_status_edge_v1_runtime_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeRuntimeStatus'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/software:
+    get:
+      summary: Installed Software
+      operationId: installed_software_edge_v1_software_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSoftwareStatus'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/software/commands:
+    post:
+      summary: Software Command
+      operationId: software_command_edge_v1_software_commands_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeSoftwareCommand'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSoftwareStatus'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/blobs/{sha256}:
+    head:
+      summary: Blob Head
+      operationId: blob_head_edge_v1_blobs__sha256__head
+      parameters:
+      - name: sha256
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sha256
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+    put:
+      summary: Blob Put
+      operationId: blob_put_edge_v1_blobs__sha256__put
+      parameters:
+      - name: sha256
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sha256
+      - name: x-upload-offset
+        in: header
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+          title: X-Upload-Offset
+      - name: x-total-size
+        in: header
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+          title: X-Total-Size
+      - name: x-idempotency-key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 160
+          title: X-Idempotency-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeBlobUploadStatus'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/deployments/{deployment_id}/prepare:
+    post:
+      summary: Prepare Deployment
+      operationId: prepare_deployment_edge_v1_deployments__deployment_id__prepare_post
+      parameters:
+      - name: deployment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeDeploymentManifest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeploymentState'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/deployments/{deployment_id}/commit:
+    post:
+      summary: Commit Deployment
+      operationId: commit_deployment_edge_v1_deployments__deployment_id__commit_post
+      parameters:
+      - name: deployment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeDeploymentCommandRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeploymentState'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/deployments/{deployment_id}/rollback:
+    post:
+      summary: Rollback Deployment
+      operationId: rollback_deployment_edge_v1_deployments__deployment_id__rollback_post
+      parameters:
+      - name: deployment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeDeploymentCommandRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeploymentState'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/deployments/{deployment_id}/stop:
+    post:
+      summary: Stop Deployment
+      operationId: stop_deployment_edge_v1_deployments__deployment_id__stop_post
+      parameters:
+      - name: deployment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeDeploymentCommandRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeploymentState'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/deployments/{deployment_id}:
+    get:
+      summary: Get Deployment
+      operationId: get_deployment_edge_v1_deployments__deployment_id__get
+      parameters:
+      - name: deployment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeDeploymentState'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/results:
+    get:
+      summary: Get Results
+      operationId: get_results_edge_v1_results_get
+      parameters:
+      - name: after_sequence
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: After Sequence
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 100
+          title: Limit
+      - name: boot_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: Boot Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeResultBatch'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/results/streams:
+    get:
+      summary: Get Result Streams
+      operationId: get_result_streams_edge_v1_results_streams_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeResultStreamList'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/results/ack:
+    post:
+      summary: Acknowledge Results
+      operationId: acknowledge_results_edge_v1_results_ack_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeResultAck'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeResultAck'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/media/viewer-leases:
+    post:
+      summary: Acquire Media Lease
+      operationId: acquire_media_lease_edge_v1_media_viewer_leases_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeMediaLeaseRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeMediaLeaseState'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/media/viewer-leases/{lease_id}:
+    delete:
+      summary: Release Media Lease
+      operationId: release_media_lease_edge_v1_media_viewer_leases__lease_id__delete
+      parameters:
+      - name: lease_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Lease Id
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/media/preview:
+    get:
+      summary: Get Preview Frame
+      operationId: get_preview_frame_edge_v1_media_preview_get
+      parameters:
+      - name: lease_id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 160
+          title: Lease Id
+      - name: channel_id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 128
+          title: Channel Id
+      - name: after_sequence
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: After Sequence
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgePreviewFrame'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+components:
+  schemas:
+    EdgeArtifactDescriptor:
+      properties:
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+        size_bytes:
+          type: integer
+          minimum: 0.0
+          title: Size Bytes
+        kind:
+          type: string
+          enum:
+          - onnx_model
+          - label_map
+          - pipeline_graph
+          - runtime_plugin
+          - configuration
+          - golden_input
+          - other
+          title: Kind
+        file_name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: File Name
+        media_type:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Media Type
+          default: application/octet-stream
+      additionalProperties: false
+      type: object
+      required:
+      - sha256
+      - size_bytes
+      - kind
+      - file_name
+      title: EdgeArtifactDescriptor
+    EdgeBlobUploadStatus:
+      properties:
+        schema_version:
+          type: string
+          const: edge.blob.status.v1
+          title: Schema Version
+          default: edge.blob.status.v1
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+        size_bytes:
+          type: integer
+          minimum: 0.0
+          title: Size Bytes
+        received_bytes:
+          type: integer
+          minimum: 0.0
+          title: Received Bytes
+        complete:
+          type: boolean
+          title: Complete
+        idempotency_key:
+          anyOf:
+          - type: string
+            maxLength: 160
+          - type: 'null'
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - sha256
+      - size_bytes
+      - received_bytes
+      - complete
+      title: EdgeBlobUploadStatus
+    EdgeCameraAdapterCapability:
+      properties:
+        adapter:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Adapter
+        available:
+          type: boolean
+          title: Available
+        provider:
+          type: string
+          maxLength: 96
+          minLength: 1
+          title: Provider
+        version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Version
+        device_count:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Device Count
+        detail:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Detail
+      additionalProperties: false
+      type: object
+      required:
+      - adapter
+      - available
+      - provider
+      title: EdgeCameraAdapterCapability
+    EdgeCapabilitySnapshot:
+      properties:
+        schema_version:
+          type: string
+          const: edge.device.capabilities.v1
+          title: Schema Version
+          default: edge.device.capabilities.v1
+        management_ip:
+          type: string
+          format: ipv4
+          title: Management Ip
+          description: Fixed IPv4 address of the Edge device itself.
+        platform:
+          type: string
+          enum:
+          - jetson_orin_nano
+          - jetson_agx_orin
+          - windows_11
+          - simulated
+          title: Platform
+        architecture:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Architecture
+        os_version:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Os Version
+        jetpack_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Jetpack Version
+        l4t_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: L4T Version
+        cuda_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Cuda Version
+        tensorrt_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Tensorrt Version
+        deepstream_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Deepstream Version
+        gpu_model:
+          anyOf:
+          - type: string
+            maxLength: 160
+          - type: 'null'
+          title: Gpu Model
+        gpu_driver_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Gpu Driver Version
+        gpu_memory_bytes:
+          type: integer
+          minimum: 0.0
+          title: Gpu Memory Bytes
+          default: 0
+        python_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Python Version
+        ram_total_bytes:
+          type: integer
+          minimum: 0.0
+          title: Ram Total Bytes
+        storage_total_bytes:
+          type: integer
+          minimum: 0.0
+          title: Storage Total Bytes
+        storage_free_bytes:
+          type: integer
+          minimum: 0.0
+          title: Storage Free Bytes
+        agent_version:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Agent Version
+        runtime_version:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Runtime Version
+        supported_node_types:
+          items:
+            type: string
+          type: array
+          title: Supported Node Types
+        runtime_code_digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Code Digest
+        node_contract_versions:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Node Contract Versions
+        software_update_protocol:
+          type: integer
+          title: Software Update Protocol
+          default: 0
+        camera_adapters:
+          items:
+            type: string
+          type: array
+          title: Camera Adapters
+        camera_inventory:
+          items:
+            $ref: '#/components/schemas/EdgeCameraAdapterCapability'
+          type: array
+          title: Camera Inventory
+        inventory_source:
+          type: string
+          enum:
+          - probed
+          - partial
+          - configured_fallback
+          title: Inventory Source
+          default: configured_fallback
+        inventory_warnings:
+          items:
+            type: string
+          type: array
+          title: Inventory Warnings
+        observed_at:
+          type: string
+          title: Observed At
+      additionalProperties: false
+      type: object
+      required:
+      - management_ip
+      - platform
+      - architecture
+      - os_version
+      - ram_total_bytes
+      - storage_total_bytes
+      - storage_free_bytes
+      - agent_version
+      - runtime_version
+      - observed_at
+      title: EdgeCapabilitySnapshot
+    EdgeControlError:
+      properties:
+        schema_version:
+          type: string
+          const: edge.control.error.v1
+          title: Schema Version
+          default: edge.control.error.v1
+        code:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Code
+        message:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Message
+        retryable:
+          type: boolean
+          title: Retryable
+          default: false
+        detail:
+          additionalProperties: true
+          type: object
+          title: Detail
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      title: EdgeControlError
+    EdgeDeploymentCommandRequest:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      title: EdgeDeploymentCommandRequest
+    EdgeDeploymentManifest:
+      properties:
+        schema_version:
+          type: string
+          const: edge.deployment.manifest.v1
+          title: Schema Version
+          default: edge.deployment.manifest.v1
+        deployment_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Deployment Id
+        workload_release_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Workload Release Id
+        channel_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Channel Id
+        pipeline_version_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Pipeline Version Id
+        idempotency_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Idempotency Key
+        artifacts:
+          items:
+            $ref: '#/components/schemas/EdgeArtifactDescriptor'
+          type: array
+          title: Artifacts
+        required_platforms:
+          items:
+            type: string
+            enum:
+            - jetson_orin_nano
+            - jetson_agx_orin
+            - windows_11
+            - simulated
+          type: array
+          title: Required Platforms
+        required_node_types:
+          items:
+            type: string
+          type: array
+          title: Required Node Types
+        runtime_requirements:
+          additionalProperties: true
+          type: object
+          title: Runtime Requirements
+        created_at:
+          type: string
+          title: Created At
+        simulate_activation_failure:
+          type: boolean
+          title: Simulate Activation Failure
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_id
+      - workload_release_id
+      - channel_id
+      - pipeline_version_id
+      - idempotency_key
+      - created_at
+      title: EdgeDeploymentManifest
+    EdgeDeploymentState:
+      properties:
+        schema_version:
+          type: string
+          const: edge.deployment.state.v1
+          title: Schema Version
+          default: edge.deployment.state.v1
+        deployment_id:
+          type: string
+          title: Deployment Id
+        workload_release_id:
+          type: string
+          title: Workload Release Id
+        channel_id:
+          type: string
+          title: Channel Id
+        status:
+          type: string
+          enum:
+          - requested
+          - validating
+          - transferring
+          - prepared
+          - activating
+          - running
+          - standby
+          - activation_failed
+          - rolling_back
+          - rolled_back
+          - stopping
+          - stopped
+          title: Status
+        idempotency_key:
+          type: string
+          title: Idempotency Key
+        prepared_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prepared At
+        activated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activated At
+        rolled_back_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rolled Back At
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        missing_artifacts:
+          items:
+            type: string
+          type: array
+          title: Missing Artifacts
+        runtime_slot:
+          anyOf:
+          - type: string
+            enum:
+            - A
+            - B
+          - type: 'null'
+          title: Runtime Slot
+        recovery_count:
+          type: integer
+          minimum: 0.0
+          title: Recovery Count
+          default: 0
+        admission_report:
+          additionalProperties: true
+          type: object
+          title: Admission Report
+        engine_builds:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Engine Builds
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_id
+      - workload_release_id
+      - channel_id
+      - status
+      - idempotency_key
+      title: EdgeDeploymentState
+    EdgeDeviceAddress:
+      properties:
+        management_ip:
+          type: string
+          format: ipv4
+          title: Management Ip
+          description: Fixed IPv4 address of the Edge device itself.
+        control_port:
+          type: integer
+          maximum: 65535.0
+          minimum: 1.0
+          title: Control Port
+          description: Edge-local control port reached from the orchestration server.
+          default: 9443
+        plant_api_port:
+          type: integer
+          maximum: 65535.0
+          minimum: 1.0
+          title: Plant Api Port
+          description: Edge-local HTTP trigger port reached from admitted PLC clients.
+          default: 9444
+        rtsp_port:
+          type: integer
+          maximum: 65535.0
+          minimum: 1.0
+          title: Rtsp Port
+          default: 8554
+      additionalProperties: false
+      type: object
+      required:
+      - management_ip
+      title: EdgeDeviceAddress
+    EdgeDeviceHealth:
+      properties:
+        schema_version:
+          type: string
+          const: edge.device.health.v1
+          title: Schema Version
+          default: edge.device.health.v1
+        state:
+          type: string
+          enum:
+          - ok
+          - degraded
+          - down
+          title: State
+        detail:
+          type: string
+          maxLength: 1000
+          minLength: 1
+          title: Detail
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        observed_at:
+          type: string
+          title: Observed At
+        active_deployment_ids:
+          items:
+            type: string
+          type: array
+          title: Active Deployment Ids
+        result_backlog_count:
+          type: integer
+          minimum: 0.0
+          title: Result Backlog Count
+          default: 0
+        disk_free_bytes:
+          type: integer
+          minimum: 0.0
+          title: Disk Free Bytes
+          default: 0
+        runtime:
+          anyOf:
+          - $ref: '#/components/schemas/EdgeRuntimeStatus'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - state
+      - detail
+      - boot_id
+      - observed_at
+      title: EdgeDeviceHealth
+    EdgeDeviceIdentity:
+      properties:
+        schema_version:
+          type: string
+          const: edge.device.identity.v1
+          title: Schema Version
+          default: edge.device.identity.v1
+        address:
+          $ref: '#/components/schemas/EdgeDeviceAddress'
+        hostname:
+          type: string
+          maxLength: 253
+          minLength: 1
+          title: Hostname
+        platform:
+          type: string
+          enum:
+          - jetson_orin_nano
+          - jetson_agx_orin
+          - windows_11
+          - simulated
+          title: Platform
+        architecture:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Architecture
+        agent_version:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Agent Version
+        runtime_version:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Runtime Version
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+      additionalProperties: false
+      type: object
+      required:
+      - address
+      - hostname
+      - platform
+      - architecture
+      - agent_version
+      - runtime_version
+      - boot_id
+      title: EdgeDeviceIdentity
+    EdgeMediaLeaseRequest:
+      properties:
+        lease_id:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Lease Id
+        channel_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Channel Id
+        ttl_seconds:
+          type: integer
+          maximum: 120.0
+          minimum: 5.0
+          title: Ttl Seconds
+          default: 30
+        max_fps:
+          type: number
+          maximum: 10.0
+          minimum: 0.2
+          title: Max Fps
+          default: 2.0
+        max_width:
+          type: integer
+          maximum: 1920.0
+          minimum: 64.0
+          title: Max Width
+          default: 640
+        include_overlay:
+          type: boolean
+          title: Include Overlay
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - lease_id
+      - channel_id
+      title: EdgeMediaLeaseRequest
+    EdgeMediaLeaseState:
+      properties:
+        schema_version:
+          type: string
+          const: edge.media.lease.v1
+          title: Schema Version
+          default: edge.media.lease.v1
+        lease_id:
+          type: string
+          title: Lease Id
+        channel_id:
+          type: string
+          title: Channel Id
+        expires_at:
+          type: string
+          title: Expires At
+        max_fps:
+          type: number
+          title: Max Fps
+        max_width:
+          type: integer
+          title: Max Width
+        include_overlay:
+          type: boolean
+          title: Include Overlay
+      additionalProperties: false
+      type: object
+      required:
+      - lease_id
+      - channel_id
+      - expires_at
+      - max_fps
+      - max_width
+      - include_overlay
+      title: EdgeMediaLeaseState
+    EdgePreviewFrame:
+      properties:
+        schema_version:
+          type: string
+          const: edge.media.preview.v1
+          title: Schema Version
+          default: edge.media.preview.v1
+        channel_id:
+          type: string
+          title: Channel Id
+        workload_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workload Release Id
+        boot_id:
+          type: string
+          title: Boot Id
+        available:
+          type: boolean
+          title: Available
+          default: false
+        sequence:
+          type: integer
+          minimum: 0.0
+          title: Sequence
+          default: 0
+        image_base64:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image Base64
+        mime_type:
+          type: string
+          const: image/jpeg
+          title: Mime Type
+          default: image/jpeg
+        width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Width
+        height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Height
+        captured_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Captured At
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      additionalProperties: false
+      type: object
+      required:
+      - channel_id
+      - boot_id
+      title: EdgePreviewFrame
+    EdgeResultAck:
+      properties:
+        schema_version:
+          type: string
+          const: edge.result.ack.v1
+          title: Schema Version
+          default: edge.result.ack.v1
+        management_ip:
+          type: string
+          format: ipv4
+          title: Management Ip
+          description: Fixed IPv4 address of the Edge device itself.
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        acknowledged_through_sequence:
+          type: integer
+          minimum: 0.0
+          title: Acknowledged Through Sequence
+        idempotency_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - management_ip
+      - boot_id
+      - acknowledged_through_sequence
+      - idempotency_key
+      title: EdgeResultAck
+    EdgeResultBatch:
+      properties:
+        schema_version:
+          type: string
+          const: edge.result.batch.v1
+          title: Schema Version
+          default: edge.result.batch.v1
+        management_ip:
+          type: string
+          format: ipv4
+          title: Management Ip
+          description: Fixed IPv4 address of the Edge device itself.
+        boot_id:
+          type: string
+          title: Boot Id
+        after_sequence:
+          type: integer
+          minimum: 0.0
+          title: After Sequence
+        items:
+          items:
+            $ref: '#/components/schemas/EdgeResultEnvelope'
+          type: array
+          title: Items
+        highest_sequence:
+          type: integer
+          minimum: 0.0
+          title: Highest Sequence
+        has_more:
+          type: boolean
+          title: Has More
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - management_ip
+      - boot_id
+      - after_sequence
+      - highest_sequence
+      title: EdgeResultBatch
+    EdgeResultEnvelope:
+      properties:
+        schema_version:
+          type: string
+          const: edge.result.envelope.v1
+          title: Schema Version
+          default: edge.result.envelope.v1
+        management_ip:
+          type: string
+          format: ipv4
+          title: Management Ip
+          description: Fixed IPv4 address of the Edge device itself.
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        sequence:
+          type: integer
+          minimum: 1.0
+          title: Sequence
+        channel_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Channel Id
+        workload_release_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Workload Release Id
+        correlation_id:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Correlation Id
+        occurred_at:
+          type: string
+          title: Occurred At
+        result_type:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Result Type
+          default: pipeline_execution
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      additionalProperties: false
+      type: object
+      required:
+      - management_ip
+      - boot_id
+      - sequence
+      - channel_id
+      - workload_release_id
+      - correlation_id
+      - occurred_at
+      title: EdgeResultEnvelope
+    EdgeResultStreamList:
+      properties:
+        schema_version:
+          type: string
+          const: edge.result.streams.v1
+          title: Schema Version
+          default: edge.result.streams.v1
+        management_ip:
+          type: string
+          format: ipv4
+          title: Management Ip
+          description: Fixed IPv4 address of the Edge device itself.
+        current_boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Current Boot Id
+        items:
+          items:
+            $ref: '#/components/schemas/EdgeResultStreamSummary'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - management_ip
+      - current_boot_id
+      title: EdgeResultStreamList
+    EdgeResultStreamSummary:
+      properties:
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        earliest_sequence:
+          type: integer
+          minimum: 0.0
+          title: Earliest Sequence
+        highest_sequence:
+          type: integer
+          minimum: 0.0
+          title: Highest Sequence
+        acknowledged_sequence:
+          type: integer
+          minimum: 0.0
+          title: Acknowledged Sequence
+        pending_count:
+          type: integer
+          minimum: 0.0
+          title: Pending Count
+      additionalProperties: false
+      type: object
+      required:
+      - boot_id
+      - earliest_sequence
+      - highest_sequence
+      - acknowledged_sequence
+      - pending_count
+      title: EdgeResultStreamSummary
+    EdgeRuntimeProcess:
+      properties:
+        deployment_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Deployment Id
+        state:
+          type: string
+          enum:
+          - stopped
+          - starting
+          - running
+          - backoff
+          - crash_loop
+          title: State
+        restart_count:
+          type: integer
+          minimum: 0.0
+          title: Restart Count
+          default: 0
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        last_heartbeat_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Heartbeat At
+        next_restart_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Restart At
+        last_error:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Last Error
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_id
+      - state
+      title: EdgeRuntimeProcess
+    EdgeRuntimeSlot:
+      properties:
+        name:
+          type: string
+          enum:
+          - A
+          - B
+          title: Name
+        state:
+          type: string
+          enum:
+          - empty
+          - prepared
+          - active
+          - standby
+          - failed
+          title: State
+        deployment_id:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Deployment Id
+        workload_release_id:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Workload Release Id
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - state
+      - updated_at
+      title: EdgeRuntimeSlot
+    EdgeRuntimeStatus:
+      properties:
+        schema_version:
+          type: string
+          const: edge.runtime.status.v1
+          title: Schema Version
+          default: edge.runtime.status.v1
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        supervisor_state:
+          type: string
+          enum:
+          - idle
+          - running
+          - degraded
+          title: Supervisor State
+        active_slot:
+          anyOf:
+          - type: string
+            enum:
+            - A
+            - B
+          - type: 'null'
+          title: Active Slot
+        previous_slot:
+          anyOf:
+          - type: string
+            enum:
+            - A
+            - B
+          - type: 'null'
+          title: Previous Slot
+        slots:
+          items:
+            $ref: '#/components/schemas/EdgeRuntimeSlot'
+          type: array
+          maxItems: 2
+          minItems: 2
+          title: Slots
+        processes:
+          items:
+            $ref: '#/components/schemas/EdgeRuntimeProcess'
+          type: array
+          title: Processes
+        storage:
+          $ref: '#/components/schemas/EdgeStorageQuotaStatus'
+        database_journal_mode:
+          type: string
+          const: wal
+          title: Database Journal Mode
+          default: wal
+        recovered_deployment_ids:
+          items:
+            type: string
+          type: array
+          title: Recovered Deployment Ids
+        observed_at:
+          type: string
+          title: Observed At
+      additionalProperties: false
+      type: object
+      required:
+      - boot_id
+      - supervisor_state
+      - slots
+      - storage
+      - observed_at
+      title: EdgeRuntimeStatus
+    EdgeSoftwareCommand:
+      properties:
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9._-]{2,127}$
+          title: Request Id
+        action:
+          type: string
+          enum:
+          - update
+          - rollback
+          title: Action
+          default: update
+        package_sha256:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Package Sha256
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      title: EdgeSoftwareCommand
+    EdgeSoftwareStatus:
+      properties:
+        protocol_version:
+          type: integer
+          title: Protocol Version
+          default: 0
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        phase:
+          type: string
+          enum:
+          - idle
+          - queued
+          - transferring
+          - verifying
+          - installing
+          - activating
+          - checking
+          - succeeded
+          - failed
+          - rolled_back
+          title: Phase
+          default: idle
+        active_release:
+          type: string
+          title: Active Release
+          default: bootstrap
+        previous_release:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Previous Release
+        candidate_release:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Candidate Release
+        runtime_code_digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Code Digest
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        updated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updated At
+        transfer_bytes:
+          type: integer
+          minimum: 0.0
+          title: Transfer Bytes
+          default: 0
+        transfer_total_bytes:
+          type: integer
+          minimum: 0.0
+          title: Transfer Total Bytes
+          default: 0
+      additionalProperties: false
+      type: object
+      title: EdgeSoftwareStatus
+    EdgeStorageQuotaStatus:
+      properties:
+        artifact_bytes:
+          type: integer
+          minimum: 0.0
+          title: Artifact Bytes
+        artifact_quota_bytes:
+          type: integer
+          minimum: 1.0
+          title: Artifact Quota Bytes
+        outbox_bytes:
+          type: integer
+          minimum: 0.0
+          title: Outbox Bytes
+        outbox_quota_bytes:
+          type: integer
+          minimum: 1.0
+          title: Outbox Quota Bytes
+        outbox_items:
+          type: integer
+          minimum: 0.0
+          title: Outbox Items
+        outbox_max_items:
+          type: integer
+          minimum: 1.0
+          title: Outbox Max Items
+        disk_free_bytes:
+          type: integer
+          minimum: 0.0
+          title: Disk Free Bytes
+        minimum_disk_free_bytes:
+          type: integer
+          minimum: 0.0
+          title: Minimum Disk Free Bytes
+        pressure:
+          type: boolean
+          title: Pressure
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - artifact_bytes
+      - artifact_quota_bytes
+      - outbox_bytes
+      - outbox_quota_bytes
+      - outbox_items
+      - outbox_max_items
+      - disk_free_bytes
+      - minimum_disk_free_bytes
+      title: EdgeStorageQuotaStatus

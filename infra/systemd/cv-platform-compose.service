@@ -1,0 +1,14 @@
+[Unit]
+Description=CV Platform Compose Stack
+After=network.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/cv-platform/repo
+ExecStart=/usr/bin/docker compose -f infra/compose/compose.prod.yaml up -d
+ExecStop=/usr/bin/docker compose -f infra/compose/compose.prod.yaml down
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+

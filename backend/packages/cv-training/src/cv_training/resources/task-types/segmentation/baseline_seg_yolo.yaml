@@ -1,0 +1,38 @@
+task_type: segmentation
+recipe_name: baseline_seg_yolo
+recipe_version: 1.2.0
+framework: ultralytics
+trainer_backend: ultralytics-yolo
+architecture_family: yolo
+supported_versions:
+  - v8
+  - v11
+  - v26
+supported_sizes:
+  - n
+  - s
+  - m
+  - l
+  - x
+image_size: 768
+epochs: 80
+batch_size: 6
+optimizer: sgd
+optimizer_settings:
+  momentum: 0.937
+  weight_decay: 0.0005
+learning_rate: 0.01
+checkpoint_interval_steps: 30
+early_stopping_patience: 60
+early_stopping_min_delta: 0.0
+best_metric_name: mask_map_50_95
+best_metric_mode: max
+max_keep_ckpts: 5
+pretrained: auto
+pretrained_checkpoint: auto
+scratch_training_min_items: 2000
+onnx_opset: 13
+postprocessing:
+  confidence_threshold_default: 0.5
+  output_type: instance_masks
+nms_enabled: true

@@ -1,0 +1,15 @@
+[project]
+name = "cv-utils"
+version = "0.1.0"
+description = "Shared utilities for IDs, timestamps, audit context, and domain errors"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.8.2,<3",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cv_utils"]

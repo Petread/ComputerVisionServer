@@ -1,0 +1,18 @@
+logLevel: info
+api: yes
+apiAddress: :9997
+metrics: yes
+metricsAddress: :9998
+rtspTransports: [tcp]
+rtspAddress: :8554
+hls: no
+webrtcAddress: :8889
+webrtcLocalUDPAddress: ""
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: false
+webrtcAdditionalHosts:
+  - "172.23.27.242"
+authMethod: internal
+paths:
+  all_others:
+    source: publisher

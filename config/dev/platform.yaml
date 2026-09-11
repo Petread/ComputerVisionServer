@@ -1,0 +1,47 @@
+service:
+  public_base_url: http://localhost:8080
+cors:
+  allowed_origins:
+    - http://localhost
+    - http://localhost:4173
+    - http://127.0.0.1:4173
+label_studio:
+  local_files_root: .local/state
+  local_files_url_prefix: /data/local-files/?d=
+storage:
+  state_root: .local/state
+  training_root: .local/state/training
+  serving_root: .local/state/serving
+  audit_root: .local/state/audit
+  logs_root: .local/state/logs
+training:
+  heartbeat_interval_seconds: 3
+  stale_after_seconds: 15
+  trainer_mode: real
+  default_step_duration_ms: 10
+runtime:
+  realtime_frame_buffer_size: 2
+  realtime_target_latency_ms: 350
+  realtime_max_channels_per_executor: 4
+  trigger_timeout_ms: 3000
+  trigger_max_concurrency: 2
+  executor_heartbeat_interval_seconds: 2
+  executor_stale_after_seconds: 8
+  plc_writes_allowed: false
+api_keys:
+  enabled: false
+tls:
+  enabled: false
+artifact_retention:
+  checkpoints_days: 7
+  training_workspace_days: 2
+  exports_days: 7
+  batch_outputs_days: 3
+  quarantine_days: 3
+  runtime_operational_result_minutes: 15
+  runtime_result_prune_batch_size: 1000
+  runtime_delivery_metadata_days: 2
+  runtime_capture_metadata_days: 7
+backup:
+  enabled: true
+  metadata_retention_days: 7

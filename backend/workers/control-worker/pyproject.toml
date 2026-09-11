@@ -1,0 +1,26 @@
+[project]
+name = "control-worker"
+version = "0.1.0"
+description = "RQ worker for webhook, dataset, deploy, and maintenance queues"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27.2,<1",
+  "onnxruntime>=1.19.0,<2 ; python_version == '3.11' and platform_system == 'Linux' and platform_machine == 'x86_64'",
+  "redis>=5.0.8,<6",
+  "rq>=1.16.2,<2",
+  "cv-contracts",
+  "cv-core",
+  "cv-deploy",
+  "cv-datasets",
+  "cv-db",
+  "cv-status",
+  "cv-observability",
+  "cv-utils",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/control_worker"]

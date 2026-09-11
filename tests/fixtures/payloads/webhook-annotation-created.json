@@ -1,0 +1,16 @@
+{
+  "action": "ANNOTATION_CREATED",
+  "project_id": 501,
+  "annotation": {
+    "id": 11,
+    "result": [
+      {
+        "value": {
+          "choices": [
+            "accepted"
+          ]
+        }
+      }
+    ]
+  }
+}

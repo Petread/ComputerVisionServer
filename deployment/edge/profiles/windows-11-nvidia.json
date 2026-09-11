@@ -1,0 +1,29 @@
+{
+  "schema_version": "ybb.edge.platform-profile.v1",
+  "platform": "windows_11",
+  "display_name": "Windows 11 mit NVIDIA GPU",
+  "architecture": "x86_64",
+  "archive_format": "zip",
+  "base_os": "Windows 11 23H2 oder neuer",
+  "jetpack_version": null,
+  "l4t_version": null,
+  "cuda_version": "13.2",
+  "tensorrt_version": "10.16",
+  "deepstream_version": null,
+  "python_version": "3.12 full relocatable runtime with venv and pip",
+  "python_tag": "312",
+  "python_abi": "cp312",
+  "pip_platforms": ["win_amd64"],
+  "system_python": false,
+  "minimum_nvme_bytes": 128849018880,
+  "performance_profile": "High performance",
+  "approved_camera_adapters": [
+    "rtsp",
+    "usb_opencv",
+    "gstreamer",
+    "basler_pylon",
+    "flir_spinnaker"
+  ],
+  "required_distributions": ["edge-agent", "cv-status", "cv-contracts", "cv-runtime", "cv-edge", "cv-utils", "python-snap7", "fastapi", "uvicorn", "numpy", "pillow", "opencv-python-headless", "cuda-python", "tensorrt-cu13", "tensorrt-cu13-bindings", "tensorrt-cu13-libs"],
+  "required_external_payloads": ["python_runtime", "winsw", "cuda_toolkit_offline_installer"]
+}

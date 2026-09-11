@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Realtime Executor
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/runtime/boundary:
+    get:
+      tags:
+      - runtime-boundary
+      summary: Get Runtime Boundary
+      operationId: get_runtime_boundary_api_v1_runtime_boundary_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBoundaryResponse'
+  /api/v1/runtime/channels/{channel_id}:execute-frame:
+    post:
+      tags:
+      - runtime-boundary
+      summary: Execute Single Frame
+      operationId: execute_single_frame_api_v1_runtime_channels__channel_id__execute_frame_post
+      parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Channel Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeTriggerExecutionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeTriggerExecutionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RuntimeBoardFormat:
+      properties:
+        format_id:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Format Id
+        format_version:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Format Version
+        width_mm:
+          type: number
+          maximum: 10000.0
+          exclusiveMinimum: 0.0
+          title: Width Mm
+        thickness_mm:
+          type: number
+          maximum: 2000.0
+          exclusiveMinimum: 0.0
+          title: Thickness Mm
+      additionalProperties: false
+      type: object
+      required:
+      - format_id
+      - format_version
+      - width_mm
+      - thickness_mm
+      title: RuntimeBoardFormat
+    RuntimeBoundaryResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.boundary.v1
+          title: Schema Version
+          default: runtime.boundary.v1
+        service_name:
+          type: string
+          title: Service Name
+        responsibilities:
+          items:
+            type: string
+          type: array
+          title: Responsibilities
+        non_responsibilities:
+          items:
+            type: string
+          type: array
+          title: Non Responsibilities
+      additionalProperties: false
+      type: object
+      required:
+      - service_name
+      title: RuntimeBoundaryResponse
+    RuntimeTriggerCameraImage:
+      properties:
+        image_base64:
+          type: string
+          minLength: 16
+          title: Image Base64
+        mime_type:
+          type: string
+          enum:
+          - image/jpeg
+          - image/png
+          title: Mime Type
+          default: image/jpeg
+        captured_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Captured At
+      additionalProperties: false
+      type: object
+      required:
+      - image_base64
+      title: RuntimeTriggerCameraImage
+    RuntimeTriggerExecutionRequest:
+      properties:
+        trigger_id:
+          anyOf:
+          - type: string
+            maxLength: 120
+            minLength: 1
+          - type: 'null'
+          title: Trigger Id
+        image_base64:
+          anyOf:
+          - type: string
+            minLength: 16
+          - type: 'null'
+          title: Image Base64
+        mime_type:
+          type: string
+          title: Mime Type
+          default: image/jpeg
+        images_by_role:
+          additionalProperties:
+            $ref: '#/components/schemas/RuntimeTriggerCameraImage'
+          propertyNames:
+            enum:
+            - upper
+            - lower
+            - end_face
+          type: object
+          title: Images By Role
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+        board_format:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeBoardFormat'
+          - type: 'null'
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      additionalProperties: false
+      type: object
+      title: RuntimeTriggerExecutionRequest
+    RuntimeTriggerExecutionResponse:
+      properties:
+        schema_version:
+          type: string
+          const: runtime.trigger.execution-response.v1
+          title: Schema Version
+          default: runtime.trigger.execution-response.v1
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          - skipped
+          - timeout
+          - rejected
+          title: Status
+        trigger_endpoint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Endpoint Id
+        endpoint_slug:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Endpoint Slug
+        channel_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Id
+        pipeline_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pipeline Version Id
+        runtime_execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Execution Id
+        trigger_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        final_response:
+          additionalProperties: true
+          type: object
+          title: Final Response
+        execution_result:
+          additionalProperties: true
+          type: object
+          title: Execution Result
+        overlay_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Overlay Outputs
+        capture_intents:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Capture Intents
+        http_trigger_responses:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Http Trigger Responses
+        persisted_results:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Persisted Results
+        plc_write_outputs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Plc Write Outputs
+        projected_results:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Projected Results
+        errors:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Errors
+        timing:
+          additionalProperties: true
+          type: object
+          title: Timing
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Code
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+        retryable:
+          type: boolean
+          title: Retryable
+          default: false
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - meta
+      title: RuntimeTriggerExecutionResponse
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

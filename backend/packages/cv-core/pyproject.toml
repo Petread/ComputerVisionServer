@@ -1,0 +1,27 @@
+[project]
+name = "cv-core"
+version = "0.1.0"
+description = "Shared app factory, config loading, security, and queue helpers"
+requires-python = ">=3.11"
+dependencies = [
+  "argon2-cffi>=23.1.0,<24",
+  "dvc>=3.61.0,<4",
+  "fastapi>=0.115.0,<1",
+  "itsdangerous>=2.2.0,<3",
+  "mlflow-skinny>=2.14.0,<3",
+  "pydantic>=2.8.2,<3",
+  "pydantic-settings>=2.4.0,<3",
+  "PyYAML>=6.0.2,<7",
+  "redis>=5.0.8,<6",
+  "rq>=1.16.2,<2",
+  "cv-observability",
+  "cv-status",
+  "cv-utils",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cv_core"]

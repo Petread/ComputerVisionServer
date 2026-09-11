@@ -1,0 +1,23 @@
+[project]
+name = "edge-agent"
+version = "0.8.0"
+description = "Fixed-IP YBB durable edge runtime and control agent"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0,<1",
+  "uvicorn[standard]>=0.30.6,<1",
+  "numpy>=1.26,<3",
+  "pillow>=10.4,<13",
+  "pypylon>=3.0.0,<27",
+  "cuda-python>=12.6,<14",
+  "cv-contracts",
+  "cv-runtime",
+  "cv-edge",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edge_agent"]

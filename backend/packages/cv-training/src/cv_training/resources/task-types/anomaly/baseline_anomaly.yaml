@@ -1,0 +1,33 @@
+task_type: anomaly
+recipe_name: baseline_anomaly
+recipe_version: 1.0.0
+framework: anomalib
+trainer_backend: anomalib-patchcore
+method: patchcore
+backbone: wide_resnet50_2
+image_size: 256
+optimizer: anomalib-default
+optimizer_settings:
+  threshold_calibration: adaptive
+learning_rate: 0.001
+epochs: 1
+batch_size: 8
+checkpoint_interval_steps: 1
+best_metric_name: image_auroc
+best_metric_mode: max
+max_keep_ckpts: 1
+pretrained: true
+onnx_opset: 13
+normalize:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+postprocessing:
+  anomaly_method: patchcore
+  threshold_calibration: adaptive
+  confidence_threshold_default: 0.5
+  heatmap_colormap: turbo
+  heatmap_opacity_default: 0.55
+  heatmap_support: true
+  score_output_support: true
+  thresholding_support: true
+  mask_support: false

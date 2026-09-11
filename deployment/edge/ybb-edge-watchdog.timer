@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically probe the YBB edge runtime
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=30
+AccuracySec=5
+Unit=ybb-edge-watchdog.service
+
+[Install]
+WantedBy=timers.target

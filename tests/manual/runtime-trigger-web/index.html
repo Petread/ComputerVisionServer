@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Runtime Trigger Test</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #1f2933;
+        --muted: #64748b;
+        --line: #d9e1ea;
+        --accent: #1664d9;
+        --accent-strong: #0f4eac;
+        --danger: #b42318;
+        --ok: #087443;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 24px 0 48px;
+      }
+
+      header {
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 16px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        color: #334155;
+        font-weight: 600;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid #b9c6d4;
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: #fff;
+        color: var(--text);
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 108px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      }
+
+      button {
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        min-height: 42px;
+        padding: 0 16px;
+      }
+
+      button:hover {
+        background: var(--accent-strong);
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.62;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 260px;
+        gap: 14px;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .status {
+        color: var(--muted);
+      }
+
+      .status.ok {
+        color: var(--ok);
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      .result-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .empty {
+        color: var(--muted);
+        padding: 20px 0;
+      }
+
+      .json-tree {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .json-field {
+        display: grid;
+        grid-template-columns: minmax(120px, 220px) minmax(0, 1fr);
+        gap: 8px;
+        min-width: 0;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .json-field:last-child {
+        border-bottom: 0;
+      }
+
+      .json-name {
+        min-width: 0;
+        color: #334155;
+        font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+      }
+
+      .json-value {
+        min-width: 0;
+      }
+
+      .json-nested {
+        border-left: 2px solid #dbe4ee;
+        margin-top: 6px;
+        padding-left: 10px;
+        min-width: 0;
+      }
+
+      .json-details {
+        min-width: 0;
+      }
+
+      .json-details > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        list-style-position: outside;
+      }
+
+      .scalar {
+        display: block;
+        max-height: 180px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .null {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      .image-value {
+        display: grid;
+        gap: 8px;
+        max-width: 720px;
+      }
+
+      .image-value img {
+        max-width: min(100%, 680px);
+        max-height: 520px;
+        object-fit: contain;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #f8fafc;
+      }
+
+      .image-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .raw-json {
+        margin-top: 14px;
+      }
+
+      .raw-json > summary {
+        cursor: pointer;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      pre {
+        overflow: auto;
+        margin: 10px 0 0;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0f172a;
+        color: #dbeafe;
+        font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100vw - 20px, 1180px);
+          padding-top: 14px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        button {
+          width: 100%;
+        }
+
+        .json-field {
+          grid-template-columns: 1fr;
+          gap: 3px;
+        }
+
+        .json-nested {
+          padding-left: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Runtime Trigger Test</h1>
+        <p>PUT-Endpoint ausloesen und Antwort als Bilder plus JSON-Tabelle pruefen.</p>
+      </header>
+
+      <section>
+        <div class="grid">
+          <div>
+            <label for="endpoint">Endpoint</label>
+            <input
+              id="endpoint"
+              autocomplete="off"
+              spellcheck="false"
+              value="https://172.23.27.242/runtime-trigger/api/v1/runtime/triggers/hw1-sortierf-rderer-objektisolierung-http-put"
+            />
+          </div>
+          <div>
+            <label for="token">Bearer Token / API Key</label>
+            <input id="token" autocomplete="off" spellcheck="false" placeholder="optional" />
+          </div>
+        </div>
+
+        <div style="margin-top: 14px">
+          <label for="body">Request Body</label>
+          <textarea id="body" spellcheck="false">{"trigger_id":"manual-web-test"}</textarea>
+        </div>
+
+        <div class="actions">
+          <button id="triggerButton" type="button">Trigger ausloesen</button>
+          <span id="status" class="status">Bereit.</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="result-head">
+          <h2>Ergebnis</h2>
+          <span id="summary" class="status"></span>
+        </div>
+        <div id="result" class="empty">Noch keine Antwort.</div>
+      </section>
+    </main>
+
+    <script>
+      const endpointInput = document.getElementById("endpoint");
+      const tokenInput = document.getElementById("token");
+      const bodyInput = document.getElementById("body");
+      const triggerButton = document.getElementById("triggerButton");
+      const statusText = document.getElementById("status");
+      const summaryText = document.getElementById("summary");
+      const resultRoot = document.getElementById("result");
+
+      const storageKeys = {
+        endpoint: "runtimeTriggerTest.endpoint",
+        token: "runtimeTriggerTest.token",
+        body: "runtimeTriggerTest.body",
+      };
+
+      endpointInput.value = localStorage.getItem(storageKeys.endpoint) || endpointInput.value;
+      tokenInput.value = localStorage.getItem(storageKeys.token) || "";
+      bodyInput.value = localStorage.getItem(storageKeys.body) || bodyInput.value;
+
+      endpointInput.addEventListener("input", () =>
+        localStorage.setItem(storageKeys.endpoint, endpointInput.value)
+      );
+      tokenInput.addEventListener("input", () =>
+        localStorage.setItem(storageKeys.token, tokenInput.value)
+      );
+      bodyInput.addEventListener("input", () =>
+        localStorage.setItem(storageKeys.body, bodyInput.value)
+      );
+
+      triggerButton.addEventListener("click", async () => {
+        const endpoint = endpointInput.value.trim();
+        if (!endpoint) {
+          setStatus("Endpoint fehlt.", "error");
+          return;
+        }
+
+        let requestBody;
+        try {
+          requestBody = bodyInput.value.trim() ? JSON.parse(bodyInput.value) : {};
+        } catch (error) {
+          setStatus(`Request Body ist kein gueltiges JSON: ${error.message}`, "error");
+          return;
+        }
+
+        setStatus("Trigger laeuft...", "");
+        summaryText.textContent = "";
+        triggerButton.disabled = true;
+        const started = performance.now();
+
+        try {
+          const headers = { "Content-Type": "application/json" };
+          const token = tokenInput.value.trim();
+          if (token) {
+            headers.Authorization = token.toLowerCase().startsWith("bearer ")
+              ? token
+              : `Bearer ${token}`;
+          }
+
+          const useLocalProxy = location.protocol !== "file:" && location.port === "8787";
+          const response = useLocalProxy
+            ? await fetch("/proxy-trigger", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ endpoint, token, payload: requestBody }),
+              })
+            : await fetch(endpoint, {
+                method: "PUT",
+                headers,
+                body: JSON.stringify(requestBody),
+              });
+          const elapsed = Math.round(performance.now() - started);
+          const contentType = response.headers.get("content-type") || "";
+          const payload = contentType.includes("application/json")
+            ? await response.json()
+            : await response.text();
+
+          renderResult(payload);
+          summaryText.textContent = `HTTP ${response.status} - ${elapsed} ms`;
+          setStatus(response.ok ? "Antwort empfangen." : "Antwort mit Fehler empfangen.", response.ok ? "ok" : "error");
+        } catch (error) {
+          resultRoot.className = "empty";
+          resultRoot.textContent = "Keine darstellbare Antwort.";
+          summaryText.textContent = "";
+          setStatus(`Request fehlgeschlagen: ${error.message}`, "error");
+        } finally {
+          triggerButton.disabled = false;
+        }
+      });
+
+      function setStatus(message, state) {
+        statusText.textContent = message;
+        statusText.className = `status ${state || ""}`.trim();
+      }
+
+      function renderResult(payload) {
+        resultRoot.className = "";
+        resultRoot.innerHTML = "";
+
+        if (typeof payload === "string") {
+          const pre = document.createElement("pre");
+          pre.textContent = payload;
+          resultRoot.appendChild(pre);
+          return;
+        }
+
+        resultRoot.appendChild(renderValue(payload, null, null, 0));
+
+        const details = document.createElement("details");
+        details.className = "raw-json";
+        const summary = document.createElement("summary");
+        summary.textContent = "Raw JSON";
+        const pre = document.createElement("pre");
+        pre.textContent = JSON.stringify(payload, null, 2);
+        details.append(summary, pre);
+        resultRoot.appendChild(details);
+      }
+
+      function renderValue(value, fieldName, parent, depth) {
+        const imageSource = imageSourceFromValue(value, fieldName, parent);
+        if (imageSource) {
+          return renderImage(imageSource);
+        }
+
+        if (Array.isArray(value)) {
+          return renderNestedCollection(
+            Object.fromEntries(value.map((item, index) => [`[${index}]`, item])),
+            `array · ${value.length} items`,
+            depth
+          );
+        }
+
+        if (value && typeof value === "object") {
+          return renderNestedCollection(
+            value,
+            `object · ${Object.keys(value).length} fields`,
+            depth
+          );
+        }
+
+        const span = document.createElement("span");
+        span.className = value === null ? "null" : "scalar";
+        span.textContent = value === null ? "null" : String(value);
+        return span;
+      }
+
+      function renderNestedCollection(object, label, depth) {
+        if (depth === 0) {
+          return renderObjectFields(object, depth);
+        }
+
+        const details = document.createElement("details");
+        details.className = "json-details";
+        details.open = depth < 3;
+        const summary = document.createElement("summary");
+        summary.textContent = label;
+        const nested = document.createElement("div");
+        nested.className = "json-nested";
+        nested.appendChild(renderObjectFields(object, depth));
+        details.append(summary, nested);
+        return details;
+      }
+
+      function renderObjectFields(object, depth) {
+        const wrap = document.createElement("div");
+        wrap.className = "json-tree";
+
+        for (const [key, value] of Object.entries(object)) {
+          const row = document.createElement("div");
+          const nameCell = document.createElement("div");
+          const valueCell = document.createElement("div");
+          row.className = "json-field";
+          nameCell.className = "json-name";
+          valueCell.className = "json-value";
+          nameCell.textContent = key;
+          valueCell.appendChild(renderValue(value, key, object, depth + 1));
+          row.append(nameCell, valueCell);
+          wrap.appendChild(row);
+        }
+
+        return wrap;
+      }
+
+      function renderImage(source) {
+        const box = document.createElement("div");
+        box.className = "image-value";
+        const img = document.createElement("img");
+        img.src = source.src;
+        img.alt = source.label || "Bild";
+        const meta = document.createElement("div");
+        meta.className = "image-meta";
+        meta.textContent = source.label || "Bild";
+        box.append(img, meta);
+        return box;
+      }
+
+      function imageSourceFromValue(value, fieldName, parent) {
+        if (typeof value !== "string" || !value) {
+          return null;
+        }
+
+        if (value.startsWith("data:image/")) {
+          return { src: value, label: "data:image" };
+        }
+
+        if (/^https?:\/\/.+\.(png|jpg|jpeg|webp|bmp)(\?.*)?$/i.test(value)) {
+          return { src: value, label: value };
+        }
+
+        const key = String(fieldName || "").toLowerCase();
+        const parentMime = typeof parent?.mime_type === "string" ? parent.mime_type : "";
+        const geometryMime = typeof parent?.mimeType === "string" ? parent.mimeType : "";
+        const mimeType = parentMime || geometryMime;
+        const looksLikeImageField =
+          key === "image_base64" ||
+          key === "data" ||
+          key.endsWith("_image_base64") ||
+          key.includes("image_base64");
+        const looksLikeImageMime = mimeType.startsWith("image/");
+
+        if (looksLikeImageField && looksLikeImageMime && looksLikeBase64(value)) {
+          return { src: `data:${mimeType};base64,${value}`, label: mimeType };
+        }
+
+        if (key === "image_base64" && looksLikeBase64(value)) {
+          return { src: `data:image/jpeg;base64,${value}`, label: "image/jpeg" };
+        }
+
+        return null;
+      }
+
+      function looksLikeBase64(value) {
+        return value.length > 48 && /^[A-Za-z0-9+/=\r\n]+$/.test(value);
+      }
+    </script>
+  </body>
+</html>

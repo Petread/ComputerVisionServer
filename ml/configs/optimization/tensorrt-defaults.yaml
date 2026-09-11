@@ -1,0 +1,6 @@
+precision: fp16
+workspace_size_mb: 4096
+max_batch_size:
+  realtime: 1
+  batch: 64
+

@@ -1,0 +1,35 @@
+task_type: detection
+recipe_name: baseline_det_yolo
+recipe_version: 1.2.0
+framework: ultralytics
+trainer_backend: ultralytics-yolo
+architecture_family: yolo
+supported_versions:
+  - v11
+  - v26
+supported_sizes:
+  - n
+  - s
+  - m
+  - l
+  - x
+image_size: 640
+epochs: 80
+batch_size: 16
+learning_rate: 0.01
+optimizer: sgd
+optimizer_settings:
+  momentum: 0.937
+  weight_decay: 0.0005
+pretrained: auto
+pretrained_checkpoint: auto
+scratch_training_min_items: 2000
+checkpoint_interval_steps: 25
+early_stopping_patience: 50
+early_stopping_min_delta: 0.0
+max_keep_ckpts: 5
+best_metric_name: map_50_95
+best_metric_mode: max
+nms_iou_threshold: 0.65
+score_threshold: 0.25
+max_detections: 300

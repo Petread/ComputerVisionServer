@@ -1,0 +1,958 @@
+openapi: 3.1.0
+info:
+  title: CV Platform Deployment Controller
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - health
+      summary: Live
+      operationId: live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      tags:
+      - health
+      summary: Ready
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/startup:
+    get:
+      tags:
+      - health
+      summary: Startup
+      operationId: startup_health_startup_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags:
+      - health
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/deployments/packages:
+    get:
+      tags:
+      - deployments
+      summary: Get Packages
+      operationId: get_packages_api_v1_deployments_packages_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_DeploymentPackageSummary_'
+    post:
+      tags:
+      - deployments
+      summary: Create Package Build
+      operationId: create_package_build_api_v1_deployments_packages_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentPackageBuildRequest'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/packages/{model_version_id}:
+    get:
+      tags:
+      - deployments
+      summary: Get Package
+      operationId: get_package_api_v1_deployments_packages__model_version_id__get
+      parameters:
+      - name: model_version_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Version Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentPackageDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/targets:
+    get:
+      tags:
+      - deployments
+      summary: Get Targets
+      operationId: get_targets_api_v1_deployments_targets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_DeploymentTargetSummary_'
+  /api/v1/deployments/releases:
+    get:
+      tags:
+      - deployments
+      summary: Get Releases
+      operationId: get_releases_api_v1_deployments_releases_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponse_DeploymentReleaseSummary_'
+  /api/v1/deployments/active-releases:reload:
+    post:
+      tags:
+      - deployments
+      summary: Reload Active Model Releases
+      operationId: reload_active_model_releases_api_v1_deployments_active_releases_reload_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Reload Active Model Releases Api V1 Deployments Active
+                  Releases Reload Post
+  /api/v1/deployments/releases/{deployment_release_id}:
+    get:
+      tags:
+      - deployments
+      summary: Get Release
+      operationId: get_release_api_v1_deployments_releases__deployment_release_id__get
+      parameters:
+      - name: deployment_release_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Release Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentReleaseDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/promotions:
+    post:
+      tags:
+      - deployments
+      summary: Create Promotion
+      operationId: create_promotion_api_v1_deployments_promotions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentCommandRequest'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/releases/{deployment_release_id}:smoke-test:
+    post:
+      tags:
+      - deployments
+      summary: Trigger Smoke Test
+      operationId: trigger_smoke_test_api_v1_deployments_releases__deployment_release_id__smoke_test_post
+      parameters:
+      - name: deployment_release_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Release Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentSmokeTestRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/releases/{deployment_release_id}:deactivate:
+    post:
+      tags:
+      - deployments
+      summary: Deactivate Model Serving
+      operationId: deactivate_model_serving_api_v1_deployments_releases__deployment_release_id__deactivate_post
+      parameters:
+      - name: deployment_release_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Release Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentModelServingCommandRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/releases/{deployment_release_id}:activate:
+    post:
+      tags:
+      - deployments
+      summary: Activate Model Serving
+      operationId: activate_model_serving_api_v1_deployments_releases__deployment_release_id__activate_post
+      parameters:
+      - name: deployment_release_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Release Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentModelServingCommandRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/deployments/{target_path}:rollback:
+    post:
+      tags:
+      - deployments
+      summary: Rollback Target
+      operationId: rollback_target_api_v1_deployments__target_path__rollback_post
+      parameters:
+      - name: target_path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Target Path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackCommandRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AcceptedJob:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        queue:
+          $ref: '#/components/schemas/QueueName'
+        status:
+          type: string
+          title: Status
+        accepted_at:
+          type: string
+          title: Accepted At
+      type: object
+      required:
+      - job_id
+      - queue
+      - status
+      - accepted_at
+      title: AcceptedJob
+    DeploymentCommandRequest:
+      properties:
+        model_version_id:
+          type: string
+          title: Model Version Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        requested_state:
+          type: string
+          enum:
+          - staged
+          - production
+          title: Requested State
+          default: staged
+      type: object
+      required:
+      - model_version_id
+      - target_path
+      title: DeploymentCommandRequest
+    DeploymentPackageBuildRequest:
+      properties:
+        model_version_id:
+          type: string
+          title: Model Version Id
+      type: object
+      required:
+      - model_version_id
+      title: DeploymentPackageBuildRequest
+    DeploymentPackageDetail:
+      properties:
+        model_version_id:
+          type: string
+          title: Model Version Id
+        model_family_id:
+          type: string
+          title: Model Family Id
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        version_no:
+          type: integer
+          title: Version No
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        status:
+          $ref: '#/components/schemas/DeploymentPackageStatus'
+        built_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Built At
+        serving_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serving Manifest Uri
+        compatible_targets:
+          items:
+            $ref: '#/components/schemas/TargetPath'
+          type: array
+          title: Compatible Targets
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        export_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Export Manifest Uri
+        artifact_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Artifact Manifest Uri
+        serving_manifest:
+          additionalProperties: true
+          type: object
+          title: Serving Manifest
+        export_manifest:
+          additionalProperties: true
+          type: object
+          title: Export Manifest
+        artifact_manifest:
+          additionalProperties: true
+          type: object
+          title: Artifact Manifest
+      type: object
+      required:
+      - model_version_id
+      - model_family_id
+      - model_family_slug
+      - version_no
+      - task_type
+      - architecture
+      - status
+      title: DeploymentPackageDetail
+    DeploymentPackageStatus:
+      type: string
+      enum:
+      - missing
+      - building
+      - ready
+      - failed
+      title: DeploymentPackageStatus
+    DeploymentPackageSummary:
+      properties:
+        model_version_id:
+          type: string
+          title: Model Version Id
+        model_family_id:
+          type: string
+          title: Model Family Id
+        model_family_slug:
+          type: string
+          title: Model Family Slug
+        version_no:
+          type: integer
+          title: Version No
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        status:
+          $ref: '#/components/schemas/DeploymentPackageStatus'
+        built_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Built At
+        serving_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serving Manifest Uri
+        compatible_targets:
+          items:
+            $ref: '#/components/schemas/TargetPath'
+          type: array
+          title: Compatible Targets
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - model_version_id
+      - model_family_id
+      - model_family_slug
+      - version_no
+      - task_type
+      - architecture
+      - status
+      title: DeploymentPackageSummary
+    DeploymentModelServingCommandRequest:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      title: DeploymentModelServingCommandRequest
+    DeploymentReleaseDetail:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        model_version_id:
+          type: string
+          title: Model Version Id
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        triton_model_name:
+          type: string
+          title: Triton Model Name
+        triton_model_version:
+          type: integer
+          title: Triton Model Version
+        status:
+          $ref: '#/components/schemas/DeploymentReleaseStatus'
+        serving_enabled:
+          type: boolean
+          title: Serving Enabled
+          default: true
+        serving_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serving Release Id
+        activated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activated At
+        rollback_source_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rollback Source Release Id
+        artifact_manifest_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Artifact Manifest Uri
+        artifact_manifest:
+          additionalProperties: true
+          type: object
+          title: Artifact Manifest
+        smoke_report_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Smoke Report Uri
+        smoke_report:
+          additionalProperties: true
+          type: object
+          title: Smoke Report
+        compatibility_report:
+          additionalProperties: true
+          type: object
+          title: Compatibility Report
+      type: object
+      required:
+      - deployment_release_id
+      - target_path
+      - model_version_id
+      - architecture
+      - triton_model_name
+      - triton_model_version
+      - status
+      title: DeploymentReleaseDetail
+    DeploymentReleaseStatus:
+      type: string
+      enum:
+      - requested
+      - packaging
+      - repository_sync
+      - loading
+      - smoke_testing
+      - activated
+      - deactivated
+      - activation_failed
+      - rollback_requested
+      - rolled_back
+      - retired
+      title: DeploymentReleaseStatus
+    DeploymentReleaseSummary:
+      properties:
+        deployment_release_id:
+          type: string
+          title: Deployment Release Id
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        model_version_id:
+          type: string
+          title: Model Version Id
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        triton_model_name:
+          type: string
+          title: Triton Model Name
+        triton_model_version:
+          type: integer
+          title: Triton Model Version
+        status:
+          $ref: '#/components/schemas/DeploymentReleaseStatus'
+        serving_enabled:
+          type: boolean
+          title: Serving Enabled
+          default: true
+        serving_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serving Release Id
+        activated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activated At
+        rollback_source_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rollback Source Release Id
+      type: object
+      required:
+      - deployment_release_id
+      - target_path
+      - model_version_id
+      - architecture
+      - triton_model_name
+      - triton_model_version
+      - status
+      title: DeploymentReleaseSummary
+    DeploymentSmokeTestRequest:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      title: DeploymentSmokeTestRequest
+    DeploymentTargetSummary:
+      properties:
+        target_path:
+          $ref: '#/components/schemas/TargetPath'
+        active_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Release Id
+        previous_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Previous Release Id
+        active_model_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Model Version Id
+        previous_model_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Previous Model Version Id
+        active_release_status:
+          anyOf:
+          - $ref: '#/components/schemas/DeploymentReleaseStatus'
+          - type: 'null'
+        updated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updated At
+      type: object
+      required:
+      - target_path
+      title: DeploymentTargetSummary
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthCheck:
+      properties:
+        name:
+          type: string
+          title: Name
+        state:
+          $ref: '#/components/schemas/HealthState'
+        detail:
+          type: string
+          title: Detail
+        observed_at:
+          type: string
+          title: Observed At
+      type: object
+      required:
+      - name
+      - state
+      - detail
+      - observed_at
+      title: HealthCheck
+    HealthResponse:
+      properties:
+        service:
+          anyOf:
+          - $ref: '#/components/schemas/ServiceName'
+          - type: string
+          title: Service
+        state:
+          $ref: '#/components/schemas/HealthState'
+        checks:
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+          type: array
+          title: Checks
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - service
+      - state
+      - checks
+      - meta
+      title: HealthResponse
+    HealthState:
+      type: string
+      enum:
+      - ok
+      - degraded
+      - down
+      title: HealthState
+    ListResponse_DeploymentPackageSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DeploymentPackageSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[DeploymentPackageSummary]
+    ListResponse_DeploymentReleaseSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DeploymentReleaseSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[DeploymentReleaseSummary]
+    ListResponse_DeploymentTargetSummary_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DeploymentTargetSummary'
+          type: array
+          title: Items
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+      type: object
+      required:
+      - items
+      - meta
+      title: ListResponse[DeploymentTargetSummary]
+    ModelArchitectureSummary:
+      properties:
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        family:
+          type: string
+          maxLength: 64
+          minLength: 2
+          title: Family
+        version:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Version
+        size:
+          type: string
+          maxLength: 16
+          minLength: 1
+          title: Size
+        display_name:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Display Name
+        internal_key:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Internal Key
+      type: object
+      required:
+      - task_type
+      - family
+      - version
+      - size
+      - display_name
+      - internal_key
+      title: ModelArchitectureSummary
+    QueueName:
+      type: string
+      enum:
+      - webhook
+      - dataset
+      - training
+      - deploy
+      - batch
+      - runtime-control
+      - runtime-capture
+      - runtime-connector
+      - maintenance
+      title: QueueName
+    ResponseMeta:
+      properties:
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        generated_at:
+          type: string
+          title: Generated At
+      type: object
+      required:
+      - generated_at
+      title: ResponseMeta
+    RollbackCommandRequest:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      title: RollbackCommandRequest
+    ServiceName:
+      type: string
+      enum:
+      - admin-api
+      - webhook-receiver
+      - dataset-service
+      - training-orchestrator
+      - model-registry-service
+      - inference-gateway-rt
+      - inference-gateway-batch
+      - deployment-controller
+      - runtime-admin-api
+      - channel-service
+      - pipeline-definition-service
+      - runtime-orchestrator
+      - realtime-executor
+      - trigger-executor
+      - overlay-service
+      - capture-service
+      - result-service
+      - connector-service
+      - control-worker
+      - training-worker
+      - batch-worker
+      - maintenance-worker
+      title: ServiceName
+    TargetPath:
+      type: string
+      enum:
+      - realtime
+      - batch
+      title: TargetPath
+    TaskType:
+      type: string
+      enum:
+      - classification
+      - detection
+      - oriented_detection
+      - segmentation
+      - anomaly
+      - temporal_sequence
+      title: TaskType
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

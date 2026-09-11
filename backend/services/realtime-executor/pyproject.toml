@@ -1,0 +1,25 @@
+[project]
+name = "realtime-executor"
+version = "0.1.0"
+description = "Runtime realtime executor for RTSP and live channel processing"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0,<1",
+  "harvesters>=1.4.3,<2",
+  "opencv-python-headless>=4.10.0,<5",
+  "pillow>=10.4.0,<12",
+  "pypylon>=3.0.0,<27",
+  "uvicorn[standard]>=0.30.6,<1",
+  "cv-core",
+  "cv-contracts",
+  "cv-db",
+  "cv-runtime",
+  "cv-status",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/realtime_executor"]

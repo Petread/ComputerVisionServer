@@ -1,0 +1,863 @@
+﻿name: cv-platform-prod
+
+x-python-env: &python-env
+  PYTHONPATH: "/workspace/backend/packages/cv-core/src:/workspace/backend/packages/cv-contracts/src:/workspace/backend/packages/cv-db/src:/workspace/backend/packages/cv-deploy/src:/workspace/backend/packages/cv-runtime/src:/workspace/backend/packages/cv-datasets/src:/workspace/backend/packages/cv-events/src:/workspace/backend/packages/cv-observability/src:/workspace/backend/packages/cv-status/src:/workspace/backend/packages/cv-training/src:/workspace/backend/packages/cv-utils/src:/workspace/backend/services/admin-api/src:/workspace/backend/services/dataset-service/src:/workspace/backend/services/deployment-controller/src:/workspace/backend/services/inference-gateway/src:/workspace/backend/services/model-registry-service/src:/workspace/backend/services/training-orchestrator/src:/workspace/backend/services/webhook-receiver/src:/workspace/backend/services/runtime-admin-api/src:/workspace/backend/services/channel-service/src:/workspace/backend/services/pipeline-definition-service/src:/workspace/backend/services/runtime-orchestrator/src:/workspace/backend/services/realtime-executor/src:/workspace/backend/services/camera-media/src:/workspace/backend/services/trigger-executor/src:/workspace/backend/services/overlay-service/src:/workspace/backend/services/capture-service/src:/workspace/backend/services/result-service/src:/workspace/backend/services/connector-service/src:/workspace/backend/services/operations-agent/src:/workspace/backend/workers/batch-worker/src:/workspace/backend/workers/control-worker/src:/workspace/backend/workers/maintenance-worker/src:/workspace/backend/workers/training-worker/src"
+
+services:
+  reverse-proxy:
+    image: caddy:2.8.4
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../reverse-proxy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform/runtime:/srv/cv-platform/runtime:ro
+      - /srv/cv-platform/control/uploads:/srv/cv-platform/control/uploads:ro
+    depends_on:
+      admin-web:
+        condition: service_started
+      admin-api:
+        condition: service_healthy
+      dataset-service:
+        condition: service_healthy
+      training-orchestrator:
+        condition: service_healthy
+      model-registry-service:
+        condition: service_healthy
+      deployment-controller:
+        condition: service_healthy
+      inference-gateway-rt:
+        condition: service_healthy
+      inference-gateway-batch:
+        condition: service_healthy
+      runtime-admin-api:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+      trigger-executor:
+        condition: service_healthy
+      overlay-service:
+        condition: service_healthy
+    networks:
+      - edge
+      - control
+      - data
+
+  admin-web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/frontend.Dockerfile
+    command: sh -c "pnpm --filter @cv-platform/admin-web build && pnpm dlx vite preview --host 0.0.0.0 --port 4173"
+    environment:
+      VITE_ADMIN_API_URL: ""
+      VITE_RUNTIME_ADMIN_API_URL: /runtime-api
+      VITE_RESULT_SERVICE_URL: /runtime-results
+      VITE_TRIGGER_EXECUTOR_URL: /runtime-trigger
+      VITE_INFERENCE_GATEWAY_RT_URL: /inference-rt
+      VITE_INFERENCE_GATEWAY_BATCH_URL: /inference-batch
+      VITE_ADMIN_WS_URL: ""
+      VITE_FRONTEND_BASE_PATH: /frontend/
+    networks:
+      - edge
+
+  migrations:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: alembic -c backend/migrations/alembic.ini upgrade head
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    networks:
+      - control
+
+  admin-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn admin_api.main:app --host 0.0.0.0 --port 8080
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  operations-agent:
+    image: cv-platform-prod-admin-api
+    command: uvicorn operations_agent.main:app --host 0.0.0.0 --port 8101
+    environment:
+      <<: *python-env
+      ENV: prod
+      OPERATIONS_REPO_ROOT: /workspace
+      OPERATIONS_STATE_FILE: /srv/cv-platform/operations/offline-update-state.json
+      OPERATIONS_DOCKER_SOCKET: /var/run/docker.sock
+      OPERATIONS_COMPOSE_PROJECT: cv-platform-prod
+    volumes:
+      - ../..:/workspace:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8101/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+
+  dataset-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn dataset_service.main:app --host 0.0.0.0 --port 8082
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  training-orchestrator:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn training_orchestrator.main:app --host 0.0.0.0 --port 8083
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  model-registry-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn model_registry_service.main:app --host 0.0.0.0 --port 8084
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  deployment-controller:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn deployment_controller.main:app --host 0.0.0.0 --port 8085
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  webhook-receiver:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn webhook_receiver.main:app --host 0.0.0.0 --port 8086
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  inference-gateway-rt:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn inference_gateway.main_realtime:app --host 0.0.0.0 --port 8087
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      triton-rt:
+        condition: service_started
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  inference-gateway-batch:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn inference_gateway.main_batch:app --host 0.0.0.0 --port 8088
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      triton-batch:
+        condition: service_started
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  label-studio-ml-adapter:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn inference_gateway.main_labelstudio_ml_adapter:app --host 0.0.0.0 --port 8089
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      triton-rt:
+        condition: service_started
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  runtime-admin-api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    restart: unless-stopped
+    command: uvicorn runtime_admin_api.main:app --host 0.0.0.0 --port 8090
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  channel-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn channel_service.main:app --host 0.0.0.0 --port 8091
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8091/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  pipeline-definition-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn pipeline_definition_service.main:app --host 0.0.0.0 --port 8092
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8092/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  runtime-orchestrator:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    restart: unless-stopped
+    command: uvicorn runtime_orchestrator.main:app --host 0.0.0.0 --port 8093
+    environment:
+      <<: *python-env
+      ENV: prod
+      CV_PLATFORM__RUNTIME__STREAM_MEDIAMTX_API_URL: http://mediamtx:9997
+      CV_PLATFORM__RUNTIME__STREAM_RTSP_PUBLISH_HOST: mediamtx
+      CV_PLATFORM__RUNTIME__STREAM_AUTH_ENABLED: "false"
+      CV_PLATFORM__RUNTIME__INFERENCE_GATEWAY_BEARER_TOKEN_FILE: /run/secrets/internal_inference_gateway_bearer_token
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      inference-gateway-rt:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8093/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.19.0
+    restart: unless-stopped
+    command: /mediamtx /etc/mediamtx/mediamtx.yml
+    ports:
+      - "127.0.0.1:9997:9997"
+      - "8554:8554"
+      - "8889:8889"
+      - "8189:8189"
+    volumes:
+      - ../mediamtx/mediamtx.yml:/etc/mediamtx/mediamtx.yml:ro
+    networks:
+      - data
+      - observability
+
+  camera-media:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn camera_media.main:app --host 0.0.0.0 --port 8102
+    restart: unless-stopped
+    gpus: all
+    ipc: host
+    environment:
+      <<: *python-env
+      ENV: prod
+      CV_PLATFORM__RUNTIME__STREAM_MEDIAMTX_API_URL: http://mediamtx:9997
+      CV_PLATFORM__RUNTIME__STREAM_RTSP_PUBLISH_HOST: mediamtx
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+    volumes:
+      - /srv/cv-platform:/srv/cv-platform
+      - /srv/cv-platform/runtime/camera-media:/run/ybb-camera-media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8102/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  realtime-executor:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn realtime_executor.main:app --host 0.0.0.0 --port 8094
+    gpus: all
+    ipc: host
+    environment:
+      <<: *python-env
+      ENV: prod
+      CV_PLATFORM__RUNTIME__INFERENCE_GATEWAY_BEARER_TOKEN_FILE: /run/secrets/internal_inference_gateway_bearer_token
+    depends_on:
+      postgres:
+        condition: service_healthy
+      inference-gateway-rt:
+        condition: service_healthy
+      camera-media:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+      - /srv/cv-platform/runtime/camera-media:/run/ybb-camera-media
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8094/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  trigger-executor:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn trigger_executor.main:app --host 0.0.0.0 --port 8095
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      inference-gateway-rt:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8095/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - data
+      - observability
+
+  overlay-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn overlay_service.main:app --host 0.0.0.0 --port 8096
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  capture-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn capture_service.main:app --host 0.0.0.0 --port 8097
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      label-studio:
+        condition: service_started
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8097/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  result-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn result_service.main:app --host 0.0.0.0 --port 8098
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8098/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  connector-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: uvicorn connector_service.main:app --host 0.0.0.0 --port 8099
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8099/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+      - observability
+
+  control-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: python -m control_worker.worker
+    environment:
+      <<: *python-env
+      ENV: prod
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    networks:
+      - control
+      - data
+
+  training-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/training-worker.Dockerfile
+      args:
+        UV_SYNC_ARGS: --all-packages --group training-runtime
+    command: python -m training_worker.worker
+    gpus: all
+    environment:
+      <<: *python-env
+      ENV: prod
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    networks:
+      - control
+
+  batch-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: python -m batch_worker.worker
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    networks:
+      - control
+      - data
+
+  maintenance-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+    command: python -m maintenance_worker.worker
+    environment:
+      <<: *python-env
+      ENV: prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - /srv/cv-platform/secrets:/run/secrets:ro
+      - /srv/cv-platform:/srv/cv-platform
+    networks:
+      - control
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_app_password
+    volumes:
+      - /srv/cv-platform/postgres:/var/lib/postgresql/data
+      - ../postgres/init:/docker-entrypoint-initdb.d:ro
+      - /srv/cv-platform/secrets:/run/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+
+  redis:
+    image: redis:7.4
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - /srv/cv-platform/redis:/data
+      - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    environment:
+      HOST: ${LABEL_STUDIO_HOST:-https://127.0.0.1/label-studio}
+      LABEL_STUDIO_HOST: ${LABEL_STUDIO_HOST:-https://127.0.0.1/label-studio}
+      CSRF_TRUSTED_ORIGINS: ${LABEL_STUDIO_CSRF_TRUSTED_ORIGINS:-https://127.0.0.1}
+      LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
+      LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT: /srv/cv-platform
+      DJANGO_DB: default
+      POSTGRE_NAME: labelstudio
+      POSTGRE_USER: postgres
+      POSTGRE_PASSWORD_FILE: /run/secrets/postgres_app_password
+      POSTGRE_HOST: postgres
+      POSTGRE_PORT: 5432
+    entrypoint:
+      - sh
+      - -c
+      - |
+        export POSTGRE_PASSWORD="$$(cat /run/secrets/postgres_app_password)"
+        exec ./deploy/docker-entrypoint.sh label-studio
+    volumes:
+      - /srv/cv-platform/labelstudio:/label-studio/data
+      - /srv/cv-platform/runtime:/srv/cv-platform/runtime:ro
+      - /srv/cv-platform/control/uploads:/srv/cv-platform/control/uploads:ro
+      - /srv/cv-platform/secrets:/run/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - control
+
+  mlflow:
+    build:
+      context: ../..
+      dockerfile: infra/docker/mlflow.Dockerfile
+    command: >
+      sh -c "mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://postgres:$$(cat /run/secrets/postgres_app_password)@postgres:5432/mlflow
+      --artifacts-destination /mlflow/artifacts"
+    volumes:
+      - /srv/cv-platform/mlflow:/mlflow/artifacts
+      - /srv/cv-platform/secrets:/run/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - control
+
+  triton-rt:
+    image: nvcr.io/nvidia/tritonserver:24.08-py3
+    gpus: all
+    command: >
+      tritonserver
+      --model-repository=/models
+      --model-control-mode=explicit
+      --http-port=8000
+      --grpc-port=8001
+    volumes:
+      - /srv/cv-platform/serving/triton/realtime:/models
+    networks:
+      - data
+
+  triton-batch:
+    image: nvcr.io/nvidia/tritonserver:24.08-py3
+    gpus: all
+    command: >
+      tritonserver
+      --model-repository=/models
+      --model-control-mode=explicit
+      --http-port=8000
+      --grpc-port=8001
+    volumes:
+      - /srv/cv-platform/serving/triton/batch:/models
+    networks:
+      - data
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    volumes:
+      - ../observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - /srv/cv-platform/prometheus:/prometheus
+    networks:
+      - observability
+      - control
+      - data
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - /srv/cv-platform/grafana:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - observability
+
+networks:
+  edge:
+  control:
+  data:
+  observability:

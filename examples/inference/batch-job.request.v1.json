@@ -1,0 +1,24 @@
+{
+  "model_id": "wood-log-detector",
+  "inputs": [
+    {
+      "item_id": "frame-0001",
+      "image_base64": "<base64 image payload>",
+      "external_ref": "camera-7/frame-0001.png",
+      "metadata": {
+        "line_id": "saw-1",
+        "shift": "A"
+      }
+    },
+    {
+      "item_id": "frame-0002",
+      "image_base64": "<base64 image payload>",
+      "external_ref": "camera-7/frame-0002.png",
+      "metadata": {
+        "line_id": "saw-1",
+        "shift": "A"
+      }
+    }
+  ],
+  "timeout_seconds": 600
+}

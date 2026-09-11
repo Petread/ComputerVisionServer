@@ -1,0 +1,14 @@
+name: ${APP_NAME}
+
+services:
+  app:
+    image: ${DOCKER_IMAGE_NAME}:${APP_VERSION}
+    container_name: ${APP_NAME}
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT}:${CONTAINER_PORT}"
+    volumes:
+      - app_data:/app/data
+
+volumes:
+  app_data:

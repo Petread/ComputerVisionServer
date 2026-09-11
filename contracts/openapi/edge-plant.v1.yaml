@@ -1,0 +1,417 @@
+openapi: 3.1.0
+info:
+  title: YBB Edge Plant Trigger API
+  version: 1.0.0
+paths:
+  /edge-plant/v1/health:
+    get:
+      summary: Health
+      operationId: health_edge_plant_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgePlantHealth'
+        '400':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '403':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '404':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '429':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '504':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge-plant/v1/channels/{channel_id}/trigger:
+    put:
+      summary: Trigger
+      operationId: trigger_edge_plant_v1_channels__channel_id__trigger_put
+      parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Channel Id
+      - name: x-idempotency-key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 160
+          title: X-Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgePlantTriggerRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgePlantTriggerResponse'
+        '400':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '403':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '404':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '429':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '504':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+  /edge-plant/v1/channels/{channel_id}/last-result:
+    get:
+      summary: Last Result
+      operationId: last_result_edge_plant_v1_channels__channel_id__last_result_get
+      parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Channel Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgePlantLastResultResponse'
+        '400':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '403':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '404':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '429':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '504':
+          description: Edge plant boundary error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+components:
+  schemas:
+    EdgeControlError:
+      properties:
+        schema_version:
+          type: string
+          const: edge.control.error.v1
+          title: Schema Version
+          default: edge.control.error.v1
+        code:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Code
+        message:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Message
+        retryable:
+          type: boolean
+          title: Retryable
+          default: false
+        detail:
+          additionalProperties: true
+          type: object
+          title: Detail
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      title: EdgeControlError
+    EdgePlantHealth:
+      properties:
+        schema_version:
+          type: string
+          const: edge.plant.health.v1
+          title: Schema Version
+          default: edge.plant.health.v1
+        state:
+          type: string
+          enum:
+          - ok
+          - degraded
+          title: State
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        active_channel_ids:
+          items:
+            type: string
+          type: array
+          title: Active Channel Ids
+        max_request_bytes:
+          type: integer
+          minimum: 1.0
+          title: Max Request Bytes
+        max_concurrent_triggers:
+          type: integer
+          minimum: 1.0
+          title: Max Concurrent Triggers
+        observed_at:
+          type: string
+          title: Observed At
+      additionalProperties: false
+      type: object
+      required:
+      - state
+      - boot_id
+      - max_request_bytes
+      - max_concurrent_triggers
+      - observed_at
+      title: EdgePlantHealth
+      description: Minimal health contract exposed to the machine/PLC network on port
+        9444.
+    EdgePlantLastResultResponse:
+      properties:
+        schema_version:
+          type: string
+          const: edge.plant.last-result.v1
+          title: Schema Version
+          default: edge.plant.last-result.v1
+        channel_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Channel Id
+        available:
+          type: boolean
+          title: Available
+          default: false
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/EdgePlantTriggerResponse'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - channel_id
+      title: EdgePlantLastResultResponse
+    EdgePlantTriggerRequest:
+      properties:
+        schema_version:
+          type: string
+          const: edge.plant.trigger.request.v1
+          title: Schema Version
+          default: edge.plant.trigger.request.v1
+        correlation_id:
+          anyOf:
+          - type: string
+            maxLength: 160
+            minLength: 1
+          - type: 'null'
+          title: Correlation Id
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+        timeout_ms:
+          type: integer
+          maximum: 10000.0
+          minimum: 50.0
+          title: Timeout Ms
+          default: 2500
+        include_overlay:
+          type: boolean
+          title: Include Overlay
+          default: false
+      additionalProperties: false
+      type: object
+      title: EdgePlantTriggerRequest
+      description: Bounded, task-neutral trigger input. Images are deliberately not
+        accepted here.
+    EdgePlantTriggerResponse:
+      properties:
+        schema_version:
+          type: string
+          const: edge.plant.trigger.response.v1
+          title: Schema Version
+          default: edge.plant.trigger.response.v1
+        channel_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Channel Id
+        workload_release_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          title: Workload Release Id
+        correlation_id:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Correlation Id
+        boot_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Boot Id
+        result_sequence:
+          type: integer
+          minimum: 1.0
+          title: Result Sequence
+        duplicate:
+          type: boolean
+          title: Duplicate
+          default: false
+        execution_result:
+          additionalProperties: true
+          type: object
+          title: Execution Result
+        completed_at:
+          type: string
+          title: Completed At
+      additionalProperties: false
+      type: object
+      required:
+      - channel_id
+      - workload_release_id
+      - correlation_id
+      - boot_id
+      - result_sequence
+      - execution_result
+      - completed_at
+      title: EdgePlantTriggerResponse

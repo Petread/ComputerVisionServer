@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inference Photo Uploader</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5e697f;
+      --border: #d8deea;
+      --accent: #2857ff;
+      --accent-2: #1741d9;
+      --danger: #b42318;
+      --ok: #177245;
+      --shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 240px);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+    }
+
+    .sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+
+    input, select, button {
+      font: inherit;
+    }
+
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    input[type="file"] {
+      width: 100%;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .stack > * + * {
+      margin-top: 12px;
+    }
+
+    .hint {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+
+    button.secondary {
+      background: #e7ebf7;
+      color: var(--text);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .preview-stage__media {
+      width: 100%;
+      display: block;
+      height: auto;
+    }
+
+    .preview-stage {
+      position: relative;
+      width: 100%;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .preview-stage img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .preview-stage__overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .preview-stage__summary {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      z-index: 2;
+      max-width: calc(100% - 24px);
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #f8fafc;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+    }
+
+    .preview-stage__label {
+      position: absolute;
+      z-index: 2;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      transform: translate(-50%, -120%);
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+    }
+
+    .preview-stage__box {
+      position: absolute;
+      border: 2px solid #2857ff;
+      background: rgba(40, 87, 255, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.48);
+    }
+
+    .preview-stage__polygon {
+      fill: rgba(40, 87, 255, 0.22);
+      stroke: #2857ff;
+      stroke-width: 1.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .preview-stage__empty {
+      padding: 24px 16px;
+      color: var(--muted);
+      text-align: center;
+      border-radius: 14px;
+      border: 1px dashed var(--border);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    pre {
+      margin: 0;
+      padding: 14px;
+      min-height: 320px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-radius: 14px;
+      background: #0b1020;
+      color: #e2e8f0;
+      overflow: auto;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--ok); }
+
+    .hidden { display: none; }
+
+    @media (max-width: 900px) {
+      .grid, .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Inference Photo Uploader</h1>
+    <p class="sub">Upload an image or take one with your webcam, then send it to your inference gateway and inspect the response.</p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Request</h2>
+        <form id="form" class="stack">
+          <div class="row">
+            <div>
+              <label for="baseUrl">Gateway base URL</label>
+              <input id="baseUrl" type="text" placeholder="http://localhost/inference-rt/api/v1" />
+              <div class="hint">
+                Dev examples:
+                <code>http://localhost/inference-rt/api/v1</code> or (same origin) <code>/inference-rt/api/v1</code>
+              </div>
+              <div class="hint">Final request URL: <code id="finalUrlPreview"></code></div>
+            </div>
+            <div>
+              <label for="endpoint">Endpoint</label>
+              <select id="endpoint">
+                <option value="classify">infer/classify</option>
+                <option value="detect">infer/detect</option>
+		<option value="segment">segmentation</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="apiKey">API key</label>
+              <input id="apiKey" type="password" placeholder="key_id.secret" autocomplete="off" />
+            </div>
+            <div>
+              <label for="authHeader">Auth header</label>
+              <select id="authHeader">
+                <option value="authorization">Authorization: Bearer</option>
+                <option value="x-api-key">X-API-Key</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="modelId">Model ID</label>
+              <input id="modelId" type="text" value="quality-classifier" />
+            </div>
+            <div>
+              <label for="requestId">Request ID</label>
+              <input id="requestId" type="text" readonly />
+              <div class="hint">Used for both <code>X-Request-ID</code> and <code>X-Correlation-ID</code>.</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="topK">top_k</label>
+              <input id="topK" type="text" placeholder="2" />
+            </div>
+            <div>
+              <label for="threshold">threshold</label>
+              <input id="threshold" type="text" placeholder="0.35" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="maxDetections">max_detections</label>
+              <input id="maxDetections" type="text" placeholder="10" />
+            </div>
+            <div class="controls" style="align-self:end;">
+              <button type="button" id="regenId" class="secondary">New request ID</button>
+            </div>
+          </div>
+
+          <div>
+            <label for="fileInput">Image file</label>
+            <input id="fileInput" type="file" accept="image/jpeg,image/png,image/bmp,image/webp" />
+          </div>
+
+          <div class="controls">
+            <button type="button" id="startCam" class="secondary">Start webcam</button>
+            <button type="button" id="capture" class="secondary" disabled>Capture frame</button>
+            <button type="button" id="stopCam" class="secondary" disabled>Stop webcam</button>
+          </div>
+
+          <div>
+            <video id="video" class="preview-stage__media hidden" playsinline autoplay muted></video>
+            <div id="previewStage" class="preview-stage hidden">
+              <img id="preview" class="preview-stage__media" alt="Selected image preview" />
+              <div id="previewSummary" class="preview-stage__summary hidden"></div>
+              <div id="overlayLayer" class="preview-stage__overlay"></div>
+            </div>
+            <canvas id="canvas" class="hidden"></canvas>
+          </div>
+
+          <div class="controls">
+            <button type="button" id="listModels" class="secondary">List models</button>
+            <button type="submit" id="send">Send to inference server</button>
+          </div>
+          <div id="requestStatus" class="status"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Response</h2>
+        <pre id="output">{}</pre>
+        <div id="responseStatus" class="status"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const baseUrl = document.getElementById('baseUrl');
+    const endpoint = document.getElementById('endpoint');
+    const apiKey = document.getElementById('apiKey');
+    const authHeader = document.getElementById('authHeader');
+    const modelId = document.getElementById('modelId');
+    const requestId = document.getElementById('requestId');
+    const topK = document.getElementById('topK');
+    const threshold = document.getElementById('threshold');
+    const maxDetections = document.getElementById('maxDetections');
+    const fileInput = document.getElementById('fileInput');
+    const video = document.getElementById('video');
+    const preview = document.getElementById('preview');
+    const previewStage = document.getElementById('previewStage');
+    const previewSummary = document.getElementById('previewSummary');
+    const overlayLayer = document.getElementById('overlayLayer');
+    const canvas = document.getElementById('canvas');
+    const output = document.getElementById('output');
+    const requestStatus = document.getElementById('requestStatus');
+    const responseStatus = document.getElementById('responseStatus');
+    const sendBtn = document.getElementById('send');
+    const startCamBtn = document.getElementById('startCam');
+    const captureBtn = document.getElementById('capture');
+    const stopCamBtn = document.getElementById('stopCam');
+    const regenIdBtn = document.getElementById('regenId');
+    const listModelsBtn = document.getElementById('listModels');
+    const finalUrlPreview = document.getElementById('finalUrlPreview');
+
+    let stream = null;
+    let imageBlob = null;
+    let imageName = 'capture.png';
+    let previewObjectUrl = null;
+
+    function setStatus(el, message, kind = '') {
+      el.textContent = message || '';
+      el.className = kind ? `status ${kind}` : 'status';
+    }
+
+    function newRequestId() {
+      return crypto.randomUUID ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+
+    function normalizeBaseUrl(value) {
+      const trimmed = value.trim().replace(/\/+$/, '');
+      if (!trimmed) return '';
+
+      // Allow same-origin absolute paths like "/inference-rt/api/v1"
+      if (trimmed.startsWith('/')) return trimmed;
+
+      // If the user forgets the scheme, infer a reasonable default.
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) return trimmed;
+
+      const lower = trimmed.toLowerCase();
+      if (lower.startsWith('localhost') || lower.startsWith('127.0.0.1')) {
+        return `http://${trimmed}`;
+      }
+      if (trimmed.includes('.')) {
+        return `https://${trimmed}`;
+      }
+      return `${window.location.protocol}//${trimmed}`;
+    }
+
+    function showPreviewFromBlob(blob) {
+      if (!blob) return;
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = URL.createObjectURL(blob);
+      preview.src = previewObjectUrl;
+      previewStage.classList.remove('hidden');
+      preview.classList.remove('hidden');
+      video.classList.add('hidden');
+      clearOverlay();
+    }
+
+    async function fileToBlob(file) {
+      imageName = file.name || 'upload.png';
+      imageBlob = file;
+      showPreviewFromBlob(file);
+    }
+
+    async function startCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus(requestStatus, 'Webcam is not supported in this browser.', 'error');
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        await video.play();
+        previewStage.classList.remove('hidden');
+        preview.classList.add('hidden');
+        video.classList.remove('hidden');
+        clearOverlay();
+        previewSummary.textContent = 'Live webcam';
+        previewSummary.classList.remove('hidden');
+        captureBtn.disabled = false;
+        stopCamBtn.disabled = false;
+        setStatus(requestStatus, 'Webcam ready.', 'ok');
+      } catch (err) {
+        setStatus(requestStatus, `Could not start webcam: ${err.message}`, 'error');
+      }
+    }
+
+    function stopCamera(silent = false) {
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+      }
+      stream = null;
+      video.pause();
+      video.srcObject = null;
+      video.classList.add('hidden');
+      captureBtn.disabled = true;
+      stopCamBtn.disabled = true;
+      if (preview.classList.contains('hidden')) {
+        previewStage.classList.add('hidden');
+      }
+      if (!silent) setStatus(requestStatus, 'Webcam stopped.', 'ok');
+    }
+
+    async function captureFrame() {
+      if (!video.videoWidth) {
+        setStatus(requestStatus, 'Wait for the camera to finish loading.', 'error');
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      imageBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!imageBlob) {
+        setStatus(requestStatus, 'Could not capture a frame from the webcam.', 'error');
+        return;
+      }
+      imageName = 'webcam-capture.png';
+      showPreviewFromBlob(imageBlob);
+      setStatus(requestStatus, 'Frame captured.', 'ok');
+    }
+
+    function clearOverlay() {
+      overlayLayer.replaceChildren();
+      previewSummary.textContent = '';
+      previewSummary.classList.add('hidden');
+    }
+
+    function parseMaybeJson(text) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    }
+
+    function buildUrl() {
+      return `${normalizeBaseUrl(baseUrl.value)}/infer/${endpoint.value}`;
+    }
+
+    function buildModelsUrl() {
+      return `${normalizeBaseUrl(baseUrl.value)}/models`;
+    }
+
+    function refreshUrlPreview() {
+      if (!finalUrlPreview) return;
+      const url = normalizeBaseUrl(baseUrl.value) ? buildUrl() : '';
+      finalUrlPreview.textContent = url || '(set gateway base URL)';
+    }
+
+    function appendOptionalFields(formData) {
+      formData.append('model_id', modelId.value.trim());
+      if (endpoint.value === 'classify' && topK.value.trim() !== '') {
+        formData.append('top_k', topK.value.trim());
+      }
+      if (endpoint.value === 'detect') {
+        if (threshold.value.trim() !== '') formData.append('threshold', threshold.value.trim());
+        if (maxDetections.value.trim() !== '') formData.append('max_detections', maxDetections.value.trim());
+      }
+    }
+
+    function getPredictionSummary(payload) {
+      if (Array.isArray(payload?.predictions) && payload.predictions.length > 0) {
+        const top = payload.predictions[0];
+        const score = typeof top.score === 'number' ? ` (${(top.score * 100).toFixed(1)}%)` : '';
+        return `${top.label}${score}`;
+      }
+      if (Array.isArray(payload?.detections) && payload.detections.length > 0) {
+        const top = payload.detections[0];
+        const score = typeof (top.confidence ?? top.score) === 'number'
+          ? ` (${(((top.confidence ?? top.score)) * 100).toFixed(1)}%)`
+          : '';
+        return `${payload.detections.length} detection${payload.detections.length === 1 ? '' : 's'}${top.label ? `, top: ${top.label}${score}` : ''}`;
+      }
+      if (Array.isArray(payload?.segments) && payload.segments.length > 0) {
+        const top = payload.segments[0];
+        const score = typeof (top.confidence ?? top.score) === 'number'
+          ? ` (${(((top.confidence ?? top.score)) * 100).toFixed(1)}%)`
+          : '';
+        return `${payload.segments.length} segment${payload.segments.length === 1 ? '' : 's'}${top.label ? `, top: ${top.label}${score}` : ''}`;
+      }
+      return '';
+    }
+
+    function getDetectionBox(detection) {
+      return detection.bounding_box || detection.box || null;
+    }
+
+    function getPredictionScore(item) {
+      return typeof item.confidence === 'number' ? item.confidence : item.score;
+    }
+
+    function renderOverlayLabel(text, left, top) {
+      const badge = document.createElement('div');
+      badge.className = 'preview-stage__label';
+      badge.textContent = text;
+      badge.style.left = `${left * 100}%`;
+      badge.style.top = `${top * 100}%`;
+      return badge;
+    }
+
+    function renderResultOverlay(payload) {
+      clearOverlay();
+
+      if (!payload) {
+        return;
+      }
+
+      const summary = getPredictionSummary(payload);
+      if (summary) {
+        previewSummary.textContent = summary;
+        previewSummary.classList.remove('hidden');
+      }
+
+      if (Array.isArray(payload.detections) && payload.detections.length > 0) {
+        for (const [index, detection] of payload.detections.entries()) {
+          const box = getDetectionBox(detection);
+          if (!box) continue;
+
+          const boxEl = document.createElement('div');
+          boxEl.className = 'preview-stage__box';
+          boxEl.style.left = `${box.x_min * 100}%`;
+          boxEl.style.top = `${box.y_min * 100}%`;
+          boxEl.style.width = `${(box.x_max - box.x_min) * 100}%`;
+          boxEl.style.height = `${(box.y_max - box.y_min) * 100}%`;
+          overlayLayer.appendChild(boxEl);
+
+          const score = getPredictionScore(detection);
+          const labelText = `${detection.label || `Detection ${index + 1}`}${typeof score === 'number' ? ` ${(score * 100).toFixed(1)}%` : ''}`;
+          overlayLayer.appendChild(renderOverlayLabel(labelText, box.x_min, Math.max(0, box.y_min)));
+        }
+      }
+
+      if (Array.isArray(payload.segments) && payload.segments.length > 0) {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('class', 'preview-stage__overlay');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('preserveAspectRatio', 'none');
+
+        for (const [index, segment] of payload.segments.entries()) {
+          const polygon = document.createElementNS(svgNS, 'polygon');
+          polygon.setAttribute('class', 'preview-stage__polygon');
+          polygon.setAttribute(
+            'points',
+            (segment.polygon || []).map((point) => `${point.x * 100},${point.y * 100}`).join(' ')
+          );
+          svg.appendChild(polygon);
+
+          if ((segment.polygon || []).length > 0) {
+            const centroid = segment.polygon.reduce(
+              (acc, point) => {
+                acc.x += point.x;
+                acc.y += point.y;
+                return acc;
+              },
+              { x: 0, y: 0 }
+            );
+            const centerX = centroid.x / segment.polygon.length;
+            const centerY = centroid.y / segment.polygon.length;
+            const score = getPredictionScore(segment);
+            const labelText = `${segment.label || `Segment ${index + 1}`}${typeof score === 'number' ? ` ${(score * 100).toFixed(1)}%` : ''}`;
+            overlayLayer.appendChild(renderOverlayLabel(labelText, centerX, centerY));
+          }
+        }
+
+        overlayLayer.appendChild(svg);
+      }
+    }
+
+    async function sendRequest(event) {
+      event.preventDefault();
+
+      if (!normalizeBaseUrl(baseUrl.value)) {
+        setStatus(requestStatus, 'Add the gateway base URL first.', 'error');
+        return;
+      }
+      if (!apiKey.value.trim()) {
+        setStatus(requestStatus, 'Add an API key first.', 'error');
+        return;
+      }
+      if (!modelId.value.trim()) {
+        setStatus(requestStatus, 'Add a model ID first.', 'error');
+        return;
+      }
+      if (!imageBlob) {
+        setStatus(requestStatus, 'Choose a file or capture a webcam frame first.', 'error');
+        return;
+      }
+
+      sendBtn.disabled = true;
+      setStatus(requestStatus, 'Sending request...', '');
+      setStatus(responseStatus, '', '');
+      output.textContent = 'Waiting for response...';
+
+      const formData = new FormData();
+      appendOptionalFields(formData);
+      formData.append('image', imageBlob, imageName);
+
+      const headers = {
+        'X-Request-ID': requestId.value,
+        'X-Correlation-ID': requestId.value
+      };
+      if (authHeader.value === 'authorization') {
+        headers.Authorization = `Bearer ${apiKey.value.trim()}`;
+      } else {
+        headers['X-API-Key'] = apiKey.value.trim();
+      }
+
+      try {
+        const res = await fetch(buildUrl(), {
+          method: 'POST',
+          headers,
+          body: formData
+        });
+
+        const text = await res.text();
+        const payload = parseMaybeJson(text);
+        output.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+        if (typeof payload === 'object' && payload) {
+          renderResultOverlay(payload);
+        }
+
+        if (!res.ok) {
+          setStatus(responseStatus, `HTTP ${res.status} ${res.statusText}`, 'error');
+        } else {
+          setStatus(responseStatus, `HTTP ${res.status} ${res.statusText}`, 'ok');
+        }
+        setStatus(requestStatus, `Sent to ${buildUrl()}`, 'ok');
+      } catch (err) {
+        output.textContent = String(err);
+        setStatus(requestStatus, `Request failed: ${err.message}`, 'error');
+        setStatus(responseStatus, 'No response received.', 'error');
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    async function listModels() {
+      if (!normalizeBaseUrl(baseUrl.value)) {
+        setStatus(requestStatus, 'Add the gateway base URL first.', 'error');
+        return;
+      }
+      if (!apiKey.value.trim()) {
+        setStatus(requestStatus, 'Add an API key first.', 'error');
+        return;
+      }
+
+      sendBtn.disabled = true;
+      setStatus(requestStatus, 'Fetching model list...', '');
+      setStatus(responseStatus, '', '');
+      output.textContent = 'Waiting for response...';
+
+      const headers = {
+        'X-Request-ID': requestId.value,
+        'X-Correlation-ID': requestId.value
+      };
+      if (authHeader.value === 'authorization') {
+        headers.Authorization = `Bearer ${apiKey.value.trim()}`;
+      } else {
+        headers['X-API-Key'] = apiKey.value.trim();
+      }
+
+      try {
+        const res = await fetch(buildModelsUrl(), { method: 'GET', headers });
+        const text = await res.text();
+        const payload = parseMaybeJson(text);
+        output.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+
+        if (!res.ok) {
+          setStatus(responseStatus, `HTTP ${res.status} ${res.statusText}`, 'error');
+        } else {
+          setStatus(responseStatus, `HTTP ${res.status} ${res.statusText}`, 'ok');
+        }
+        setStatus(requestStatus, `Fetched ${buildModelsUrl()}`, res.ok ? 'ok' : 'error');
+      } catch (err) {
+        output.textContent = String(err);
+        setStatus(requestStatus, `Request failed: ${err.message}`, 'error');
+        setStatus(responseStatus, 'No response received.', 'error');
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      await fileToBlob(file);
+      stopCamera(true);
+    });
+
+    baseUrl.addEventListener('input', refreshUrlPreview);
+    endpoint.addEventListener('change', refreshUrlPreview);
+    startCamBtn.addEventListener('click', startCamera);
+    captureBtn.addEventListener('click', captureFrame);
+    stopCamBtn.addEventListener('click', stopCamera);
+    regenIdBtn.addEventListener('click', () => requestId.value = newRequestId());
+    listModelsBtn.addEventListener('click', listModels);
+    form.addEventListener('submit', sendRequest);
+
+    requestId.value = newRequestId();
+    if (!baseUrl.value.trim()) {
+      baseUrl.value = `${window.location.origin}/inference-rt/api/v1`;
+    }
+    refreshUrlPreview();
+    output.textContent = '{\n  "response": "ready"\n}';
+  </script>
+</body>
+</html>

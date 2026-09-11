@@ -1,0 +1,16 @@
+[project]
+name = "cv-edge"
+version = "0.1.0"
+description = "Fixed-IP edge-device network policy, control client, and result replay helpers"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27.2,<1",
+  "cv-contracts",
+]
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cv_edge"]
