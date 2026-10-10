@@ -48,7 +48,11 @@ from cv_runtime import (
     validate_stem_minimum_principle_validation_artifact,
     validate_stem_surface_phase_calibration,
 )
-from cv_runtime.projections import normalize_output_result_config, output_policy_from_config
+from cv_runtime.projections import (
+    edge_http_response_policy,
+    normalize_output_result_config,
+    output_policy_from_config,
+)
 from cv_runtime.siemens_sps import (
     snap7_dependency_available,
     validate_siemens_sps_write_config,
@@ -85,6 +89,7 @@ from cv_db.runtime_execution_store import (
     refresh_runtime_model_capability_cache,
     request_runtime_execution_stop,
     runtime_model_capability_is_selectable_for_policy,
+    runtime_model_reference_query,
 )
 
 
@@ -630,7 +635,7 @@ def _bind_owner_channel_to_published_version(
     channel = session.get(RuntimeChannel, definition.owner_channel_id)
     if channel is None or channel.deleted_at is not None:
         return
-    if not _channel_version_can_drive_live_runtime(channel, version):
+    if not _channel_version_can_drive_live_runtime(session, channel, version):
         return
     previous_desired_state = RuntimeChannelDesiredState(channel.desired_state)
     previous_observed_state = RuntimeObservedState(channel.observed_state)
@@ -747,11 +752,18 @@ def validate_pipeline_graph(
     nodes_by_key = {node.node_key: node for node in graph.nodes}
     specs_by_key = {node.node_key: registry.get(node.node_type) for node in graph.nodes}
 
+    try:
+        edge_http_response_policy(graph.nodes)
+    except ValueError as exc:
+        issues.append(_issue("error", "edge_http_response_invalid", str(exc)))
+
     if not graph.nodes:
         issues.append(_issue("error", "empty_graph", "Add at least one source node."))
 
     source_nodes = [
         node for node in graph.nodes if node.node_category == RuntimeNodeCategory.SOURCE
+        and not (node.node_type in registry
+                 and registry[node.node_type].compatibility_constraints.get("auxiliary_source"))
     ]
     trigger_nodes = [
         node for node in graph.nodes if node.node_category == RuntimeNodeCategory.TRIGGER
@@ -1466,7 +1478,7 @@ def _sync_channel_bound_trigger_endpoint(
         "scope": row.auth_scope,
         "source": "pipeline_trigger_node",
     }
-    row.timeout_ms = _bounded_int(trigger_config.get("timeout_ms"), 50, 30_000, 2500)
+    row.timeout_ms = _bounded_int(trigger_config.get("timeout_ms"), 50, 120_000, 2500)
     response_policy = _response_policy_from_response_node(response_node)
     row.response_policy = response_policy
     row.request_schema = dict(trigger_config.get("request_schema") or {})
@@ -1526,12 +1538,29 @@ def _disable_channel_trigger_endpoints(
 
 
 def _channel_version_can_drive_live_runtime(
+    session: Session,
     channel: RuntimeChannel,
     version: PipelineVersion | None,
 ) -> bool:
     if version is None:
         return False
-    return RuntimeMode(channel.mode) == RuntimeMode(version.mode)
+    if RuntimeMode(channel.mode) == RuntimeMode(version.mode):
+        return True
+    if RuntimeMode(version.mode) != RuntimeMode.TRIGGER:
+        return False
+    # Adding an HTTP trigger changes the pipeline mode, not the source channel's
+    # mode. Follow versions of its assigned instance, including a superseded
+    # assignment left by an older publisher. Separate trigger instances must not
+    # replace a channel's live pipeline merely because they share its owner.
+    assigned = (
+        session.get(PipelineVersion, channel.pipeline_version_id)
+        if channel.pipeline_version_id
+        else None
+    )
+    return (
+        assigned is not None
+        and assigned.pipeline_definition_id == version.pipeline_definition_id
+    )
 
 
 def _version_is_published_trigger(version: PipelineVersion | None) -> bool:
@@ -1813,6 +1842,31 @@ def _validate_node_properties(
                     "error",
                     "property_option_invalid",
                     f"{field.label} must use one of the configured options.",
+                    node_key=node.node_key,
+                    field=field.key,
+                )
+            )
+        if field.field_type == "multi_select" and (
+            not isinstance(value, list)
+            or any(not isinstance(item, str) for item in value)
+            or len(value) != len(set(value))
+            or any(item not in {option.value for option in field.options} for item in value)
+        ):
+            issues.append(
+                _issue(
+                    "error",
+                    "property_option_invalid",
+                    f"{field.label} must be a list of unique configured options.",
+                    node_key=node.node_key,
+                    field=field.key,
+                )
+            )
+        if field.key == "require_idempotency_key" and not isinstance(value, bool):
+            issues.append(
+                _issue(
+                    "error",
+                    "property_boolean_invalid",
+                    f"{field.label} must be a boolean.",
                     node_key=node.node_key,
                     field=field.key,
                 )
@@ -2815,6 +2869,8 @@ def _catalog_field_value_type(field: str) -> str:
         "frame",
         "heatmap",
         "dominant_constraint",
+        "left",
+        "right",
     } or field.endswith("_frame"):
         return "object"
     if (
@@ -2861,6 +2917,7 @@ def _catalog_field_value_type(field: str) -> str:
         "reason_code",
         "workpiece_id",
         "schema_version",
+        "metrology_status",
     }:
         return "text"
     return "auto"
@@ -2923,6 +2980,9 @@ def _known_result_fields_for_node(
     node: RuntimeNodeSpec | None = None,
 ) -> set[str]:
     common = {"result", "decision"}
+    if node_type == "analysis.bark_pair_result":
+        return {"schema_version", "workpiece_id", "valid", "mean_mm", "left", "right",
+                "metrology_status", "metrology_label"}
     if node_type == "inference.detection":
         return common | {
             "count",
@@ -3178,11 +3238,7 @@ def _validate_inference_node(
         )
     refresh_runtime_model_capability_cache(session)
     rows = session.scalars(
-        select(RuntimeModelCapabilityCache).where(
-            RuntimeModelCapabilityCache.model_family_slug == model_ref.model_family_slug,
-            RuntimeModelCapabilityCache.target_path == model_ref.target_path.value,
-            RuntimeModelCapabilityCache.contract_major == model_ref.contract_major,
-        )
+        runtime_model_reference_query(model_ref)
     ).all()
     now = utc_now()
     rows = [
@@ -3301,11 +3357,7 @@ def _validate_inference_image_view_graph(
         view_profile = next(iter(unique_profiles.values()))
 
         rows = session.scalars(
-            select(RuntimeModelCapabilityCache).where(
-                RuntimeModelCapabilityCache.model_family_slug == model_ref.model_family_slug,
-                RuntimeModelCapabilityCache.target_path == model_ref.target_path.value,
-                RuntimeModelCapabilityCache.contract_major == model_ref.contract_major,
-            )
+            runtime_model_reference_query(model_ref)
         ).all()
         now = utc_now()
         rows = [row for row in rows if _not_expired(row.expires_at, now)]
@@ -4444,11 +4496,7 @@ def _validate_board_cut_model_class_maps(
         if model_ref is None:
             continue
         rows = session.scalars(
-            select(RuntimeModelCapabilityCache).where(
-                RuntimeModelCapabilityCache.model_family_slug == model_ref.model_family_slug,
-                RuntimeModelCapabilityCache.target_path == model_ref.target_path.value,
-                RuntimeModelCapabilityCache.contract_major == model_ref.contract_major,
-            )
+            runtime_model_reference_query(model_ref)
         ).all()
         if model_ref.selection_policy == "explicit_release":
             rows = [
@@ -4558,11 +4606,7 @@ def _validate_board_surface_class_mappings(
         if model_ref is None:
             continue
         rows = session.scalars(
-            select(RuntimeModelCapabilityCache).where(
-                RuntimeModelCapabilityCache.model_family_slug == model_ref.model_family_slug,
-                RuntimeModelCapabilityCache.target_path == model_ref.target_path.value,
-                RuntimeModelCapabilityCache.contract_major == model_ref.contract_major,
-            )
+            runtime_model_reference_query(model_ref)
         ).all()
         if model_ref.selection_policy == "explicit_release":
             rows = [
@@ -5334,6 +5378,7 @@ def _iso(value: object) -> str | None:
 
 def _template_definitions() -> list[dict[str, Any]]:
     return [
+        _bark_measurement_template_definition(),
         {
             "slug": "template-realtime-detection-overlay",
             "name": "Realtime detection with overlay",
@@ -5927,6 +5972,136 @@ def _template_definitions() -> list[dict[str, Any]]:
             ),
         },
     ]
+
+
+def _bark_measurement_template_definition() -> dict[str, Any]:
+    nodes = [
+        _template_node_with_config(
+            "bark_trigger",
+            "trigger.http_put",
+            40,
+            10,
+            {"timeout_ms": 120000, "response_mode": "all_final_response"},
+        ),
+        _template_node("photo", "source.channel_frame", 40, 120),
+        _template_node("csv_measurement", "source.stem_csv_measurements", 40, 330),
+        _template_node("split_faces", "preprocessing.endface_pair_split", 300, 200),
+    ]
+    edges = []
+
+    def connect(source: str, output: str, target: str, input_key: str) -> None:
+        edges.append(
+            RuntimeGraphEdge(
+                from_node_key=source, from_port=output, to_node_key=target, to_port=input_key
+            )
+        )
+
+    connect("photo", "frame", "split_faces", "frame")
+    connect("bark_trigger", "trigger", "photo", "trigger")
+    nodes.append(
+        _template_node_with_config(
+            "display_photo",
+            "output.display_output",
+            570,
+            740,
+            {
+                "display_name": "Eingabefoto",
+                "overlay_layers": "",
+                "object_layers": "",
+                "show_enriched_labels": False,
+            },
+        )
+    )
+    connect("photo", "frame", "display_photo", "frame")
+    connect("csv_measurement", "measurement", "split_faces", "measurement")
+    for side, y in (("left", 100), ("right", 440)):
+        outline, rectify, semantic, measure = (
+            f"{side}_{part}" for part in ("outline", "metric", "classes", "bark")
+        )
+        for key, x in ((outline, 570), (semantic, 1090)):
+            nodes.append(
+                _template_inference_node(
+                    key,
+                    "inference.segmentation",
+                    TaskType.SEGMENTATION,
+                    x,
+                    y,
+                    config={
+                        "return_masks": True,
+                        "max_segments": 10,
+                        "timeout_ms": 10000,
+                        "model_binding_group": "bark_outline"
+                        if key == outline
+                        else "bark_semantic",
+                    },
+                    unbound=True,
+                )
+            )
+        nodes.extend(
+            [
+                _template_node(rectify, "preprocessing.endface_metric_rectify", 830, y),
+                _template_node(measure, "analysis.bark_radial_thickness", 1350, y),
+            ]
+        )
+        connect("split_faces", f"{side}_frame", outline, "frame")
+        connect("split_faces", f"{side}_frame", rectify, "frame")
+        connect("split_faces", f"{side}_reference", rectify, "reference")
+        connect(outline, "segments", rectify, "segments")
+        connect(rectify, "frame", semantic, "frame")
+        connect(rectify, "frame", measure, "frame")
+        connect(rectify, "calibration", measure, "calibration")
+        connect(semantic, "segments", measure, "segments")
+        connect(measure, "measurement", "bark_result", side)
+    nodes.append(_template_node("bark_result", "analysis.bark_pair_result", 1610, 230))
+    fields = [
+        ("schema_version", "text"),
+        ("workpiece_id", "text"),
+        ("valid", "boolean"),
+        ("mean_mm", "number"),
+        ("left", "object"),
+        ("right", "object"),
+        ("metrology_status", "text"),
+        ("metrology_label", "text"),
+    ]
+    nodes.append(
+        _template_node_with_config(
+            "result_output",
+            "output.result",
+            1870,
+            230,
+            {
+                "include_decision": False,
+                "include_runtime_metadata": False,
+                "projections": [
+                    {
+                        "key": key,
+                        "label": key,
+                        "source": {
+                            "node_key": "bark_result",
+                            "output_port": "result",
+                            "path": key,
+                            "value_type": kind,
+                        },
+                        "destinations": ["response", "history"],
+                        "required": False,
+                    }
+                    for key, kind in fields
+                ],
+            },
+        )
+    )
+    connect("bark_result", "result", "result_output", "result")
+    return {
+        "slug": "template-trigger-bark-measurement",
+        "name": "Rindenmessung – zwei Stirnflächen",
+        "description": (
+            "Foto und HFA-CSV gemeinsam hochladen; Links/erste oder Links/letzte ausdrücklich "
+            "zuordnen. Zwei Segmentierungsmodelle binden. Radiale Mittelwerte; "
+            "messtechnische Freigabe ausständig."
+        ),
+        "mode": RuntimeMode.TRIGGER,
+        "graph": RuntimePipelineGraph(nodes=nodes, edges=edges),
+    }
 
 
 def _template_node(node_key: str, node_type: str, x: float, y: float) -> RuntimeNodeSpec:

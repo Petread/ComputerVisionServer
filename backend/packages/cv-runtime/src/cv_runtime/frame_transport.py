@@ -236,6 +236,8 @@ class SharedFrameRingReader:
         self.descriptor: FrameRingDescriptor | None = None
         self._shm: shared_memory.SharedMemory | None = None
         self._last_sequence = 0
+        self.overwritten_frames = 0
+        self.skipped_frames = 0
 
     @property
     def last_sequence(self) -> int:
@@ -247,11 +249,21 @@ class SharedFrameRingReader:
         stop_event: Event | None = None,
         timeout_seconds: float = 1.0,
     ) -> SharedFrame | None:
+        return self._read(stop_event=stop_event, timeout_seconds=timeout_seconds, ordered=False)
+
+    def read_next(
+        self, *, stop_event: Event | None = None, timeout_seconds: float = 1.0,
+    ) -> SharedFrame | None:
+        """Read the oldest unread frame still present in the unchanged ring format."""
+        return self._read(stop_event=stop_event, timeout_seconds=timeout_seconds, ordered=True)
+
+    def _read(self, *, stop_event: Event | None, timeout_seconds: float,
+              ordered: bool) -> SharedFrame | None:
         deadline = time.monotonic() + max(timeout_seconds, 0.0)
         while stop_event is None or not stop_event.is_set():
             try:
                 self._attach_current_generation()
-                frame = self._read_once()
+                frame = self._read_once(ordered=ordered)
             except (FileNotFoundError, ValueError, OSError):
                 self._detach()
                 frame = None
@@ -324,12 +336,28 @@ class SharedFrameRingReader:
         self._shm = shm
         self._last_sequence = 0
 
-    def _read_once(self) -> SharedFrame | None:
+    def _read_once(self, *, ordered: bool = False) -> SharedFrame | None:
         if self._shm is None or self.descriptor is None:
             return None
         latest_sequence = struct.unpack_from("<Q", self._shm.buf, _GLOBAL_HEADER.size - 8)[0]
         if latest_sequence <= self._last_sequence:
             return None
+        oldest_sequence = max(1, latest_sequence - self.descriptor.slot_count + 1)
+        overwritten = max(oldest_sequence - self._last_sequence - 1, 0)
+        if ordered:
+            # Writers may provide non-contiguous camera sequence numbers.
+            # Find committed slots, otherwise an absent number could stall us.
+            available = []
+            for index in range(self.descriptor.slot_count):
+                offset = _GLOBAL_HEADER_SIZE + index * (
+                    _SLOT_HEADER_SIZE + self.descriptor.slot_capacity)
+                header = _SLOT_HEADER.unpack_from(self._shm.buf, offset)
+                if self._last_sequence < header[0] <= latest_sequence and header[0] == header[-1]:
+                    available.append(header[0])
+            if not available:
+                return None
+            latest_sequence = min(available)
+            overwritten = min(overwritten, latest_sequence - self._last_sequence - 1)
         slot_index = latest_sequence % self.descriptor.slot_count
         slot_offset = _GLOBAL_HEADER_SIZE + slot_index * (
             _SLOT_HEADER_SIZE + self.descriptor.slot_capacity
@@ -362,6 +390,8 @@ class SharedFrameRingReader:
             (int(height), int(width)) if channels == 1 else (int(height), int(width), int(channels))
         )
         frame = frame.reshape(shape)
+        self.overwritten_frames += overwritten
+        self.skipped_frames += max(latest_sequence - self._last_sequence - 1 - overwritten, 0)
         self._last_sequence = int(latest_sequence)
         return SharedFrame(
             sequence=int(latest_sequence),

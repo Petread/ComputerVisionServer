@@ -21,9 +21,11 @@ from cv_contracts import (
 from cv_status import TargetPath
 
 from inference_gateway.dependencies import RequestIdentity, get_settings, require_realtime_access
+from inference_gateway.dependencies import require_runtime_inference
 from inference_gateway.runtime.public_service import PublicRealtimeGatewayService
 
-router = APIRouter(prefix="/realtime", tags=["realtime-inference"])
+router = APIRouter(prefix="/realtime", tags=["realtime-inference"],
+                   dependencies=[Depends(require_runtime_inference)])
 
 
 def get_service(request: Request, settings=Depends(get_settings)) -> PublicRealtimeGatewayService:

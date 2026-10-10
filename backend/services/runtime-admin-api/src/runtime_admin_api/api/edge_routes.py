@@ -37,6 +37,8 @@ from cv_contracts import (
 from cv_contracts.edge import (
     EdgeConnectivityState,
     EdgeFleetCommandSummary,
+    EdgeSettingsCommand,
+    EdgeSettingsStatus,
     EdgeSoftwareOverview,
     EdgeSoftwareRolloutRequest,
 )
@@ -60,7 +62,7 @@ from cv_db import (
     update_edge_device,
     upsert_edge_viewer_lease,
 )
-from cv_edge import EdgeClientError
+from cv_edge import EdgeAgentClient, EdgeClientError, EdgeNetworkPolicy
 from cv_status import UserRole
 from cv_utils import NotFoundError, PlatformError
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
@@ -110,6 +112,80 @@ FleetWriter = Annotated[
     ),
 ]
 SettingsDep = Annotated[PlatformSettings, Depends(get_settings)]
+
+
+def _settings_client(settings: PlatformSettings, edge_device_id: str) -> EdgeAgentClient:
+    with session_scope(settings) as session:
+        device = get_edge_device_detail(session, edge_device_id)
+    if device is None or not device.enabled:
+        raise _edge_error(
+            "edge_settings_unavailable", ValueError("Gerät fehlt oder ist deaktiviert.")
+        )
+    return EdgeAgentClient(
+        address=device.address,
+        network_policy=EdgeNetworkPolicy.from_strings(
+            allowed_cidrs=[str(device.allowed_cidr)],
+            registered_addresses=[str(device.address.management_ip)],
+        ),
+    )
+
+
+@router.get("/runtime/edge-devices/{edge_device_id}/settings", response_model=EdgeSettingsStatus)
+def get_edge_settings(
+    edge_device_id: str, _current_user: FleetReader, settings: SettingsDep
+) -> EdgeSettingsStatus:
+    try:
+        with _settings_client(settings, edge_device_id) as client:
+            return client.settings_status()
+    except EdgeClientError as exc:
+        if exc.status_code == 404:
+            return EdgeSettingsStatus(
+                supported=False,
+                message=(
+                    "Die installierte Edge-Runtime unterstützt zentrale Einstellungen noch nicht. "
+                    "Edge-Update und aktuellen Offline-Installer ausführen."
+                ),
+            )
+        raise PlatformError(
+            code="edge_settings_unreachable",
+            message="Edge-Einstellungen sind derzeit nicht erreichbar.",
+            detail=str(exc),
+            status_code=503,
+        ) from exc
+
+
+@router.put(
+    "/runtime/edge-devices/{edge_device_id}/settings",
+    response_model=EdgeSettingsStatus,
+    status_code=202,
+)
+def put_edge_settings(
+    edge_device_id: str,
+    payload: EdgeSettingsCommand,
+    request: Request,
+    current_user: FleetWriter,
+    settings: SettingsDep,
+) -> EdgeSettingsStatus:
+    try:
+        with _settings_client(settings, edge_device_id) as client:
+            result = client.update_settings(payload)
+    except EdgeClientError as exc:
+        raise PlatformError(
+            code="edge_settings_rejected",
+            message="Edge-Einstellungen konnten nicht übernommen werden.",
+            detail=str(exc),
+            status_code=409 if exc.status_code == 409 else 503,
+        ) from exc
+    write_runtime_audit_event(
+        settings=settings,
+        request=request,
+        current_user=current_user,
+        event_type="edge.settings.requested.v1",
+        aggregate_type="edge_device",
+        aggregate_id=edge_device_id,
+        payload=payload.model_dump(mode="json"),
+    )
+    return result
 
 
 @router.get("/runtime/edge-software", response_model=EdgeSoftwareOverview)
@@ -717,6 +793,7 @@ def reconcile_edge_device(
                     "boot_id": observation.identity.boot_id,
                     "platform": observation.identity.platform,
                     "health_state": observation.health.state,
+                    **observation.software_observation(),
                 },
             )
 

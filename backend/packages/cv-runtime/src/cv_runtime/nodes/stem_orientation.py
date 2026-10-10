@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -160,12 +161,22 @@ class StemMaskGeometryHandler:
             geometry_config,
             polygon_coordinate_space=selected.coordinate_space,
         )
-        geometry = analyze_stem_geometry(
-            selected.polygon,
-            image_width=image_width,
-            image_height=image_height,
-            config=selected_geometry_config,
+        geometry_started = time.perf_counter()
+        geometry_timings: dict[str, float] = {}
+        geometry = context.frame_analysis_cache.get(
+            segment_payload,
+            ("stem_geometry", image_width, image_height, selected_geometry_config,
+             tuple(tuple(point) for point in selected.polygon)),
+            lambda: analyze_stem_geometry(
+                selected.polygon, image_width=image_width, image_height=image_height,
+                config=selected_geometry_config,
+                timings_ms=geometry_timings,
+            ),
         )
+        geometry_timings["total_ms"] = (time.perf_counter() - geometry_started) * 1000
+        context.stem_stage_timings_ms.update({
+            f"{node.node_key}_{key}": value for key, value in geometry_timings.items()
+        })
         payload = _geometry_payload(
             context,
             node,

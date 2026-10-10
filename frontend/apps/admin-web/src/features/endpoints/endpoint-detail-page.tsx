@@ -137,7 +137,7 @@ export function EndpointDetailPage() {
               </div>
               <div className="metric-pill">
                 <span>Realtime route</span>
-                <strong>{supportsRealtime ? '/infer/... live' : 'Not available'}</strong>
+                <strong>{supportsRealtime ? '/api/v1/infer/... live' : 'Not available'}</strong>
                 <small className="subtle-text">{realtime?.response_schema.schema_id ?? 'No realtime contract loaded'}</small>
               </div>
               <div className="metric-pill">
@@ -368,16 +368,16 @@ function EndpointResultPanel(props: { result: EndpointTestResult }) {
 function buildDefaultExamples(taskType: string, modelId: string) {
   const realtimePath =
     taskType === 'classification'
-      ? '/infer/classify'
+      ? '/api/v1/infer/classify'
       : taskType === 'detection' || taskType === 'oriented_detection'
-        ? '/infer/detect'
+        ? '/api/v1/infer/detect'
         : taskType === 'anomaly'
-          ? '/infer/anomaly'
-          : '/infer/segment';
+          ? '/api/v1/infer/anomaly'
+          : '/api/v1/infer/segment';
   return [
     {
       method: 'GET',
-      path: `/models/${modelId}`,
+      path: `/api/v1/models/${modelId}`,
       description: 'Discover the published contract and current availability.'
     },
     {
@@ -396,12 +396,12 @@ function buildDefaultExamples(taskType: string, modelId: string) {
 function buildRealtimeExample(taskType: string, modelId: string) {
   const route =
     taskType === 'classification'
-      ? '/infer/classify'
+      ? '/api/v1/infer/classify'
       : taskType === 'detection' || taskType === 'oriented_detection'
-        ? '/infer/detect'
+        ? '/api/v1/infer/detect'
         : taskType === 'anomaly'
-          ? '/infer/anomaly'
-          : '/infer/segment';
+          ? '/api/v1/infer/anomaly'
+          : '/api/v1/infer/segment';
   return [`curl -X POST "${route}" \\`, `  -F "model_id=${modelId}" \\`, '  -F "image=@sample.jpg"'].join('\n');
 }
 

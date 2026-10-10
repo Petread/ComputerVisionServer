@@ -11,6 +11,8 @@ from types import ModuleType
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("edge_system_package_cache")
+
 ROOT = Path(__file__).resolve().parents[3]
 WINDOWS_GIT_OPENSSL = Path(r"C:\Program Files\Git\usr\bin\openssl.exe")
 OPENSSL = shutil.which("openssl") or (
@@ -30,11 +32,71 @@ def _builder() -> ModuleType:
 def _wheel(path: Path, distribution: str) -> None:
     normalized = distribution.replace("-", "_")
     with zipfile.ZipFile(path / f"{normalized}-1.0.0-py3-none-any.whl", "w") as archive:
-        archive.writestr(f"{normalized}/__init__.py", "__version__ = '1.0.0'\n")
+        kind = "services" if distribution == "edge-agent" else "packages"
+        source = ROOT / "backend" / kind / distribution / "src"
+        if distribution in {
+            "cv-status", "cv-contracts", "cv-utils", "cv-edge", "cv-runtime", "edge-agent"
+        }:
+            for item in sorted(source.rglob("*.py")):
+                archive.writestr(item.relative_to(source).as_posix(), item.read_bytes())
+        else:
+            archive.writestr(f"{normalized}/__init__.py", "__version__ = '1.0.0'\n")
         archive.writestr(
             f"{normalized}-1.0.0.dist-info/METADATA",
             f"Metadata-Version: 2.1\nName: {distribution}\nVersion: 1.0.0\n",
         )
+
+
+@pytest.mark.parametrize("change", ["outdated", "missing", "extra", "duplicate"])
+def test_bundle_rejects_cached_internal_code_that_differs_from_installer_checkout(
+    tmp_path: Path, change: str
+) -> None:
+    builder = _builder()
+    config_path = _config(tmp_path, "jetson_orin_nano")
+    wheels = tmp_path / "wheels"
+    wheel = next(wheels.glob("cv_contracts-*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        contents = {name: archive.read(name) for name in archive.namelist()}
+    key = "cv_contracts/edge.py"
+    if change == "outdated":
+        # Same package version, but the schema shipped before system_packages existed.
+        contents[key] = contents[key].replace(
+            b"    system_packages: dict[str, str] = Field(default_factory=dict, max_length=201)\n",
+            b"",
+        ).replace(
+            b"    system_packages: dict[str, str] = "
+            b"Field(default_factory=dict, max_length=201)\r\n",
+            b"",
+        )
+    elif change == "missing":
+        del contents[key]
+    elif change == "extra":
+        contents["cv_contracts/obsolete.py"] = b"old = True\n"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for name, content in contents.items():
+            archive.writestr(name, content)
+        if change == "duplicate":
+            with pytest.warns(UserWarning, match="Duplicate name"):
+                archive.writestr(key, contents[key])
+    with pytest.raises(builder.BundleError, match="cv-contracts.*Online-Inhalte vorbereiten"):
+        builder.build(config_path, tmp_path / "output")
+    assert not list((tmp_path / "output").glob("*.tar.gz"))
+
+
+def test_internal_wheel_source_comparison_accepts_crlf_and_bom(tmp_path: Path) -> None:
+    builder = _builder()
+    _config(tmp_path, "jetson_orin_nano")
+    wheels = tmp_path / "wheels"
+    wheel = next(wheels.glob("cv_contracts-*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        contents = {name: archive.read(name) for name in archive.namelist()}
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for name, content in contents.items():
+            if name.endswith(".py"):
+                text = content.decode("utf-8-sig").replace("\r\n", "\n")
+                content = ("\ufeff" + text.replace("\n", "\r\n")).encode("utf-8")
+            archive.writestr(name, content)
+    builder._validate_internal_wheel_sources(wheels)
 
 
 def _config(tmp_path: Path, platform: str) -> Path:
@@ -122,15 +184,27 @@ def test_offline_bundle_is_reproducible_and_contains_mandatory_integrity_files(
             archive.extractall(extracted, filter="data")
     assert (extracted / "SHA256SUMS").is_file()
     assert (extracted / "release-manifest.json").is_file()
+    for settings_file in (
+        "edge-settings-helper.py", "edge_environment.py",
+        "ybb-edge-settings.service", "ybb-edge-settings.timer",
+    ):
+        assert (extracted / "deployment/edge" / settings_file).is_file()
+    assert (extracted / "deployment/edge/edge_environment.py").read_bytes() == (
+        ROOT / "backend/packages/cv-contracts/src/cv_contracts/edge_environment.py"
+    ).read_bytes()
     assert (extracted / "SIGNATURE_POLICY").read_text(encoding="ascii").strip() == "prepared"
     environment = (extracted / "device.env").read_text(encoding="utf-8")
     assert "YBB_EDGE_MANAGEMENT_IP=192.168.50.21\n" in environment
     assert "YBB_EDGE_SERVER_IP=192.168.50.10\n" in environment
     assert "YBB_EDGE_PLANT_ALLOWED_IPS=\n" in environment
     assert "YBB_ALLOW_PLC_WRITES=false\n" in environment
+    assert "YBB_EDGE_OUTBOX_QUOTA_BYTES=67108864\n" in environment
+    assert "YBB_EDGE_OUTBOX_MAX_ITEMS=10000\n" in environment
     if platform == "windows_11":
         assert (extracted / "cuda-runtime-installer.exe").is_file()
+        assert not (extracted / "system-packages").exists()
         assert (extracted / "YBB-Edge-Windows-Installer.exe").is_file()
+        assert (extracted / "deployment/edge/WindowsReleaseSignatureVerifier.cs").is_file()
         runtime_requirements = (extracted / "runtime-requirements.txt").read_text(
             encoding="utf-8"
         )
@@ -142,6 +216,9 @@ def test_offline_bundle_is_reproducible_and_contains_mandatory_integrity_files(
         assert any(name.startswith("tensorrt_cu13_libs-") for name in wheel_names)
     else:
         assert (extracted / "deployment/edge/Install-JetsonOfflineUI.sh").is_file()
+        assert (extracted / "deployment/edge/edge-system-packages.py").is_file()
+        assert (extracted / "system-packages/ufw_0.36.2-6_all.deb").is_file()
+        assert (extracted / "system-packages/Packages").is_file()
         assert (extracted / "deployment/edge/install-jetson-offline-ui.py").is_file()
         installer = (extracted / "deployment/edge/install-jetson-offline.sh").read_text(
             encoding="utf-8"

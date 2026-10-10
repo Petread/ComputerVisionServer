@@ -9,6 +9,7 @@ dependencies = [
   "cv-core",
   "cv-contracts",
   "cv-db",
+  "cv-deploy",
   "cv-runtime",
   "cv-status",
 ]

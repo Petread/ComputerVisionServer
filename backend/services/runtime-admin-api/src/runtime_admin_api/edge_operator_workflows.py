@@ -382,7 +382,11 @@ def _preflight_for_release(
             outcome=item.outcome,
             message=item.message,
             remediation_hint=(
-                "Resolve the failed admission check and run preflight again."
+                "In Edge-Orchestrierung ein signiertes Runtime-Paket mit dem Codestand "
+                "der Zentrale importieren und dieses Gerät aktualisieren. Danach Status "
+                "abrufen und den Kanal-Preflight erneut ausführen."
+                if item.outcome == "fail" and item.key == "runtime.code"
+                else "Resolve the failed admission check and run preflight again."
                 if item.outcome == "fail"
                 else None
             ),

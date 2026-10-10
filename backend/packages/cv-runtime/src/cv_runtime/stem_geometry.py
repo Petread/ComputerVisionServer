@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -258,6 +259,7 @@ def analyze_stem_geometry(
     image_width: int,
     image_height: int,
     config: StemGeometryConfig | None = None,
+    timings_ms: dict[str, float] | None = None,
 ) -> StemGeometryResult:
     """Describe one segmented stem in the 2D image projection.
 
@@ -267,6 +269,7 @@ def analyze_stem_geometry(
     metric or 3D quantities.
     """
 
+    stage_started = time.perf_counter()
     resolved = config or StemGeometryConfig()
     if image_width <= 0 or image_height <= 0:
         return _invalid_result(
@@ -321,6 +324,9 @@ def analyze_stem_geometry(
                 selection=selection,
             )
 
+    if timings_ms is not None:
+        timings_ms["support_ms"] = (time.perf_counter() - stage_started) * 1000
+    stage_started = time.perf_counter()
     quality_flags: list[StemGeometryQualityFlag] = []
     if selection.meaningful_component_count > 1:
         quality_flags.append(StemGeometryQualityFlag.FRAGMENTS_REMOVED)
@@ -369,6 +375,9 @@ def analyze_stem_geometry(
             selection=selection,
         )
 
+    if timings_ms is not None:
+        timings_ms["axis_ms"] = (time.perf_counter() - stage_started) * 1000
+    stage_started = time.perf_counter()
     for _iteration in range(resolved.axis_refinement_passes):
         measured, _missing = _measure_cross_sections(points, origin, direction, resolved)
         accepted, _rejected, _uncertain = _filter_cross_sections(measured, resolved)
@@ -378,6 +387,8 @@ def analyze_stem_geometry(
 
     measured, missing = _measure_cross_sections(points, origin, direction, resolved)
     accepted, rejected, uncertain = _filter_cross_sections(measured, resolved)
+    if timings_ms is not None:
+        timings_ms["cross_sections_ms"] = (time.perf_counter() - stage_started) * 1000
     rejected = [*missing, *rejected]
     valid_cross_section_fraction = len(accepted) / resolved.cross_section_count
     if (
@@ -924,8 +935,9 @@ def _measure_cross_sections(
     else:
         support_points = points
     normal = _normal(direction)
-    longitudinal = (support_points - origin) @ direction
-    transverse = (support_points - origin) @ normal
+    centered = support_points - origin
+    longitudinal = centered @ direction
+    transverse = centered @ normal
     lower, upper = _trimmed_bounds(longitudinal, config.longitudinal_trim_quantile)
     length = upper - lower
     # Each cross-section previously scanned every foreground pixel. At production
@@ -955,8 +967,8 @@ def _measure_cross_sections(
                 )
             )
             continue
-        low = float(np.quantile(support, config.boundary_quantile))
-        high = float(np.quantile(support, 1.0 - config.boundary_quantile))
+        bounds = np.quantile(support, [config.boundary_quantile, 1.0 - config.boundary_quantile])
+        low, high = float(bounds[0]), float(bounds[1])
         width = high - low
         if width <= 0:
             missing.append(

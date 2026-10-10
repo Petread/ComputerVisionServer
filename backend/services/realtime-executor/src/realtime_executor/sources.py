@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import ipaddress
 import logging
 import os
 import re
@@ -16,6 +17,7 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
 from cv_runtime import LatestFrameRingReader, validate_basler_link_budget
+from cv_runtime.basler import basler_gain_setting, basler_pixel_format
 from cv_utils import utc_now_iso
 from PIL import Image
 
@@ -119,6 +121,7 @@ class SharedMemoryFrameSource:
         runtime_dir: str | Path,
         channel_id: str,
         source_type: str,
+        ordered: bool = False,
     ) -> None:
         self.health = SourceHealth(status_text="Waiting for camera-media frame ring")
         self._reader = LatestFrameRingReader(
@@ -126,10 +129,13 @@ class SharedMemoryFrameSource:
             channel_id=channel_id,
         )
         self._source_type = source_type
+        self._ordered = ordered
+        self._generation: str | None = None
 
     def read(self, stop_event: Event) -> FramePacket | None:
         try:
-            shared = self._reader.read_latest(
+            read_frame = self._reader.read_next if self._ordered else self._reader.read_latest
+            shared = read_frame(
                 stop_event=stop_event,
                 timeout_seconds=1.0,
             )
@@ -144,6 +150,9 @@ class SharedMemoryFrameSource:
             self.health.status_text = "Waiting for camera-media frame"
             return None
         descriptor = shared.descriptor
+        if self._generation is not None and descriptor.generation != self._generation:
+            self.health.reconnect_count += 1
+        self._generation = descriptor.generation
         self.health.connected = True
         self.health.status_text = "Camera-media frame transport connected"
         self.health.last_error = None
@@ -158,7 +167,12 @@ class SharedMemoryFrameSource:
             metadata={
                 **descriptor.source_metadata,
                 "source_type": self._source_type,
-                "transport": "shared_memory_latest_frame",
+                "transport": (
+                    "shared_memory_ordered_frames"
+                    if self._ordered else "shared_memory_latest_frame"
+                ),
+                "frame_ring_overwritten_frames": self._reader.overwritten_frames,
+                "frame_ring_skipped_frames": self._reader.skipped_frames,
                 "capture_monotonic_ns": shared.capture_monotonic_ns,
                 "frame_ring_generation": descriptor.generation,
             },
@@ -185,6 +199,10 @@ class RtspSourceConfigurationError(ValueError):
 
 class BaslerProfileValidationError(ValueError):
     pass
+
+
+class BaslerDeviceUnavailableError(RuntimeError):
+    """Discovery did not find the requested camera; retry without changing identity."""
 
 
 class OpenCvRtspFrameSource:
@@ -613,6 +631,8 @@ class BaslerPylonFrameSource:
         )
 
     def read(self, stop_event: Event) -> FramePacket | None:
+        if stop_event.is_set():
+            return None
         if self._transport_mode == "aravis_rtsp_bridge":
             return self._read_aravis_bridge(stop_event, reason="configured")
         if self._aravis_source is not None:
@@ -726,17 +746,11 @@ class BaslerPylonFrameSource:
             return False
         try:
             factory = pylon.TlFactory.GetInstance()
-            devices = list(factory.EnumerateDevices() or [])
-            LOGGER.info(
-                "Basler Pylon discovery found %s device(s) for source %s: %s",
-                len(devices),
-                _basler_source_uri(self.config),
-                [_pylon_device_info_dict(device) for device in devices],
-            )
-            device_info, info = _basler_device_selector(self.config, devices)
+            device_info, info = _discover_basler_device(factory, self.config)
             camera = pylon.InstantCamera(factory.CreateDevice(device_info))
-            camera.Open()
+            # Retain the handle even when Open partially succeeds and then raises.
             self._camera = camera
+            camera.Open()
             _configure_basler_camera(camera, pylon, self.config)
             capture_profile = _basler_effective_camera_profile(camera, self.config)
             try:
@@ -758,12 +772,20 @@ class BaslerPylonFrameSource:
             self.health.status_text = "Basler Pylon source connected"
             self.health.last_error = None
             LOGGER.info(
-                "Basler Pylon source opened: source_uri=%s camera=%s config=%s",
+                "Basler Pylon source opened: source_uri=%s camera=%s config=%s "
+                "effective_profile=%s",
                 self._source_uri,
                 info,
                 _basler_config_summary(self.config),
+                capture_profile,
             )
             return True
+        except BaslerDeviceUnavailableError as exc:
+            self._mark_error(f"Basler Pylon discovery unavailable: {exc}", reconnect=True)
+            if _basler_should_use_aravis_fallback(self.config, exc):
+                self._activate_aravis_fallback(reason=str(exc))
+                return True
+            return False
         except BaslerProfileValidationError as exc:
             self._mark_error(
                 f"Basler Pylon source profile rejected: {exc}",
@@ -1677,6 +1699,74 @@ def _configure_blackfly_acquirer(acquirer: Any, config: dict[str, Any]) -> None:
             _set_genicam_node_value(node_map, str(name), value, strict=True)
 
 
+class _PylonDiscoveryTransport(Protocol):
+    # Method spelling is defined by the Pylon SDK.
+    def AnnounceRemoteDevice(self, address: str) -> tuple[bool, Any]: ...  # noqa: N802
+
+
+class _PylonDiscoveryFactory(Protocol):
+    def EnumerateDevices(self) -> list[Any]: ...  # noqa: N802
+
+    def CreateTl(self, device_class: str) -> _PylonDiscoveryTransport: ...  # noqa: N802
+
+
+def _discover_basler_device(
+    factory: _PylonDiscoveryFactory, config: dict[str, Any],
+) -> tuple[Any, dict[str, Any]]:
+    """Prefer normal discovery; use only an explicitly configured IP as fallback."""
+    address = str(config.get("ip_address") or "").strip()
+    if address:
+        try:
+            parsed = ipaddress.IPv4Address(address)
+            if parsed.is_unspecified or parsed.is_multicast or int(parsed) == 0xFFFFFFFF:
+                raise ValueError("a unicast camera address is required")
+        except ValueError as exc:
+            raise RtspSourceConfigurationError(
+                f"Invalid Basler camera ip_address={address!r}: {exc}"
+            ) from exc
+    try:
+        devices = list(factory.EnumerateDevices() or [])
+    except Exception as exc:
+        LOGGER.warning("Basler Pylon general discovery failed: %s", exc)
+        if not address:
+            raise BaslerDeviceUnavailableError(str(exc)) from exc
+        devices = []
+    LOGGER.info(
+        "Basler Pylon general discovery found %s device(s) for %s: %s",
+        len(devices), _basler_source_uri(config),
+        [_pylon_device_info_dict(device) for device in devices],
+    )
+    try:
+        return _basler_device_selector(config, devices)
+    except RtspSourceConfigurationError as exc:
+        # Ambiguous selection with no configured identity needs user correction.
+        if not address:
+            if devices and not any(config.get(key) for key in (
+                "serial_number", "user_defined_name", "camera_name", "camera",
+                "device_id", "id_", "ip_address", "model",
+            )):
+                raise
+            raise BaslerDeviceUnavailableError(str(exc)) from exc
+    LOGGER.warning("Basler Pylon trying directed discovery at %s", address)
+    try:
+        transport = factory.CreateTl("BaslerGigE")
+        found, device = transport.AnnounceRemoteDevice(address)
+    except AttributeError as exc:
+        raise RtspSourceConfigurationError(
+            "The installed Pylon runtime does not support directed GigE discovery."
+        ) from exc
+    except Exception as exc:
+        raise BaslerDeviceUnavailableError(
+            f"Directed discovery at {address} failed: {exc}"
+        ) from exc
+    if not found:
+        raise BaslerDeviceUnavailableError(f"No Basler camera responded at {address}.")
+    # Never open another camera just because it now occupies the configured IP.
+    device, info = _basler_device_selector(config, [device])
+    LOGGER.info("Basler Pylon directed discovery succeeded at %s: %s", address, info)
+    return device, info
+
+
 def _basler_device_selector(
     config: dict[str, Any],
     devices: list[Any],
@@ -1772,7 +1862,12 @@ def _configure_basler_camera(camera: Any, pylon: Any, config: dict[str, Any]) ->
         _set_pylon_node_value(camera, "AcquisitionMode", acquisition_mode, strict=False)
     pixel_format = str(config.get("pixel_format") or "").strip()
     if pixel_format:
-        _set_pylon_node_value(camera, "PixelFormat", pixel_format, strict=True)
+        _set_pylon_node_value(
+            camera,
+            "PixelFormat",
+            basler_pixel_format(_basler_camera_model(camera, config), pixel_format),
+            strict=True,
+        )
 
     trigger_mode = str(config.get("trigger_mode") or "Off").strip()
     if trigger_mode:
@@ -1798,16 +1893,27 @@ def _configure_basler_camera(camera: Any, pylon: Any, config: dict[str, Any]) ->
             float(config["fps"]),
             strict=True,
         )
-    if config.get("exposure_time_us") is not None:
+    if config.get("exposure_auto") or config.get("exposure_time_us") is not None:
         exposure_auto = str(config.get("exposure_auto") or "Off").strip()
-        if exposure_auto:
-            _set_pylon_node_value(camera, "ExposureAuto", exposure_auto, strict=False)
-        _set_pylon_node_value(camera, "ExposureTime", float(config["exposure_time_us"]), strict=True)
-    if config.get("gain_db") is not None:
+        if exposure_auto and _pylon_node(camera, "ExposureAuto") is not None:
+            _set_pylon_node_value(camera, "ExposureAuto", exposure_auto, strict=True)
+    if config.get("exposure_time_us") is not None:
+        _set_first_available_pylon_node_value(
+            camera,
+            ("ExposureTime", "ExposureTimeAbs"),
+            float(config["exposure_time_us"]),
+            strict=True,
+        )
+    if (
+        config.get("gain_auto")
+        or config.get("gain_db") is not None
+        or config.get("gain_raw") is not None
+    ):
         gain_auto = str(config.get("gain_auto") or "Off").strip()
-        if gain_auto:
-            _set_pylon_node_value(camera, "GainAuto", gain_auto, strict=False)
-        _set_pylon_node_value(camera, "Gain", float(config["gain_db"]), strict=True)
+        if gain_auto and _pylon_node(camera, "GainAuto") is not None:
+            _set_pylon_node_value(camera, "GainAuto", gain_auto, strict=True)
+    if config.get("gain_db") is not None or config.get("gain_raw") is not None:
+        _configure_basler_gain(camera, config)
     _configure_basler_grab_buffers(camera, config)
     for name, key in (
         ("Width", "width"),
@@ -1823,6 +1929,49 @@ def _configure_basler_camera(camera: Any, pylon: Any, config: dict[str, Any]) ->
     if isinstance(features, dict):
         for name, value in features.items():
             _set_pylon_node_value(camera, str(name), value, strict=True)
+    _ensure_basler_even_roi(camera)
+
+
+def _configure_basler_gain(camera: Any, config: dict[str, Any]) -> None:
+    gain_raw = config.get("gain_raw")
+    setting = basler_gain_setting(
+        _basler_camera_model(camera, config),
+        gain_db=float(config["gain_db"]) if config.get("gain_db") is not None else None,
+        gain_raw=int(gain_raw) if gain_raw is not None else None,
+    )
+    if setting is None:
+        return
+    if setting.selector and _pylon_node(camera, "GainSelector") is not None:
+        _set_pylon_node_value(camera, "GainSelector", setting.selector, strict=True)
+    _set_first_available_pylon_node_value(
+        camera,
+        setting.node_names,
+        setting.value,
+        strict=True,
+    )
+
+
+def _ensure_basler_even_roi(camera: Any) -> None:
+    """Trim an odd effective ROI dimension before the NVENC frame path starts."""
+    for name in ("Width", "Height"):
+        value = _pylon_node_value(camera, (name,))
+        try:
+            dimension = int(value)
+        except (TypeError, ValueError):
+            continue
+        if dimension > 1 and dimension % 2:
+            _set_pylon_node_value(camera, name, dimension - 1, strict=True)
+
+
+def _basler_camera_model(camera: Any, config: dict[str, Any]) -> str:
+    configured = str(config.get("model") or "").strip()
+    if configured:
+        return configured
+    try:
+        device_info = camera.GetDeviceInfo()
+        return str(device_info.GetModelName() or "").strip()
+    except Exception:
+        return ""
 
 
 def _configure_basler_grab_buffers(camera: Any, config: dict[str, Any]) -> None:
@@ -2073,6 +2222,17 @@ def _basler_effective_camera_profile(
         "fps": fps or 0.0,
         "link_speed_mbps": link_speed or 0.0,
         "pixel_format": pixel_format,
+        **{
+            key: value
+            for key, names in (
+                ("exposure_time_us", ("ExposureTime", "ExposureTimeAbs")),
+                ("exposure_auto", ("ExposureAuto",)),
+                ("gain_db", ("Gain",)),
+                ("gain_raw", ("GainRaw",)),
+                ("gain_auto", ("GainAuto",)),
+            )
+            if (value := _pylon_node_value(camera, names)) is not None
+        },
     }
 
 
@@ -2485,7 +2645,10 @@ def _basler_config_summary(config: dict[str, Any]) -> dict[str, Any]:
         "pixel_format",
         "fps",
         "exposure_time_us",
+        "exposure_auto",
         "gain_db",
+        "gain_raw",
+        "gain_auto",
         "trigger_mode",
         "trigger_source",
         "trigger_activation",

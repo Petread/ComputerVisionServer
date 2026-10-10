@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { EdgeDeviceSummary, EdgeSoftwareDevice } from '@cv-platform/schemas';
+import type { EdgeDeviceSummary, EdgeSoftwareDevice, EdgeSoftwareOverview, EdgeSoftwarePackage } from '@cv-platform/schemas';
 import { describe, expect, it, vi } from 'vitest';
-import { EdgeOrchestration, softwareBusy, softwareUpdateBlockers } from './orchestration';
+import { EdgeOrchestration, recommendedSoftwarePackage, softwareBusy, softwareSelectionBlockers, softwareUpdateBlockers } from './orchestration';
 
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 vi.mock('../../components/notification-provider', () => ({ useNotifications: () => ({ notify: vi.fn() }) }));
@@ -30,7 +30,83 @@ const state: EdgeSoftwareDevice = {
   releases: [{ package_sha256: 'package', reasons: [] }], commands: []
 };
 
+function packageFixture(id: string): EdgeSoftwarePackage {
+  return {
+    package_sha256: id, size_bytes: 123,
+    release: {
+      release_id: `release-${id}`, platform: 'windows_11', architecture: 'x86_64',
+      python_version: '3.12', runtime_code_digest: 'current', node_contract_versions: {}
+    }
+  };
+}
+
 describe('central Edge orchestration', () => {
+  it('allows a verified manual selection when bundled targets are missing while retaining device and package checks', () => {
+    const overview: EdgeSoftwareOverview = {
+      server_runtime_digest: 'current', targets_managed: true,
+      target_error: 'Mitgeliefertes Edge-Paket fehlt im Katalog.',
+      releases: [packageFixture('manual')],
+      devices: [{ ...state, recommended_package_sha256: null,
+        recommendation_reasons: ['Mitgeliefertes Edge-Paket fehlt im Katalog.'],
+        releases: [{ package_sha256: 'manual', reasons: [] }]
+      }]
+    };
+    expect(softwareSelectionBlockers(device, overview, 'manual')).toEqual([]);
+    expect(softwareSelectionBlockers(device, overview)).not.toEqual([]);
+    expect(softwareSelectionBlockers(device, overview, 'missing')).not.toEqual([]);
+    expect(softwareSelectionBlockers({ ...device, enabled: false }, overview, 'manual')).not.toEqual([]);
+    expect(softwareSelectionBlockers({ ...device, connectivity_state: 'offline' }, overview, 'manual')).not.toEqual([]);
+    for (const reason of ['Python-Basisversion passt nicht.', 'Paketdatei fehlt.']) {
+      const incompatible = { ...overview, devices: [{ ...overview.devices[0], releases: [{ package_sha256: 'manual', reasons: [reason] }] }] };
+      expect(softwareSelectionBlockers(device, incompatible, 'manual')).toContain(reason);
+    }
+  });
+
+  it('uses the exact central target for agent-only updates and respects blocked recommendations', () => {
+    const overview = {
+      server_runtime_digest: 'current', targets_managed: true, central_release_id: 'central-001',
+      releases: [
+        packageFixture('old-agent'), packageFixture('new-agent')
+      ],
+      devices: [{ ...state, recommended_package_sha256: 'new-agent', releases: [
+        { package_sha256: 'old-agent', reasons: [] }, { package_sha256: 'new-agent', reasons: [] }
+      ] }]
+    } as EdgeSoftwareOverview;
+    expect(recommendedSoftwarePackage(overview, 'edge-1')).toBe('new-agent');
+    expect(recommendedSoftwarePackage({ ...overview, devices: [{ ...overview.devices[0], recommended_package_sha256: null }] }, 'edge-1')).toBe('');
+    expect(recommendedSoftwarePackage({ ...overview, target_error: 'Import incomplete' }, 'edge-1')).toBe('');
+  });
+
+  it('does not choose arbitrarily between legacy packages with the same runtime digest', () => {
+    const overview = {
+      server_runtime_digest: 'current', releases: [
+        packageFixture('one'), packageFixture('two')
+      ], devices: [{ ...state, releases: [{ package_sha256: 'one', reasons: [] }, { package_sha256: 'two', reasons: [] }] }]
+    } as EdgeSoftwareOverview;
+    expect(recommendedSoftwarePackage(overview, 'edge-1')).toBe('');
+  });
+
+  it('recommends a current compatible package per device and never falls back to old runtime code', () => {
+    const overview = {
+      server_runtime_digest: 'current',
+      releases: [
+        { package_sha256: 'old', release: { runtime_code_digest: 'old' } },
+        { package_sha256: 'windows', release: { runtime_code_digest: 'current' } },
+        { package_sha256: 'jetson', release: { runtime_code_digest: 'current' } }
+      ],
+      devices: [{ ...state, releases: [
+        { package_sha256: 'old', reasons: [] },
+        { package_sha256: 'windows', reasons: ['platform mismatch'] },
+        { package_sha256: 'jetson', reasons: [] }
+      ] }]
+    } as EdgeSoftwareOverview;
+    expect(recommendedSoftwarePackage(overview, 'edge-1')).toBe('jetson');
+    expect(recommendedSoftwarePackage(overview, 'missing')).toBe('');
+    expect(recommendedSoftwarePackage(undefined, 'edge-1')).toBe('');
+    expect(recommendedSoftwarePackage({ ...overview, releases: overview.releases.slice(0, 2) }, 'edge-1')).toBe('');
+    expect(softwareUpdateBlockers(device, { ...state, update_protocol: 0 }, 'package')).toContain('Launcher einmalig mit dem vorhandenen Edge-Installer einrichten.');
+  });
+
   it('only enables software updates for reachable compatible devices without active work', () => {
     expect(softwareUpdateBlockers(device, state, 'package')).toEqual([]);
     expect(softwareUpdateBlockers({ ...device, connectivity_state: 'offline' }, state, 'package')).not.toEqual([]);

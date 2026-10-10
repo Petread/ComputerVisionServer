@@ -1,5 +1,9 @@
 ﻿# Offline-Deployment auf Windows
 
+Edge-Runtime-Updates können beim zentralen Updateexport mitgeliefert und auf dem
+Offline-Server automatisch für den Frontend-Rollout bereitgestellt werden:
+[Bedienung und Paketprüfung](../docs/operations/central-offline-edge-updates.md).
+
 Dieses Verzeichnis enthaelt zwei Deployment-Schienen:
 
 1. **Docker-frei fuer Zielgeraete**: Windows-Installer/Updater mit vorbereiteter WSL2-Runtime. Das ist der empfohlene Weg fuer diese Anwendung, wenn das Zielgeraet keine Internetverbindung hat und persistente Daten erhalten bleiben sollen.
@@ -14,7 +18,7 @@ Dieser Abschnitt ist der normale Weg fuer deinen aktuellen Zielzustand:
 - auf dem Entwicklungsrechner weiterentwickeln
 - daraus einen Installer oder spaeter ein Update-ZIP bauen
 - das ZIP per USB-Stick oder Netzwerkfreigabe auf den Offline-Zielrechner kopieren
-- auf dem Zielrechner nur eine EXE/UI oder eine CMD-Datei starten
+- auf dem Zielrechner den bestehenden Offline-Installationsweg verwenden
 - Zugriff immer per IP-Adresse, ohne DNS- oder Hosts-Aenderung und ohne Sonderport
 
 #### 0. UI auf dem Entwicklungsrechner bauen/starten
@@ -29,11 +33,31 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\deployment\YBB-Deployment-UI.exe
 ```
 
-Die UI hat drei Reiter:
+Die gemeinsame UI laeuft auf dem Entwicklungsrechner mit Internetzugang und
+beginnt mit einer Aufgabenuebersicht:
 
-- `Export`: Installer- oder Update-ZIP auf dem Entwicklungsrechner bauen
-- `Installation`: entpacktes Installer-Bundle auf dem Offline-Zielrechner installieren
-- `Update`: Update-ZIP aus `incoming` oder von einem expliziten Pfad einspielen
+- `Zentrale: Paket`: Installer oder Update mit erklaerten Profilen erstellen
+- `Edge`: bestehenden Bundle-Builder im selben Fenster verwenden; Runtime-Updates und RSA-Schluessel verwalten
+- `Modelle`: Modellpakete herunterladen und fuer den Offline-Server exportieren
+
+Im Repository sind lokale Serveraktionen ausgeblendet und deaktiviert. Die fertigen
+Pakete werden uebertragen und am Ziel ueber den bestehenden Installationsweg
+eingespielt. Es gibt keine Ferninstallation durch diese UI. Die lokalen
+Zielsystem-Funktionen bleiben fuer bestehende Offlinepakete verfuegbar.
+
+Der [Ablauf fuer gemeinsame Updates und RSA-Vertrauen](../docs/operations/deployment-workspace.md)
+beschreibt den normalen Weg ohne manuelle PowerShell-Kommandos. Die folgenden
+aelteren Bezeichnungen `Installation` und `Update` beschreiben weiterhin die
+lokalen Zielsystem-Abläufe. `Export` entspricht `Zentrale: Paket` auf dem
+Entwicklungsrechner. Einzelne Export-Checkboxen liegen jetzt unter
+`Erweiterte Einstellungen` und sind im Profil `Benutzerdefiniert` veraenderbar.
+
+Das Profil `Anwendungsupdate` verwendet die installierte Serverbasis weiter:
+MediaMTX, APT, Training-Runtime, GStreamer und Triton werden standardmaessig
+uebersprungen; `PLC-Schreiben erlauben` ist aktiv. APT-/Training-Vorbereitung
+findet nur beim Installerbau statt. Anwendung, Frontend und das Python-Wheel-Paket
+bleiben im Update enthalten. Bei neuen Systemabhaengigkeiten oder fehlenden
+Komponenten unter `Benutzerdefiniert` die betreffenden Skip-Optionen deaktivieren.
 
 Unten in der UI bleiben Status und Lauf-Log sichtbar. Wenn ein Vorgang laeuft,
 schliesst sich das Fenster nicht automatisch. Die angezeigte `Lauf-Logdatei`
@@ -265,7 +289,9 @@ In `YBB-Deployment-UI.exe` gibt es im Export-Tab eine Checkbox
 `MediaMTX ueberspringen` und ein Feld `MediaMTX-Archiv`. Wenn die Checkbox aus
 bleibt, wird ein gesetzter Archivpfad verwendet oder das Archiv automatisch nach
 `.runtime\mediamtx` geladen und mitgebuendelt. Wenn die Checkbox gesetzt ist,
-wird MediaMTX nicht in Installer/Update aufgenommen.
+wird MediaMTX nicht in Installer/Update aufgenommen, auch bei einem gespeicherten
+Archivpfad in der UI oder Basis-Konfiguration. Im Profil `Anwendungsupdate` ist
+die Checkbox standardmaessig gesetzt und vorhandenes MediaMTX wird weitergenutzt.
 
 GStreamer wird ebenfalls ueber den bestehenden Offline-Updater mitgefuehrt.
 Wenn `PrepareRuntimeSkipGStreamerCheck=false` bleibt und
@@ -274,8 +300,10 @@ Debian-Paketbundle unter `.runtime\apt\gstreamer` und packt es als
 `runtime/gstreamer-debs.tar.gz` in Installer/Update. `apply-release.sh`
 installiert daraus die benoetigten GStreamer-Tools und Plugins offline, bevor
 der MediaMTX-Publish/Read-Smoke-Test und der Runtime-Start laufen. In der
-Deployment-UI gibt es dazu die Checkbox `GStreamer ueberspringen`; sie sollte
-fuer Zielgeraete ohne Internet aus bleiben. Das Bundle muss insbesondere
+Deployment-UI gibt es dazu die Checkbox `GStreamer ueberspringen`. Bei einer
+vollstaendigen bestehenden Installation ist sie im Profil `Anwendungsupdate`
+gesetzt. Fuer Erstinstallation, fehlende Plugins oder neue Systemabhaengigkeiten
+muss das Paket mitgeliefert werden. Das Bundle muss insbesondere
 `gstreamer1.0-rtsp` enthalten, weil der Produktionspublisher und der
 MediaMTX-Smoke-Test das Element `rtspclientsink` verwenden. Fuer GPU-Encoding
 braucht der GStreamer-Pfad ausserdem den modernen CUDA-Encoder

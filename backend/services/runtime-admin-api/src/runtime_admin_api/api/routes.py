@@ -1603,7 +1603,7 @@ def calculate_channel_stem_process_calibration(
     current_user: ChannelWriter,
     settings: SettingsDep,
 ) -> RuntimeStemCurvatureProcessCalibrationCalculateResponse:
-    """Calculate a versioned planar X/Y process calibration for stem measurement."""
+    """Calculate the versioned XY calibration with optional measured XYZ camera pose."""
     with session_scope(settings) as session:
         channel = session.get(RuntimeChannel, channel_id)
         if channel is None or channel.deleted_at is not None:
@@ -1641,6 +1641,7 @@ def calculate_channel_stem_process_calibration(
             ),
             "intrinsic_calibration_hash": payload.intrinsic_calibration_hash,
             "reference_point_count": len(payload.reference_points),
+            "spatial_calibration_enabled": payload.spatial_calibration_enabled,
             "rms_reprojection_error_px": computation.rms_reprojection_error_px,
             "maximum_reprojection_error_px": (
                 computation.maximum_reprojection_error_px
@@ -1839,6 +1840,20 @@ def preview_channel_pipeline_graph(
                 status_code=422,
             ) from exc
         preview_channel = session.get(RuntimeChannel, channel_id)
+        from cv_runtime.payloads import TriggerPayload
+
+        preview_execution = None
+        preview_resolver = build_runtime_model_resolver(session)
+        if any(node.node_category == RuntimeNodeCategory.INFERENCE for node in graph.nodes):
+            from cv_db.runtime_model_store import build_execution_model_resolver, lock_runtime_use, require_runtime_pipeline
+            execution_id = preview_channel.active_runtime_execution_id if preview_channel else ""
+            pipeline_id = preview_channel.pipeline_version_id if preview_channel else ""
+            lock_runtime_use(session, execution_id or "")
+            preview_execution = require_runtime_pipeline(
+                session, execution_id=execution_id or "", pipeline_version_id=pipeline_id or "",
+            )
+            preview_resolver = build_execution_model_resolver(session, preview_execution, pipeline_id)
+
         context = RuntimeExecutionContext(
             correlation_id=f"preview_{channel_id}_{int(time.time() * 1000)}",
             channel_id=channel_id,
@@ -1846,13 +1861,19 @@ def preview_channel_pipeline_graph(
             runtime_execution_id=f"preview-{channel_id}",
             mode=mode,
             input_frame=frame,
+            trigger=TriggerPayload(
+                trigger_id=f"preview-{channel_id}",
+                body={"bark_job": payload.bark_job.model_dump(mode="json")},
+            ) if payload.bark_job is not None else None,
             inference_client=HttpInferenceGatewayClient(
                 base_url=settings.runtime.inference_gateway_realtime_url,
                 bearer_token=settings.runtime.inference_gateway_bearer_token(),
                 timeout_seconds=settings.inference_limits.realtime_timeout_ms / 1000,
                 overload_policy="wait",
+                runtime_execution_id=preview_execution.id if preview_execution else None,
+                pipeline_version_id=preview_execution.pipeline_version_id if preview_execution else None,
             ),
-            model_resolver=build_runtime_model_resolver(session),
+            model_resolver=preview_resolver,
             metadata={
                 "executor_service": SERVICE_NAME,
                 "authoring_preview": True,
@@ -1883,6 +1904,11 @@ def preview_channel_pipeline_graph(
             fallback_frame=frame,
             result=result,
             graph_nodes=[node.model_dump(mode="json") for node in graph.nodes],
+        ),
+        execution_result=(
+            result.model_dump(mode="json")
+            if payload.bark_job is not None or payload.include_execution_result
+            else None
         ),
         meta=build_meta(),
     )
@@ -2903,6 +2929,8 @@ def create_manual_single_capture(
                 capture_source=payload.capture_source,
                 view_profile_id=payload.view_profile_id,
                 require_eligibility=payload.require_eligibility,
+                pipeline_image=payload.pipeline_image,
+                max_image_bytes=settings.request_limits.max_image_bytes,
             )
         except ValueError as exc:
             raise _manual_capture_error(exc) from exc

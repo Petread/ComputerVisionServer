@@ -54,6 +54,7 @@ def seed_deployed_runtime_model(
                 architecture_display_name="YOLOv11 Medium",
                 serving_manifest=serving_manifest
                 or {
+                    "simulation_only": True,
                     "class_labels": ["ok", "defect"],
                     "confidence_threshold_default": 0.35,
                     "compatible_targets": [target_path.value],

@@ -33,7 +33,6 @@ from cv_contracts.runtime import (
 from cv_core import MachineIdentity, PlatformSettings, parse_machine_token
 from cv_db import (
     authenticate_machine_identity,
-    build_runtime_model_resolver,
     get_runtime_live_view_state,
     get_trigger_endpoint_for_execution,
     load_published_runtime_pipeline,
@@ -46,6 +45,9 @@ from cv_db import (
     write_runtime_live_view_state,
 )
 from cv_db.models import RuntimeChannel, RuntimeSource, TriggerEndpoint
+from cv_db.runtime_model_store import (
+    build_execution_model_resolver, lock_runtime_use, require_runtime_pipeline,
+)
 from cv_runtime import (
     HttpInferenceGatewayClient,
     RuntimeExecutionContext,
@@ -555,6 +557,13 @@ def _execute_trigger_job(
                 status_code=409,
                 retryable=False,
             )
+        channel = session.get(RuntimeChannel, endpoint.channel_id)
+        execution_id = channel.active_runtime_execution_id if channel else ""
+        pipeline_id = endpoint.pipeline_version_id or (channel.pipeline_version_id if channel else "")
+        lock_runtime_use(session, execution_id or "")
+        execution = require_runtime_pipeline(
+            session, execution_id=execution_id or "", pipeline_version_id=pipeline_id or "",
+        )
         try:
             loaded = load_published_runtime_pipeline(
                 session,
@@ -651,7 +660,7 @@ def _execute_trigger_job(
             correlation_id=correlation_id,
             channel_id=loaded.channel.id,
             pipeline_version_id=loaded.version.id,
-            runtime_execution_id=None,
+            runtime_execution_id=execution.id,
             trigger_endpoint_id=endpoint.id,
             mode=RuntimeMode.TRIGGER,
             source_config=source_config,
@@ -668,8 +677,10 @@ def _execute_trigger_job(
                 )
                 / 1000,
                 overload_policy="wait",
+                runtime_execution_id=execution.id,
+                pipeline_version_id=loaded.version.id,
             ),
-            model_resolver=build_runtime_model_resolver(session),
+            model_resolver=build_execution_model_resolver(session, execution, loaded.version.id),
             metadata={
                 "executor_service": SERVICE_NAME,
                 "trigger_endpoint_id": endpoint.id,
@@ -728,13 +739,36 @@ def _execute_trigger_job(
             error_code = str(first_error.get("code") or "runtime_trigger_pipeline_failed")
             error_message = str(first_error.get("message") or "Pipeline execution failed.")
         result.status = status
-        record_runtime_execution_result(
+        bark_job_data = payload.payload.get("bark_job")
+        is_bark_job = bark_job_data is not None and any(
+            node.node_type == "source.stem_csv_measurements" for node in loaded.graph.nodes
+        )
+        result_record = record_runtime_execution_result(
             session,
             result,
             channel_id=loaded.channel.id,
-            runtime_execution_id=None,
+            runtime_execution_id=execution.id,
             trigger_endpoint_id=endpoint.id,
+            retain_history=True if is_bark_job else None,
         )
+        if is_bark_job and frame is not None:
+            from cv_contracts.bark import StemBarkJob
+            from cv_db.bark_artifacts import store_bark_artifacts
+
+            try:
+                bark_job = StemBarkJob.model_validate(bark_job_data)
+            except ValueError:
+                # The CSV source already reports malformed job data as a node error.
+                bark_job = None
+            if bark_job is not None:
+                # Keep explicitly submitted inspection failures for review as well.
+                result_record.history_retained = True
+                store_bark_artifacts(settings, result_record, result, frame, bark_job)
+                result.final_response["result_record_id"] = result_record.id
+                result.final_response["artifacts"] = result_record.runtime_metadata[
+                    "bark_artifacts"
+                ]
+                result_record.trigger_response = dict(result.final_response)
         latency_ms = float(
             result.timing.get("total_ms")
             or round((time.perf_counter() - started) * 1000, 3)
@@ -759,7 +793,7 @@ def _execute_trigger_job(
             endpoint_slug=endpoint.slug,
             channel_id=loaded.channel.id,
             pipeline_version_id=loaded.version.id,
-            runtime_execution_id=None,
+            runtime_execution_id=execution.id,
             trigger_id=payload.trigger_id or correlation_id,
             correlation_id=correlation_id,
             final_response=result.final_response,

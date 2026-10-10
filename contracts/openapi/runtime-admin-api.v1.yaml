@@ -1280,7 +1280,8 @@ paths:
       tags:
       - runtime
       summary: Calculate Channel Stem Process Calibration
-      description: Calculate a versioned planar X/Y process calibration for stem measurement.
+      description: Calculate the versioned XY calibration with optional measured XYZ
+        camera pose.
       operationId: calculate_channel_stem_process_calibration_api_v1_runtime_channels__channel_id__stem_process_calibration_calculate_post
       parameters:
       - name: channel_id
@@ -1716,6 +1717,133 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RuntimeChannelCommandResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/edge-devices/{edge_device_id}/settings:
+    get:
+      tags:
+      - edge-fleet
+      summary: Get Edge Settings
+      operationId: get_edge_settings_api_v1_runtime_edge_devices__edge_device_id__settings_get
+      parameters:
+      - name: edge_device_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Edge Device Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSettingsStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - edge-fleet
+      summary: Put Edge Settings
+      operationId: put_edge_settings_api_v1_runtime_edge_devices__edge_device_id__settings_put
+      parameters:
+      - name: edge_device_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Edge Device Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeSettingsCommand'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSettingsStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/edge-software:
+    get:
+      tags:
+      - edge-fleet
+      summary: Get Edge Software
+      operationId: get_edge_software_api_v1_runtime_edge_software_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSoftwareOverview'
+  /api/v1/runtime/edge-software/packages:
+    post:
+      tags:
+      - edge-fleet
+      summary: Upload Edge Software
+      operationId: upload_edge_software_api_v1_runtime_edge_software_packages_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_edge_software_api_v1_runtime_edge_software_packages_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSoftwareOverview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/edge-devices/{edge_device_id}/software:
+    post:
+      tags:
+      - edge-fleet
+      summary: Update Edge Software
+      operationId: update_edge_software_api_v1_runtime_edge_devices__edge_device_id__software_post
+      parameters:
+      - name: edge_device_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Edge Device Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeSoftwareRolloutRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeFleetCommandSummary'
         '422':
           description: Validation Error
           content:
@@ -2324,8 +2452,213 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/places:
+    get:
+      tags:
+      - runtime
+      summary: Get Places
+      operationId: get_places_api_v1_runtime_places_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+  /api/v1/runtime/areas:
+    post:
+      tags:
+      - runtime
+      summary: Create Area
+      operationId: create_area_api_v1_runtime_areas_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AreaWrite'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/areas/{place_id}:
+    put:
+      tags:
+      - runtime
+      summary: Update Area
+      operationId: update_area_api_v1_runtime_areas__place_id__put
+      parameters:
+      - name: place_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Place Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AreaWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - runtime
+      summary: Remove Area
+      operationId: remove_area_api_v1_runtime_areas__place_id__delete
+      parameters:
+      - name: place_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Place Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/facilities:
+    post:
+      tags:
+      - runtime
+      summary: Create Facility
+      operationId: create_facility_api_v1_runtime_facilities_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacilityWrite'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/facilities/{place_id}:
+    put:
+      tags:
+      - runtime
+      summary: Update Facility
+      operationId: update_facility_api_v1_runtime_facilities__place_id__put
+      parameters:
+      - name: place_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Place Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacilityWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - runtime
+      summary: Remove Facility
+      operationId: remove_facility_api_v1_runtime_facilities__place_id__delete
+      parameters:
+      - name: place_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Place Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    AreaDetail:
+      properties:
+        name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Name
+        id:
+          type: string
+          title: Id
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - id
+      title: AreaDetail
+    AreaWrite:
+      properties:
+        name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Name
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: AreaWrite
     Body_upload_channel_test_file_api_v1_runtime_channel_test_files_post:
       properties:
         file:
@@ -2336,6 +2669,16 @@ components:
       required:
       - file
       title: Body_upload_channel_test_file_api_v1_runtime_channel_test_files_post
+    Body_upload_edge_software_api_v1_runtime_edge_software_packages_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_upload_edge_software_api_v1_runtime_edge_software_packages_post
     EdgeAdmissionCheck:
       properties:
         key:
@@ -2593,6 +2936,20 @@ components:
             type: string
           type: array
           title: Supported Node Types
+        runtime_code_digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Code Digest
+        node_contract_versions:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Node Contract Versions
+        software_update_protocol:
+          type: integer
+          title: Software Update Protocol
+          default: 0
         camera_adapters:
           items:
             type: string
@@ -3202,8 +3559,8 @@ components:
           type: string
           format: ipv4network
           title: Allowed Cidr
-          description: Isolated machine VLAN/CIDR containing Edge device and orchestration
-            server.
+          description: Allowed IPv4 destination network containing the Edge management
+            address; the server may be reached through a gateway.
         server_ip:
           type: string
           format: ipv4
@@ -3471,8 +3828,8 @@ components:
           type: string
           format: ipv4network
           title: Allowed Cidr
-          description: Isolated machine VLAN/CIDR containing Edge device and orchestration
-            server.
+          description: Allowed IPv4 destination network containing the Edge management
+            address; the server may be reached through a gateway.
         server_ip:
           type: string
           format: ipv4
@@ -3514,8 +3871,8 @@ components:
           type: string
           format: ipv4network
           title: Allowed Cidr
-          description: Isolated machine VLAN/CIDR containing Edge device and orchestration
-            server.
+          description: Allowed IPv4 destination network containing the Edge management
+            address; the server may be reached through a gateway.
         server_ip:
           type: string
           format: ipv4
@@ -3637,8 +3994,8 @@ components:
             format: ipv4network
           - type: 'null'
           title: Allowed Cidr
-          description: Isolated machine VLAN/CIDR containing Edge device and orchestration
-            server.
+          description: Allowed IPv4 destination network containing the Edge management
+            address; the server may be reached through a gateway.
         server_ip:
           anyOf:
           - type: string
@@ -3772,6 +4129,8 @@ components:
         command_type:
           type: string
           enum:
+          - software_update
+          - software_rollback
           - reconcile
           - blob_upload
           - deployment_prepare
@@ -4184,6 +4543,108 @@ components:
       - restored_deployment
       - completed_at
       title: EdgeRollbackResponse
+    EdgeRuntimeEngine:
+      properties:
+        node_key:
+          type: string
+          title: Node Key
+        cache_hit:
+          type: boolean
+          title: Cache Hit
+        cache_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cache Key
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        duration_ms:
+          type: number
+          minimum: 0.0
+          title: Duration Ms
+          default: 0
+        engine_size_bytes:
+          type: integer
+          minimum: 0.0
+          title: Engine Size Bytes
+          default: 0
+      additionalProperties: false
+      type: object
+      required:
+      - node_key
+      - cache_hit
+      title: EdgeRuntimeEngine
+    EdgeRuntimeMetrics:
+      properties:
+        observed_at:
+          type: string
+          title: Observed At
+        window_seconds:
+          type: number
+          maximum: 10.0
+          minimum: 0.0
+          title: Window Seconds
+        acquired_frames:
+          type: integer
+          minimum: 0.0
+          title: Acquired Frames
+          default: 0
+        processed_frames:
+          type: integer
+          minimum: 0.0
+          title: Processed Frames
+          default: 0
+        sampled_out_frames:
+          type: integer
+          minimum: 0.0
+          title: Sampled Out Frames
+          default: 0
+        execution_errors:
+          type: integer
+          minimum: 0.0
+          title: Execution Errors
+          default: 0
+        source_fps:
+          type: number
+          minimum: 0.0
+          title: Source Fps
+          default: 0
+        processed_fps:
+          type: number
+          minimum: 0.0
+          title: Processed Fps
+          default: 0
+        last_frame_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Frame At
+        last_execution_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Execution At
+        stages:
+          items:
+            $ref: '#/components/schemas/EdgeTimingSummary'
+          type: array
+          maxItems: 16
+          title: Stages
+        nodes:
+          items:
+            $ref: '#/components/schemas/EdgeTimingSummary'
+          type: array
+          maxItems: 256
+          title: Nodes
+      additionalProperties: false
+      type: object
+      required:
+      - observed_at
+      - window_seconds
+      title: EdgeRuntimeMetrics
     EdgeRuntimeProcess:
       properties:
         deployment_id:
@@ -4226,6 +4687,25 @@ components:
             maxLength: 2000
           - type: 'null'
           title: Last Error
+        channel_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Id
+        workload_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workload Release Id
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/EdgeRuntimeMetrics'
+          - type: 'null'
+        engines:
+          items:
+            $ref: '#/components/schemas/EdgeRuntimeEngine'
+          type: array
+          title: Engines
       additionalProperties: false
       type: object
       required:
@@ -4342,6 +4822,422 @@ components:
       - storage
       - observed_at
       title: EdgeRuntimeStatus
+    EdgeSettingsCommand:
+      properties:
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9-]{8,80}$
+          title: Request Id
+        expected_revision:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Expected Revision
+        values:
+          additionalProperties:
+            type: string
+          type: object
+          title: Values
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - expected_revision
+      - values
+      title: EdgeSettingsCommand
+    EdgeSettingsStatus:
+      properties:
+        supported:
+          type: boolean
+          title: Supported
+          default: true
+        writable:
+          type: boolean
+          title: Writable
+          default: false
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+        boot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Boot Id
+        revision:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Revision
+        values:
+          additionalProperties:
+            type: string
+          type: object
+          title: Values
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        phase:
+          type: string
+          enum:
+          - idle
+          - queued
+          - applying
+          - succeeded
+          - failed
+          title: Phase
+          default: idle
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+      additionalProperties: false
+      type: object
+      title: EdgeSettingsStatus
+    EdgeSoftwareCommandSummary:
+      properties:
+        command_id:
+          type: string
+          title: Command Id
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - succeeded
+          - failed
+          title: Status
+        action:
+          type: string
+          enum:
+          - update
+          - rollback
+          title: Action
+        package_sha256:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Package Sha256
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        software:
+          $ref: '#/components/schemas/EdgeSoftwareStatus'
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - command_id
+      - status
+      - action
+      - created_at
+      title: EdgeSoftwareCommandSummary
+    EdgeSoftwareCompatibility:
+      properties:
+        package_sha256:
+          type: string
+          title: Package Sha256
+        reasons:
+          items:
+            type: string
+          type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
+      required:
+      - package_sha256
+      title: EdgeSoftwareCompatibility
+    EdgeSoftwareDeviceSummary:
+      properties:
+        edge_device_id:
+          type: string
+          title: Edge Device Id
+        runtime_code_digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Code Digest
+        update_protocol:
+          type: integer
+          title: Update Protocol
+          default: 0
+        platform:
+          anyOf:
+          - type: string
+            enum:
+            - jetson_orin_nano
+            - jetson_agx_orin
+            - windows_11
+            - simulated
+          - type: 'null'
+          title: Platform
+        runtime_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Version
+        node_count:
+          type: integer
+          title: Node Count
+          default: 0
+        requires_update:
+          type: boolean
+          title: Requires Update
+          default: false
+        active_package_sha256:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Package Sha256
+        recommended_package_sha256:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recommended Package Sha256
+        recommendation_reasons:
+          items:
+            type: string
+          type: array
+          title: Recommendation Reasons
+        software_observed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Software Observed At
+        releases:
+          items:
+            $ref: '#/components/schemas/EdgeSoftwareCompatibility'
+          type: array
+          title: Releases
+        commands:
+          items:
+            $ref: '#/components/schemas/EdgeSoftwareCommandSummary'
+          type: array
+          title: Commands
+      additionalProperties: false
+      type: object
+      required:
+      - edge_device_id
+      title: EdgeSoftwareDeviceSummary
+    EdgeSoftwareOverview:
+      properties:
+        server_runtime_digest:
+          type: string
+          title: Server Runtime Digest
+        central_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Central Release Id
+        targets_managed:
+          type: boolean
+          title: Targets Managed
+          default: false
+        target_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Error
+        releases:
+          items:
+            $ref: '#/components/schemas/EdgeSoftwarePackageSummary'
+          type: array
+          title: Releases
+        devices:
+          items:
+            $ref: '#/components/schemas/EdgeSoftwareDeviceSummary'
+          type: array
+          title: Devices
+      additionalProperties: false
+      type: object
+      required:
+      - server_runtime_digest
+      title: EdgeSoftwareOverview
+    EdgeSoftwarePackageSummary:
+      properties:
+        package_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Package Sha256
+        size_bytes:
+          type: integer
+          minimum: 0.0
+          title: Size Bytes
+        release:
+          $ref: '#/components/schemas/EdgeSoftwareRelease'
+      additionalProperties: false
+      type: object
+      required:
+      - package_sha256
+      - size_bytes
+      - release
+      title: EdgeSoftwarePackageSummary
+    EdgeSoftwareRelease:
+      properties:
+        schema_version:
+          type: string
+          const: edge.software.release.v1
+          title: Schema Version
+          default: edge.software.release.v1
+        release_id:
+          type: string
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9._-]{2,79}$
+          title: Release Id
+        platform:
+          type: string
+          enum:
+          - jetson_orin_nano
+          - jetson_agx_orin
+          - windows_11
+          - simulated
+          title: Platform
+        architecture:
+          type: string
+          title: Architecture
+        python_version:
+          type: string
+          title: Python Version
+        cuda_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cuda Version
+        tensorrt_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tensorrt Version
+        runtime_code_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Runtime Code Digest
+        node_contract_versions:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Node Contract Versions
+        wheels:
+          additionalProperties:
+            type: string
+          type: object
+          minProperties: 1
+          title: Wheels
+        system_packages:
+          additionalProperties:
+            type: string
+          type: object
+          maxProperties: 201
+          title: System Packages
+      additionalProperties: false
+      type: object
+      required:
+      - release_id
+      - platform
+      - architecture
+      - python_version
+      - runtime_code_digest
+      - wheels
+      title: EdgeSoftwareRelease
+    EdgeSoftwareRolloutRequest:
+      properties:
+        package_sha256:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Package Sha256
+        action:
+          type: string
+          enum:
+          - update
+          - rollback
+          title: Action
+          default: update
+        idempotency_key:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      title: EdgeSoftwareRolloutRequest
+    EdgeSoftwareStatus:
+      properties:
+        protocol_version:
+          type: integer
+          title: Protocol Version
+          default: 0
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        phase:
+          type: string
+          enum:
+          - idle
+          - queued
+          - transferring
+          - verifying
+          - installing
+          - activating
+          - checking
+          - succeeded
+          - failed
+          - rolled_back
+          title: Phase
+          default: idle
+        active_release:
+          type: string
+          title: Active Release
+          default: bootstrap
+        previous_release:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Previous Release
+        candidate_release:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Candidate Release
+        runtime_code_digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Code Digest
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        updated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Updated At
+        transfer_bytes:
+          type: integer
+          minimum: 0.0
+          title: Transfer Bytes
+          default: 0
+        transfer_total_bytes:
+          type: integer
+          minimum: 0.0
+          title: Transfer Total Bytes
+          default: 0
+      additionalProperties: false
+      type: object
+      title: EdgeSoftwareStatus
     EdgeStorageQuotaStatus:
       properties:
         artifact_bytes:
@@ -4392,6 +5288,51 @@ components:
       - disk_free_bytes
       - minimum_disk_free_bytes
       title: EdgeStorageQuotaStatus
+    EdgeTimingSummary:
+      properties:
+        key:
+          type: string
+          title: Key
+        node_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Node Type
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        sample_count:
+          type: integer
+          minimum: 1.0
+          title: Sample Count
+        mean_ms:
+          type: number
+          minimum: 0.0
+          title: Mean Ms
+        p95_ms:
+          type: number
+          minimum: 0.0
+          title: P95 Ms
+        max_ms:
+          type: number
+          minimum: 0.0
+          title: Max Ms
+        last_ms:
+          type: number
+          minimum: 0.0
+          title: Last Ms
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - sample_count
+      - mean_ms
+      - p95_ms
+      - max_ms
+      - last_ms
+      title: EdgeTimingSummary
     EdgeViewerLeaseRequest:
       properties:
         lease_id:
@@ -4697,6 +5638,46 @@ components:
       - total_artifact_bytes
       - created_at
       title: EdgeWorkloadReleaseSummary
+    FacilityDetail:
+      properties:
+        name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Name
+        area_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Area Id
+        id:
+          type: string
+          title: Id
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - area_id
+      - id
+      title: FacilityDetail
+    FacilityWrite:
+      properties:
+        name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Name
+        area_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Area Id
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - area_id
+      title: FacilityWrite
     HTTPValidationError:
       properties:
         detail:
@@ -4756,6 +5737,23 @@ components:
       - degraded
       - down
       title: HealthState
+    PlaceList:
+      properties:
+        areas:
+          items:
+            $ref: '#/components/schemas/AreaDetail'
+          type: array
+          title: Areas
+        facilities:
+          items:
+            $ref: '#/components/schemas/FacilityDetail'
+          type: array
+          title: Facilities
+      type: object
+      required:
+      - areas
+      - facilities
+      title: PlaceList
     ResponseMeta:
       properties:
         request_id:
@@ -5513,6 +6511,12 @@ components:
           maxLength: 160
           minLength: 1
           title: Technical Place
+        facility_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Facility Id
         description:
           anyOf:
           - type: string
@@ -5604,6 +6608,11 @@ components:
       title: RuntimeChannelDesiredState
     RuntimeChannelDetail:
       properties:
+        facility_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Facility Id
         channel_id:
           type: string
           title: Channel Id
@@ -6339,6 +7348,11 @@ components:
       title: RuntimeChannelStreamListResponse
     RuntimeChannelSummary:
       properties:
+        facility_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Facility Id
         channel_id:
           type: string
           title: Channel Id
@@ -6545,6 +7559,12 @@ components:
       title: RuntimeChannelTriggerablePipelineLink
     RuntimeChannelUpdateRequest:
       properties:
+        facility_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Facility Id
         name:
           anyOf:
           - type: string
@@ -7529,6 +8549,12 @@ components:
           default: runtime.live-view.state.v1
         state:
           $ref: '#/components/schemas/RuntimeLiveViewState'
+        execution_result:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Execution Result
         meta:
           $ref: '#/components/schemas/ResponseMeta'
       additionalProperties: false
@@ -7630,6 +8656,13 @@ components:
           type: string
           pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
           title: Model Family Slug
+        label_project_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Label Project Id
         target_path:
           $ref: '#/components/schemas/TargetPath'
           default: realtime
@@ -7723,6 +8756,10 @@ components:
             minLength: 3
           - type: 'null'
           title: Idempotency Key
+        pipeline_image:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineCaptureImage'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -8058,6 +9095,10 @@ components:
             minLength: 3
           - type: 'null'
           title: Idempotency Key
+        pipeline_image:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimePipelineCaptureImage'
+          - type: 'null'
         interval_seconds:
           type: integer
           maximum: 3600.0
@@ -8242,8 +9283,10 @@ components:
           - slider
           - boolean
           - select
+          - multi_select
           - channel_ref
           - image_upload
+          - image_upload_list
           - model_ref
           - zone_list
           - roi
@@ -8963,6 +10006,40 @@ components:
       additionalProperties: false
       type: object
       title: RuntimePipelineAuthoringGraph
+    RuntimePipelineCaptureImage:
+      properties:
+        node_key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,63}$
+          title: Node Key
+        output_port:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Output Port
+        pipeline_version_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Pipeline Version Id
+        frame:
+          $ref: '#/components/schemas/RuntimeLiveFrame'
+        eligibility:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Eligibility
+      additionalProperties: false
+      type: object
+      required:
+      - node_key
+      - output_port
+      - frame
+      title: RuntimePipelineCaptureImage
+      description: An operator-selected snapshot, not a request for the next live
+        frame.
     RuntimePipelineDefinitionCreateRequest:
       properties:
         slug:
@@ -9299,6 +10376,10 @@ components:
           anyOf:
           - $ref: '#/components/schemas/RuntimeLiveFrame'
           - type: 'null'
+        bark_job:
+          anyOf:
+          - $ref: '#/components/schemas/StemBarkJob'
+          - type: 'null'
         selected_node_key:
           anyOf:
           - type: string
@@ -9308,6 +10389,10 @@ components:
         include_capture_outputs:
           type: boolean
           title: Include Capture Outputs
+          default: false
+        include_execution_result:
+          type: boolean
+          title: Include Execution Result
           default: false
       additionalProperties: false
       type: object
@@ -9948,6 +11033,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/RuntimeStemCurvatureCoordinateFrameDefinition'
           - type: 'null'
+        spatial_calibration_enabled:
+          type: boolean
+          title: Spatial Calibration Enabled
+          default: false
+        intrinsic_calibration:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeCameraIntrinsicCalibrationProfile'
+          - type: 'null'
         measurement_geometry_mode:
           type: string
           enum:
@@ -10158,6 +11251,10 @@ components:
           anyOf:
           - $ref: '#/components/schemas/RuntimeStemCurvatureCoordinateFrameDefinition'
           - type: 'null'
+        spatial_calibration:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeStemSpatialCalibration'
+          - type: 'null'
         measurement_geometry_mode:
           type: string
           enum:
@@ -10295,7 +11392,9 @@ components:
       properties:
         method:
           type: string
-          const: MANUAL_REFERENCE_POINT_HOMOGRAPHY
+          enum:
+          - MANUAL_REFERENCE_POINT_HOMOGRAPHY
+          - CALIBRATED_XY_Z_PNP_V1
           title: Method
           default: MANUAL_REFERENCE_POINT_HOMOGRAPHY
         created_at:
@@ -11996,6 +13095,89 @@ components:
       - y_mm
       - z_mm
       title: RuntimeStemRotationViewPoint
+    RuntimeStemSpatialCalibration:
+      properties:
+        method:
+          type: string
+          const: CALIBRATED_XY_Z_PNP_V1
+          title: Method
+          default: CALIBRATED_XY_Z_PNP_V1
+        camera_matrix:
+          items:
+            type: number
+          type: array
+          maxItems: 9
+          minItems: 9
+          title: Camera Matrix
+        rotation_world_to_camera:
+          items:
+            type: number
+          type: array
+          maxItems: 9
+          minItems: 9
+          title: Rotation World To Camera
+        translation_world_to_camera_mm:
+          items:
+            type: number
+          type: array
+          maxItems: 3
+          minItems: 3
+          title: Translation World To Camera Mm
+        camera_center_mm:
+          items:
+            type: number
+          type: array
+          maxItems: 3
+          minItems: 3
+          title: Camera Center Mm
+        projection_matrix:
+          items:
+            type: number
+          type: array
+          maxItems: 12
+          minItems: 12
+          title: Projection Matrix
+        reference_point_count:
+          type: integer
+          minimum: 5.0
+          title: Reference Point Count
+        rms_reprojection_error_px:
+          type: number
+          minimum: 0.0
+          title: Rms Reprojection Error Px
+        maximum_reprojection_error_px:
+          type: number
+          minimum: 0.0
+          title: Maximum Reprojection Error Px
+        z_reprojection_error_px:
+          type: number
+          minimum: 0.0
+          title: Z Reprojection Error Px
+        z_reference_displacement_px:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Z Reference Displacement Px
+        pose_condition_number:
+          type: number
+          minimum: 1.0
+          title: Pose Condition Number
+      additionalProperties: false
+      type: object
+      required:
+      - camera_matrix
+      - rotation_world_to_camera
+      - translation_world_to_camera_mm
+      - camera_center_mm
+      - projection_matrix
+      - reference_point_count
+      - rms_reprojection_error_px
+      - maximum_reprojection_error_px
+      - z_reprojection_error_px
+      - z_reference_displacement_px
+      - pose_condition_number
+      title: RuntimeStemSpatialCalibration
+      description: Metric camera pose in the right-handed machine XYZ frame, for undistorted
+        pixels.
     RuntimeStemSurfacePhaseCalibrationCalculateRequest:
       properties:
         calibration_id:
@@ -12893,7 +14075,7 @@ components:
           title: Pipeline Label
         timeout_ms:
           type: integer
-          maximum: 30000.0
+          maximum: 120000.0
           minimum: 50.0
           title: Timeout Ms
         rate_limit_per_minute:
@@ -13140,7 +14322,7 @@ components:
           title: Pipeline Label
         timeout_ms:
           type: integer
-          maximum: 30000.0
+          maximum: 120000.0
           minimum: 50.0
           title: Timeout Ms
         rate_limit_per_minute:
@@ -13289,6 +14471,36 @@ components:
       - batch-worker
       - maintenance-worker
       title: ServiceName
+    StemBarkJob:
+      properties:
+        schema_version:
+          type: string
+          const: stem.bark-job.v1
+          title: Schema Version
+          default: stem.bark-job.v1
+        csv_text:
+          type: string
+          maxLength: 1000000
+          minLength: 1
+          title: Csv Text
+        csv_filename:
+          type: string
+          maxLength: 240
+          title: Csv Filename
+          default: measurement.csv
+        side_mapping:
+          anyOf:
+          - type: string
+            enum:
+            - left_first
+            - left_last
+          - type: 'null'
+          title: Side Mapping
+      additionalProperties: false
+      type: object
+      required:
+      - csv_text
+      title: StemBarkJob
     TargetPath:
       type: string
       enum:

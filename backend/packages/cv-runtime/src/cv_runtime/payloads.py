@@ -14,6 +14,7 @@ from cv_contracts import (
     RuntimeStemRotationViewModel,
     SegmentationPrediction,
 )
+from cv_contracts.bark import BarkSideMeasurement, EndfaceReference, StemCsvMeasurement
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -1891,6 +1892,41 @@ class DisplayOutputPayload(RuntimePayload):
     render_enriched_labels: bool = True
 
 
+class StemCsvPayload(RuntimePayload):
+    payload_type: Literal["stem_csv"] = "stem_csv"
+    measurement: StemCsvMeasurement
+    side_mapping_override: Literal["left_first", "left_last"] | None = None
+
+
+class EndfaceReferencePayload(RuntimePayload):
+    payload_type: Literal["endface_reference"] = "endface_reference"
+    reference: EndfaceReference
+
+
+class EndfaceCalibrationPayload(RuntimePayload):
+    payload_type: Literal["endface_calibration"] = "endface_calibration"
+    reference: EndfaceReference
+    valid: bool = False
+    reason_codes: list[str] = Field(default_factory=list)
+    image_context_id: str | None = None
+    image_to_mm: list[float] = Field(default_factory=list)
+    image_to_view: list[float] = Field(default_factory=list)
+    origin_mm: tuple[float, float] = (0, 0)
+    center_mm: tuple[float, float] = (0, 0)
+    mm_per_pixel: float = 0.25
+    outer_mask: dict[str, Any] | None = None
+    registration_hash: str | None = None
+    error_mm: float | None = None
+    stability_mm: float | None = None
+    effective_source_mm_per_pixel: float | None = None
+    alternative_view_to_mm: list[list[float]] = Field(default_factory=list)
+
+
+class BarkMeasurementPayload(RuntimePayload):
+    payload_type: Literal["bark_measurement"] = "bark_measurement"
+    measurement: BarkSideMeasurement
+
+
 AnyRuntimePayload = (
     FramePayload
     | SynchronizedFrameSetPayload
@@ -1927,6 +1963,10 @@ AnyRuntimePayload = (
     | CaptureIntentsPayload
     | OverlayPayload
     | DisplayOutputPayload
+    | StemCsvPayload
+    | EndfaceReferencePayload
+    | EndfaceCalibrationPayload
+    | BarkMeasurementPayload
 )
 
 

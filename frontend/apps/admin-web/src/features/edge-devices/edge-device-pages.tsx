@@ -1,5 +1,6 @@
 import { Tabs, Modal } from '../../components/workspace-ui';
 import { useState } from 'react';
+import { EdgeSettingsPanel } from './settings';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmptyState, Panel } from '@cv-platform/ui-kit';
@@ -14,6 +15,7 @@ import { api } from '../../app/api';
 import { describeError } from '../../app/errors';
 import { useNotifications } from '../../components/notification-provider';
 import { EdgeOrchestration } from './orchestration';
+import { EdgePerformancePanel } from './performance';
 import { edgeDiagnosticTone, edgeStatusLabel } from './presentation';
 
 const initialForm = {
@@ -122,8 +124,9 @@ export function EdgeDeviceListPage() {
               <small className="subtle-text">IP-Adresse des zentralen Servers, der dieses Gerät verwalten darf.</small>
             </label>
             <label>
-              <span>Anlagen-VLAN/CIDR</span>
-              <input required placeholder="192.168.50.0/24" value={form.allowedCidr} onChange={(event) => setForm({ ...form, allowedCidr: event.target.value })} />
+              <span>Erlaubtes Edge-Zielnetz (CIDR)</span>
+              <input required placeholder="192.168.50.21/32" value={form.allowedCidr} onChange={(event) => setForm({ ...form, allowedCidr: event.target.value })} />
+              <small className="subtle-text">Muss die Edge-Geräte-IP enthalten. Bei einem einzelnen Gerät kann dessen IP mit /32 eingetragen werden; die Server-IP darf in einem anderen Netz liegen.</small>
             </label>
             <label>
               <span>Edge-Control-Port (Server → Edge)</span>
@@ -359,8 +362,11 @@ export function EdgeDeviceDetailPage() {
           </button>
         </div>
       </section>
-      <Tabs tabs={['Betrieb', 'Deployments', 'Diagnose']} value={workspaceTab} onChange={setWorkspaceTab}/>
-      <div className="workspace-tab-body" hidden={workspaceTab !== 'Betrieb'}><EdgeOrchestration devices={[device]} detail />
+      <Tabs tabs={['Betrieb', 'Deployments', 'Diagnose', 'Einstellungen']} value={workspaceTab} onChange={setWorkspaceTab}/>
+      {workspaceTab === 'Einstellungen' ? <EdgeSettingsPanel deviceId={edgeDeviceId} enabled={device.enabled} /> : null}
+      <div className="workspace-tab-body" hidden={workspaceTab !== 'Betrieb'}>
+      <EdgePerformancePanel device={device} channelNames={Object.fromEntries(assignedChannels.map(channel => [channel.channel_id, channel.name]))} />
+      <EdgeOrchestration devices={[device]} detail onReconcile={() => reconcileMutation.mutate()} />
       {editForm ? (
         <Modal title="Edge-Gerät bearbeiten" onClose={() => setEditForm(null)} wide><Panel title="Verbindung">
           <form
@@ -389,8 +395,9 @@ export function EdgeDeviceDetailPage() {
               <small className="subtle-text">Zentraler Server, der das Edge-Gerät verwaltet und Kanäle ausrollt.</small>
             </label>
             <label>
-              <span>Anlagen-VLAN/CIDR</span>
+              <span>Erlaubtes Edge-Zielnetz (CIDR)</span>
               <input required value={editForm.allowedCidr} onChange={(event) => setEditForm({ ...editForm, allowedCidr: event.target.value })} />
+              <small className="subtle-text">Muss die Edge-Geräte-IP enthalten. Die Server-IP darf über ein Gateway in einem anderen Netz liegen.</small>
             </label>
             <label>
               <span>Edge-Control-Port (Server → Edge)</span>
@@ -425,7 +432,7 @@ export function EdgeDeviceDetailPage() {
           <div><dt>Boot-ID</dt><dd>{device.current_boot_id ?? 'Noch nicht gemeldet'}</dd></div>
           <div><dt>Identitätsgeneration</dt><dd>{device.identity_generation}</dd></div>
           <div><dt>Edge-Geräte-IP</dt><dd>{device.address.management_ip}</dd></div>
-          <div><dt>Anlagen-VLAN/CIDR</dt><dd>{device.allowed_cidr}</dd></div>
+          <div><dt>Erlaubtes Edge-Zielnetz (CIDR)</dt><dd>{device.allowed_cidr}</dd></div>
           <div><dt>Orchestrierungsserver-IP</dt><dd>{device.server_ip}</dd></div>
           <div><dt>SPS-Trigger-URL</dt><dd>http://{device.address.management_ip}:{device.address.plant_api_port}/edge-plant/v1/channels/&lt;kanal-id&gt;/trigger</dd></div>
           <div><dt>Zugewiesene Kanäle</dt><dd>{device.assigned_channel_count}</dd></div>
@@ -547,6 +554,13 @@ export function EdgeDeviceDetailPage() {
             </div>
             {preflight ? (
               <>
+                {preflight.checks.some(check => check.key === 'admission.runtime.code' && check.outcome === 'fail') && (
+                  <div className="inline-alert inline-alert--warn" role="alert">
+                    <strong>Edge-Runtime zuerst aktualisieren.</strong>
+                    <p>Der Codestand des Geräts unterscheidet sich von der Zentrale. Im Bereich Betrieb das passende signierte Runtime-Paket importieren und aktualisieren. Danach den Gerätestatus abrufen und diesen Preflight erneut ausführen.</p>
+                    <button type="button" onClick={() => setWorkspaceTab('Betrieb')}>Zum Runtime-Update</button>
+                  </div>
+                )}
                 <p className={preflight.ready ? 'inline-alert inline-alert--success' : 'inline-alert inline-alert--danger'}>
                   {preflight.ready ? 'Deployment ist freigegeben.' : 'Deployment ist durch fehlgeschlagene Prüfungen blockiert.'}
                   {' '}{preflight.artifact_count} Artefakte ({formatBytes(preflight.total_artifact_bytes)}).

@@ -274,7 +274,7 @@ class StemSurfaceRotationHandler:
 
         try:
             cv2 = _opencv()
-            gray = _frame_gray(frame, cv2)
+            gray = context.frame_analysis_cache.get(frame, "gray", lambda: _frame_gray(frame, cv2))
             axis = _axis_observation(geometry)
             if gray.shape[:2] != (axis.image_height, axis.image_width):
                 raise ValueError("frame and stem geometry resolutions do not match")
@@ -288,6 +288,7 @@ class StemSurfaceRotationHandler:
                 image_width=axis.image_width,
                 image_height=axis.image_height,
                 cv2=cv2,
+                cache=context.frame_analysis_cache,
             )
             eroded_mask = _eroded_stem_mask(
                 mask,
@@ -1923,7 +1924,14 @@ def _segment_mask(
     image_width: int,
     image_height: int,
     cv2: Any,
+    cache: Any = None,
 ) -> np.ndarray:
+    if cache is not None:
+        polygon_key = tuple(tuple((float(p.x), float(p.y)) for p in s.polygon)
+                            for s in segments.segments)
+        return cache.get(segments, ("surface_mask", image_width, image_height, polygon_key),
+                         lambda: _segment_mask(segments, image_width=image_width,
+                                               image_height=image_height, cv2=cv2))
     if len(segments.segments) != 1:
         raise ValueError("exactly one active segment is required")
     points = np.asarray(
@@ -1940,6 +1948,7 @@ def _segment_mask(
     cv2.fillPoly(mask, [polygon], 255)
     if int(cv2.countNonZero(mask)) <= 0:
         raise ValueError("active stem mask is empty")
+    mask.flags.writeable = False
     return mask
 
 
@@ -1976,7 +1985,9 @@ def _frame_gray(frame: FramePayload, cv2: Any) -> np.ndarray:
         gray = cv2.cvtColor(image, cv2.COLOR_BGRA2GRAY)
     else:
         raise ValueError("frame must contain one, three, or four channels")
-    return np.ascontiguousarray(gray, dtype=np.uint8)
+    result = np.ascontiguousarray(gray, dtype=np.uint8).view()
+    result.flags.writeable = False
+    return result
 
 
 def _store_rotation_baseline(

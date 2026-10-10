@@ -812,6 +812,12 @@ def _load_channel_context(session: Session, rows: list[RuntimeChannel]) -> dict[
         ).all():
             latest_executions[execution.channel_id] = execution
         for row in rows:
+            # Edge workloads are supervised by the Edge Agent. A RuntimeExecution
+            # belongs to the central executor and can remain as historical data
+            # after a channel is moved to an Edge device. Do not let that stale
+            # central state override the durable Edge channel state.
+            if row.execution_target == "edge_device":
+                continue
             active_execution = active_executions.get(row.active_runtime_execution_id or "")
             if (
                 active_execution is not None
@@ -1747,6 +1753,19 @@ def _normalize_basler_pylon_config(
             if gain_db < 0:
                 raise ValueError("Basler Pylon gain_db must be a non-negative number.")
             normalized["gain_db"] = gain_db
+
+    if "gain_raw" in normalized:
+        value = normalized.get("gain_raw")
+        if value is None or value == "":
+            normalized.pop("gain_raw", None)
+        else:
+            try:
+                gain_raw = int(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Basler Pylon gain_raw must be a non-negative integer.") from exc
+            if gain_raw < 0:
+                raise ValueError("Basler Pylon gain_raw must be a non-negative integer.")
+            normalized["gain_raw"] = gain_raw
 
     for key in (
         "width",

@@ -258,6 +258,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/runtime/results/{result_record_id}/artifacts/{artifact_name}:
+    get:
+      tags:
+      - runtime-results
+      summary: Get Runtime Result Artifact
+      operationId: get_runtime_result_artifact_api_v1_runtime_results__result_record_id__artifacts__artifact_name__get
+      parameters:
+      - name: result_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Result Record Id
+      - name: artifact_name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Artifact Name
+      responses:
+        '200':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/runtime/results/{result_record_id}:
     get:
       tags:

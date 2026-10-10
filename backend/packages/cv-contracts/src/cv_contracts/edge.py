@@ -19,6 +19,31 @@ class StrictEdgeModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class EdgeSettingsCommand(StrictEdgeModel):
+    request_id: str = Field(pattern=r"^[a-zA-Z0-9-]{8,80}$")
+    expected_revision: str = Field(pattern=r"^[a-f0-9]{64}$")
+    values: dict[str, str]
+
+    @field_validator("values")
+    @classmethod
+    def validate_settings(cls, values: dict[str, str]) -> dict[str, str]:
+        from cv_contracts.edge_environment import validate_values
+
+        return validate_values(values)
+
+
+class EdgeSettingsStatus(StrictEdgeModel):
+    supported: bool = True
+    writable: bool = False
+    message: str | None = None
+    boot_id: str | None = None
+    revision: str | None = None
+    values: dict[str, str] = Field(default_factory=dict)
+    request_id: str | None = None
+    phase: Literal["idle", "queued", "applying", "succeeded", "failed"] = "idle"
+    last_error: str | None = None
+
+
 EdgePlatform = Literal[
     "jetson_orin_nano",
     "jetson_agx_orin",
@@ -130,6 +155,41 @@ class EdgeRuntimeSlot(StrictEdgeModel):
     updated_at: str
 
 
+class EdgeTimingSummary(StrictEdgeModel):
+    key: str
+    node_type: str | None = None
+    status: str | None = None
+    sample_count: int = Field(ge=1)
+    mean_ms: float = Field(ge=0, allow_inf_nan=False)
+    p95_ms: float = Field(ge=0, allow_inf_nan=False)
+    max_ms: float = Field(ge=0, allow_inf_nan=False)
+    last_ms: float = Field(ge=0, allow_inf_nan=False)
+
+
+class EdgeRuntimeMetrics(StrictEdgeModel):
+    observed_at: str
+    window_seconds: float = Field(ge=0, le=10)
+    acquired_frames: int = Field(default=0, ge=0)
+    processed_frames: int = Field(default=0, ge=0)
+    sampled_out_frames: int = Field(default=0, ge=0)
+    execution_errors: int = Field(default=0, ge=0)
+    source_fps: float = Field(default=0, ge=0, allow_inf_nan=False)
+    processed_fps: float = Field(default=0, ge=0, allow_inf_nan=False)
+    last_frame_at: str | None = None
+    last_execution_at: str | None = None
+    stages: list[EdgeTimingSummary] = Field(default_factory=list, max_length=16)
+    nodes: list[EdgeTimingSummary] = Field(default_factory=list, max_length=256)
+
+
+class EdgeRuntimeEngine(StrictEdgeModel):
+    node_key: str
+    cache_hit: bool
+    cache_key: str | None = None
+    reason: str | None = None
+    duration_ms: float = Field(default=0, ge=0, allow_inf_nan=False)
+    engine_size_bytes: int = Field(default=0, ge=0)
+
+
 class EdgeRuntimeProcess(StrictEdgeModel):
     deployment_id: str = Field(min_length=3, max_length=128)
     state: EdgeRuntimeProcessState
@@ -138,6 +198,10 @@ class EdgeRuntimeProcess(StrictEdgeModel):
     last_heartbeat_at: str | None = None
     next_restart_at: str | None = None
     last_error: str | None = Field(default=None, max_length=2000)
+    channel_id: str | None = None
+    workload_release_id: str | None = None
+    metrics: EdgeRuntimeMetrics | None = None
+    engines: list[EdgeRuntimeEngine] = Field(default_factory=list)
 
 
 class EdgeStorageQuotaStatus(StrictEdgeModel):
@@ -244,6 +308,7 @@ class EdgeSoftwareRelease(StrictEdgeModel):
     runtime_code_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     node_contract_versions: dict[str, int] = Field(default_factory=dict)
     wheels: dict[str, str] = Field(min_length=1)
+    system_packages: dict[str, str] = Field(default_factory=dict, max_length=201)
 
 
 class EdgeSoftwareCommand(StrictEdgeModel):
@@ -284,9 +349,16 @@ class EdgeSoftwareRolloutRequest(StrictEdgeModel):
 
 
 class EdgeSoftwarePackageSummary(StrictEdgeModel):
-    package_sha256: str
+    package_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size_bytes: int = Field(ge=0)
     release: EdgeSoftwareRelease
+
+
+class EdgeSoftwareTargetManifest(StrictEdgeModel):
+    schema_version: Literal["edge.software.targets.v1"] = "edge.software.targets.v1"
+    central_release_id: str = Field(min_length=1, max_length=160)
+    runtime_code_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    packages: list[EdgeSoftwarePackageSummary] = Field(default_factory=list, max_length=32)
 
 
 class EdgeSoftwareCompatibility(StrictEdgeModel):
@@ -312,12 +384,19 @@ class EdgeSoftwareDeviceSummary(StrictEdgeModel):
     runtime_version: str | None = None
     node_count: int = 0
     requires_update: bool = False
+    active_package_sha256: str | None = None
+    recommended_package_sha256: str | None = None
+    recommendation_reasons: list[str] = Field(default_factory=list)
+    software_observed_at: str | None = None
     releases: list[EdgeSoftwareCompatibility] = Field(default_factory=list)
     commands: list[EdgeSoftwareCommandSummary] = Field(default_factory=list)
 
 
 class EdgeSoftwareOverview(StrictEdgeModel):
     server_runtime_digest: str
+    central_release_id: str | None = None
+    targets_managed: bool = False
+    target_error: str | None = None
     releases: list[EdgeSoftwarePackageSummary] = Field(default_factory=list)
     devices: list[EdgeSoftwareDeviceSummary] = Field(default_factory=list)
 
@@ -490,6 +569,26 @@ class EdgePlantHealth(StrictEdgeModel):
     observed_at: str
 
 
+class EdgePlantResponsePolicy(StrictEdgeModel):
+    """HTTP representation selected by an Edge pipeline's Result output node."""
+
+    mode: Literal["full", "result_only", "result_with_metadata"] = "full"
+    metadata_fields: list[
+        Literal[
+            "correlation_id",
+            "channel_id",
+            "pipeline_version_id",
+            "workload_release_id",
+            "completed_at",
+            "result_sequence",
+            "duplicate",
+            "status",
+            "duration_ms",
+            "timing",
+        ]
+    ] = Field(default_factory=list)
+
+
 class EdgePlantTriggerRequest(StrictEdgeModel):
     """Bounded, task-neutral trigger input. Images are deliberately not accepted here."""
 
@@ -506,7 +605,9 @@ class EdgePlantTriggerResponse(StrictEdgeModel):
     workload_release_id: str = Field(min_length=3, max_length=128)
     correlation_id: str = Field(min_length=1, max_length=160)
     boot_id: str = Field(min_length=1, max_length=128)
-    result_sequence: int = Field(ge=1)
+    result_sequence: int | None = Field(
+        default=None, ge=1, description="Outbox sequence; null when no history result is queued."
+    )
     duplicate: bool = False
     execution_result: dict[str, Any]
     completed_at: str
@@ -579,7 +680,10 @@ class EdgeDeviceRegistrationRequest(StrictEdgeModel):
     technical_place: str | None = Field(default=None, max_length=160)
     address: EdgeDeviceAddress
     allowed_cidr: IPv4Network = Field(
-        description="Isolated machine VLAN/CIDR containing Edge device and orchestration server."
+        description=(
+            "Allowed IPv4 destination network containing the Edge management address; "
+            "the server may be reached through a gateway."
+        )
     )
     server_ip: IPv4Address = Field(
         description="Fixed LAN/VLAN IPv4 address of the central orchestration server."
@@ -590,8 +694,6 @@ class EdgeDeviceRegistrationRequest(StrictEdgeModel):
     def validate_network_scope(self) -> EdgeDeviceRegistrationRequest:
         if self.address.management_ip not in self.allowed_cidr:
             raise ValueError("management_ip must belong to allowed_cidr")
-        if self.server_ip not in self.allowed_cidr:
-            raise ValueError("server_ip must belong to allowed_cidr")
         if self.server_ip == self.address.management_ip:
             raise ValueError("server_ip and management_ip must differ")
         return self
@@ -605,7 +707,10 @@ class EdgeDeviceUpdateRequest(StrictEdgeModel):
     rtsp_port: int | None = Field(default=None, ge=1, le=65535)
     allowed_cidr: IPv4Network | None = Field(
         default=None,
-        description="Isolated machine VLAN/CIDR containing Edge device and orchestration server.",
+        description=(
+            "Allowed IPv4 destination network containing the Edge management address; "
+            "the server may be reached through a gateway."
+        ),
     )
     server_ip: IPv4Address | None = Field(
         default=None,
@@ -652,7 +757,10 @@ class EdgeDeviceSummary(StrictEdgeModel):
     technical_place: str | None = None
     address: EdgeDeviceAddress
     allowed_cidr: IPv4Network = Field(
-        description="Isolated machine VLAN/CIDR containing Edge device and orchestration server."
+        description=(
+            "Allowed IPv4 destination network containing the Edge management address; "
+            "the server may be reached through a gateway."
+        )
     )
     server_ip: IPv4Address = Field(
         description="Fixed LAN/VLAN IPv4 address of the central orchestration server."

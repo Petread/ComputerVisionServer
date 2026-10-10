@@ -199,6 +199,7 @@ def test_high_rate_phase_queue_is_ordered_and_bounded() -> None:
 
 def test_high_rate_phase_runtime_resets_bounded_state_after_camera_reconnect() -> None:
     runtime = object.__new__(_HighRateStemPhaseRuntime)
+    runtime._rate_lock = threading.Lock()
     runtime._last_source_reconnect_count = 0
     runtime._buffer = _OrderedHighRateFrameBuffer(3)
     runtime.bridge = HighRateStemPhaseBridge(HighRatePhaseConfig())
@@ -2041,6 +2042,7 @@ def test_runtime_control_start_drives_realtime_executor_live_state(
         assert live_state.diagnostics.pipeline_inflight_limit_reason in {
             "channel_configuration",
             "per_release_concurrency",
+            "global_inference_concurrency",
         }
         assert live_state.diagnostics.pipeline_stateful_nodes == []
         assert any(

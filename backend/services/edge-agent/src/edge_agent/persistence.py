@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cv_contracts import (
@@ -16,6 +18,17 @@ from cv_contracts import (
     EdgeRuntimeProcess,
     EdgeRuntimeSlot,
 )
+
+from edge_agent.result_storage import (
+    ACK_CACHE_MAX_ITEMS,
+    TRIGGER_CACHE_MAX_BYTES,
+    TRIGGER_CACHE_MAX_ITEMS,
+    TRIGGER_REPLAY_SECONDS,
+)
+
+
+class TriggerCacheFullError(RuntimeError):
+    """A live replay guarantee must not be evicted to accept another trigger."""
 
 
 class EdgeStateStore:
@@ -34,6 +47,8 @@ class EdgeStateStore:
         if str(mode).lower() != "wal":
             raise RuntimeError(f"Edge state database did not enter WAL mode: {mode}")
         self._migrate()
+        self._last_trigger_cleanup = 0.0
+        self.prune_trigger_responses()
 
     @property
     def journal_mode(self) -> str:
@@ -113,10 +128,26 @@ class EdgeStateStore:
             )
             self._connection.execute(
                 """
-                INSERT INTO metadata(key, value) VALUES('schema_version', '5')
+                INSERT INTO metadata(key, value) VALUES('schema_version', '6')
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value
                 """
             )
+            columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(plant_trigger_requests)")
+            }
+            if "size_bytes" not in columns:
+                self._connection.execute(
+                    "ALTER TABLE plant_trigger_requests "
+                    "ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0"
+                )
+            self._connection.execute(
+                "UPDATE plant_trigger_requests "
+                "SET size_bytes = length(CAST(response_json AS BLOB)) "
+                "WHERE size_bytes = 0"
+            )
+            self._recover_reused_sequences()
+            self._prune_ack_requests(self._connection)
             for name in ("A", "B"):
                 self._connection.execute(
                     """
@@ -127,9 +158,36 @@ class EdgeStateStore:
                     (name,),
                 )
 
+    def _recover_reused_sequences(self) -> None:
+        # Older agents could restart numbering after an ACK drained the queue.
+        # Such later rows were never deliverable: give them fresh numbers instead
+        # of silently deleting their results. Each update is restart-safe.
+        rows = self._connection.execute(
+            "SELECT r.boot_id, r.sequence, r.envelope_json FROM results r "
+            "JOIN result_acks a ON a.boot_id = r.boot_id "
+            "WHERE r.sequence <= a.acknowledged_sequence ORDER BY r.boot_id, r.sequence"
+        ).fetchall()
+        for row in rows:
+            sequence = self.highest_sequence(str(row["boot_id"])) + 1
+            payload = json.loads(row["envelope_json"])
+            payload["sequence"] = sequence
+            serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            self._connection.execute(
+                "UPDATE results SET sequence = ?, envelope_json = ?, size_bytes = ? "
+                "WHERE boot_id = ? AND sequence = ?",
+                (
+                    sequence,
+                    serialized,
+                    len(serialized.encode("utf-8")),
+                    row["boot_id"],
+                    row["sequence"],
+                ),
+            )
+
     def plant_trigger_response(
         self, channel_id: str, idempotency_key: str
     ) -> tuple[str, EdgePlantTriggerResponse] | None:
+        self.prune_trigger_responses()
         row = self._fetchone(
             """
             SELECT request_digest, response_json
@@ -145,9 +203,8 @@ class EdgeStateStore:
             EdgePlantTriggerResponse.model_validate_json(row["response_json"]),
         )
 
-    def latest_plant_trigger_response(
-        self, channel_id: str
-    ) -> EdgePlantTriggerResponse | None:
+    def latest_plant_trigger_response(self, channel_id: str) -> EdgePlantTriggerResponse | None:
+        self.prune_trigger_responses()
         row = self._fetchone(
             """
             SELECT response_json FROM plant_trigger_requests
@@ -170,21 +227,57 @@ class EdgeStateStore:
         *,
         created_at: str,
     ) -> None:
+        serialized = response.model_dump_json()
+        size_bytes = len(serialized.encode("utf-8"))
         with self._transaction() as connection:
+            if not self.trigger_cache_has_capacity(size_bytes):
+                raise TriggerCacheFullError("The bounded trigger replay cache is full.")
             connection.execute(
                 """
                 INSERT INTO plant_trigger_requests(
-                    channel_id, idempotency_key, request_digest, response_json, created_at
-                ) VALUES(?, ?, ?, ?, ?)
+                    channel_id, idempotency_key, request_digest,
+                    response_json, created_at, size_bytes
+                ) VALUES(?, ?, ?, ?, ?, ?)
                 """,
                 (
                     channel_id,
                     idempotency_key,
                     request_digest,
-                    response.model_dump_json(),
+                    serialized,
                     created_at,
+                    size_bytes,
                 ),
             )
+
+    def trigger_cache_has_capacity(
+        self, additional_bytes: int, *, additional_items: int = 1
+    ) -> bool:
+        row = self._fetchone(
+            "SELECT COUNT(*) AS items, COALESCE(SUM(size_bytes), 0) AS bytes "
+            "FROM plant_trigger_requests"
+        )
+        return bool(
+            row is not None
+            and int(row["items"]) + additional_items <= TRIGGER_CACHE_MAX_ITEMS
+            and int(row["bytes"]) + additional_bytes <= TRIGGER_CACHE_MAX_BYTES
+        )
+
+    def prune_trigger_responses(self) -> None:
+        cutoff = (datetime.now(UTC) - timedelta(seconds=TRIGGER_REPLAY_SECONDS)).isoformat()
+        with self._transaction() as connection:
+            connection.execute(
+                "DELETE FROM plant_trigger_requests WHERE julianday(created_at) <= julianday(?)",
+                (cutoff,),
+            )
+        self._last_trigger_cleanup = time.monotonic()
+
+    @staticmethod
+    def _prune_ack_requests(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            "DELETE FROM result_ack_requests WHERE rowid <= "
+            "(SELECT rowid FROM result_ack_requests ORDER BY rowid DESC LIMIT 1 OFFSET ?)",
+            (ACK_CACHE_MAX_ITEMS,),
+        )
 
     def metadata(self, key: str) -> str | None:
         row = self._fetchone("SELECT value FROM metadata WHERE key = ?", (key,))
@@ -206,17 +299,13 @@ class EdgeStateStore:
     def deployment(
         self, deployment_id: str
     ) -> tuple[EdgeDeploymentManifest, EdgeDeploymentState, str, dict[str, str]] | None:
-        row = self._fetchone(
-            "SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)
-        )
+        row = self._fetchone("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,))
         return None if row is None else self._deployment_from_row(row)
 
     def deployments(
         self,
     ) -> list[tuple[EdgeDeploymentManifest, EdgeDeploymentState, str, dict[str, str]]]:
-        rows = self._fetchall(
-            "SELECT * FROM deployments ORDER BY updated_at, deployment_id"
-        )
+        rows = self._fetchall("SELECT * FROM deployments ORDER BY updated_at, deployment_id")
         return [self._deployment_from_row(row) for row in rows]
 
     def prepare_deployment(
@@ -472,6 +561,8 @@ class EdgeStateStore:
         ]
 
     def save_process(self, process: EdgeRuntimeProcess, *, updated_at: str) -> None:
+        if time.monotonic() - self._last_trigger_cleanup >= 60:
+            self.prune_trigger_responses()
         with self._transaction() as connection:
             connection.execute(
                 """
@@ -484,9 +575,7 @@ class EdgeStateStore:
             )
 
     def processes(self) -> list[EdgeRuntimeProcess]:
-        rows = self._fetchall(
-            "SELECT process_json FROM runtime_processes ORDER BY deployment_id"
-        )
+        rows = self._fetchall("SELECT process_json FROM runtime_processes ORDER BY deployment_id")
         return [EdgeRuntimeProcess.model_validate_json(row["process_json"]) for row in rows]
 
     def next_sequence(self, boot_id: str) -> int:
@@ -496,7 +585,7 @@ class EdgeStateStore:
         )
         if row is None:
             raise RuntimeError("Could not determine the next result sequence")
-        return int(row["value"]) + 1
+        return max(int(row["value"]), self.acknowledged_sequence(boot_id)) + 1
 
     def insert_result(self, result: EdgeResultEnvelope, *, size_bytes: int) -> None:
         with self._transaction() as connection:
@@ -559,6 +648,7 @@ class EdgeStateStore:
                 "DELETE FROM results WHERE boot_id = ? AND sequence <= ?",
                 (ack.boot_id, ack.acknowledged_through_sequence),
             )
+            self._prune_ack_requests(connection)
 
     def result_streams(self) -> list[EdgeResultStreamSummary]:
         rows = self._fetchall(
@@ -674,16 +764,12 @@ class EdgeStateStore:
             return False
         return int(row["count"]) == end - start + 1
 
-    def _fetchone(
-        self, query: str, parameters: tuple[object, ...] = ()
-    ) -> sqlite3.Row | None:
+    def _fetchone(self, query: str, parameters: tuple[object, ...] = ()) -> sqlite3.Row | None:
         """Serialize reads with writes because this store owns one SQLite connection."""
         with self._lock:
             return self._connection.execute(query, parameters).fetchone()
 
-    def _fetchall(
-        self, query: str, parameters: tuple[object, ...] = ()
-    ) -> list[sqlite3.Row]:
+    def _fetchall(self, query: str, parameters: tuple[object, ...] = ()) -> list[sqlite3.Row]:
         """Materialize rows while holding the shared-connection lock."""
         with self._lock:
             return list(self._connection.execute(query, parameters).fetchall())

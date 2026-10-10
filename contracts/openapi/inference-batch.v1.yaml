@@ -2595,6 +2595,46 @@ components:
       required:
       - generated_at
       title: ResponseMeta
+    SegmentationMask:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          maximum: 16384.0
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          maximum: 16384.0
+          minimum: 1.0
+          title: Height
+        native_width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Native Width
+        native_height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Native Height
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: SegmentationMask
     SegmentationPoint:
       properties:
         x:
@@ -2628,6 +2668,10 @@ components:
             $ref: '#/components/schemas/SegmentationPoint'
           type: array
           title: Polygon
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/SegmentationMask'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:

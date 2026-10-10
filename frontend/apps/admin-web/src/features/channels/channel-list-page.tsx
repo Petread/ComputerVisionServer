@@ -15,6 +15,7 @@ import { describeError } from '../../app/errors';
 import { useNotifications } from '../../components/notification-provider';
 import {
   type ChannelFilters,
+  channelRuntimeActualState,
   channelStatusLabel,
   channelStatusTone,
   filterChannels,
@@ -22,6 +23,7 @@ import {
   sourceTypeLabel
 } from './presentation';
 import { useEdgeViewerLease } from './use-edge-viewer-lease';
+import { BaslerCameraIpField, baslerCameraAddressConfig, validBaslerCameraIp } from './basler-camera-address';
 
 const sourceTypes: RuntimeSourceType[] = [
   'rtsp',
@@ -76,6 +78,7 @@ const initialForm = {
   baslerWidth: '',
   baslerHeight: '',
   baslerTransportMode: 'auto',
+  baslerCameraIp: '',
   maxFps: '',
   sampleEveryN: '1',
   pipelineMaxInflight: '2',
@@ -200,6 +203,7 @@ export function ChannelListPage() {
       form.name.trim() &&
       form.technicalPlace.trim() &&
       sourceAddressValid(form.sourceType, form.sourceAddress) &&
+      (form.sourceType !== 'basler_pylon' || validBaslerCameraIp(form.baslerCameraIp)) &&
       (form.executionTarget === 'server' || Boolean(form.edgeDeviceId)) &&
       !testFileUploadMutation.isPending
   );
@@ -325,6 +329,10 @@ export function ChannelListPage() {
           ) : null}
           {form.sourceType === 'basler_pylon' ? (
             <>
+              <BaslerCameraIpField
+                value={form.baslerCameraIp}
+                onChange={(baslerCameraIp) => setForm({ ...form, baslerCameraIp })}
+              />
               <label>
                 <span>Transport mode</span>
                 <select
@@ -753,7 +761,7 @@ export function ChannelListPage() {
                     force:
                       command === 'stop' &&
                       (['validating', 'loading_pipeline', 'starting', 'stopping'].includes(
-                        channel.runtime_state?.actual_state ?? channel.observed_state
+                        channelRuntimeActualState(channel)
                       ) ||
                         channel.runtime_state?.desired_state === 'start_requested' ||
                         channel.runtime_state?.desired_state === 'stop_requested' ||
@@ -781,7 +789,7 @@ function ChannelCard(props: {
   onCommand: (command: 'start' | 'stop') => void;
 }) {
   const tone = channelStatusTone(props.channel);
-  const actualState = props.channel.runtime_state?.actual_state ?? props.channel.status;
+  const actualState = channelRuntimeActualState(props.channel);
   const desiredState =
     props.channel.runtime_state?.desired_state ?? props.channel.desired_state;
   const runtimeRecoveryRequired =
@@ -1154,7 +1162,7 @@ function aravisGigeConfig(value: string) {
 
 function baslerPylonConfig(value: string, form: typeof initialForm) {
   const config: Record<string, unknown> = {
-    ...baslerIdentifierConfig(value),
+    ...baslerCameraAddressConfig(baslerIdentifierConfig(value), form.baslerCameraIp),
     transport_mode: form.baslerTransportMode || 'auto',
     acquisition_mode: form.baslerAcquisitionMode || 'Continuous',
     grab_strategy: form.baslerGrabStrategy || 'LatestImageOnly',

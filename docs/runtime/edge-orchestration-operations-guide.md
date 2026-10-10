@@ -407,8 +407,8 @@ YBB_EDGE_DEEPSTREAM_VERSION=
 YBB_EDGE_GPU_MODEL=<tatsächliches-GPU-Modell>
 YBB_EDGE_DATA_ROOT=C:\ProgramData\YBB\Edge
 YBB_EDGE_ARTIFACT_QUOTA_BYTES=34359738368
-YBB_EDGE_OUTBOX_QUOTA_BYTES=2147483648
-YBB_EDGE_OUTBOX_MAX_ITEMS=250000
+YBB_EDGE_OUTBOX_QUOTA_BYTES=67108864
+YBB_EDGE_OUTBOX_MAX_ITEMS=10000
 YBB_EDGE_MINIMUM_DISK_FREE_BYTES=2147483648
 YBB_EDGE_ENGINE_BUILDER_MODE=trtexec
 YBB_EDGE_TRTEXEC_PATH=C:\Program Files\NVIDIA Corporation\TensorRT\bin\trtexec.exe
@@ -587,8 +587,8 @@ YBB_EDGE_DEEPSTREAM_VERSION=9.1
 YBB_EDGE_GPU_MODEL=Jetson Orin Nano
 YBB_EDGE_DATA_ROOT=/var/lib/ybb-edge
 YBB_EDGE_ARTIFACT_QUOTA_BYTES=34359738368
-YBB_EDGE_OUTBOX_QUOTA_BYTES=2147483648
-YBB_EDGE_OUTBOX_MAX_ITEMS=250000
+YBB_EDGE_OUTBOX_QUOTA_BYTES=67108864
+YBB_EDGE_OUTBOX_MAX_ITEMS=10000
 YBB_EDGE_MINIMUM_DISK_FREE_BYTES=2147483648
 YBB_EDGE_ENGINE_BUILDER_MODE=trtexec
 YBB_EDGE_TRTEXEC_PATH=/usr/src/tensorrt/bin/trtexec
@@ -663,7 +663,7 @@ curl.exe -s http://192.168.50.21:9443/edge/v1/identity
    Technischer Ort:      Anlage 1 / Station 20
    Edge-Geräte-IP:                         192.168.50.21
    Orchestrierungsserver-IP:                192.168.50.10
-   Anlagen-VLAN/CIDR:                       192.168.50.0/24
+   Erlaubtes Edge-Zielnetz (CIDR):          192.168.50.21/32
    Edge-Control-Port (Server -> Edge):      9443
    HTTP-Trigger-Port am Edge (SPS -> Edge): 9444
    RTSP-Port:                               8554
@@ -676,6 +676,11 @@ curl.exe -s http://192.168.50.21:9443/edge/v1/identity
 
 Für Windows Edge identisch vorgehen, aber IP `192.168.50.31`, Name und
 Plattformwerte des Windows-PCs verwenden.
+
+Das erlaubte Edge-Zielnetz muss die registrierte Edge-Geräte-IP enthalten. Für ein einzelnes
+geroutet erreichbares Gerät ist `<Edge-IP>/32` die engste Freigabe. Die
+Orchestrierungsserver-IP darf in einem anderen Netz liegen; Routing und Firewall müssen die
+Verbindung zwischen beiden Adressen ermöglichen.
 
 Die Edge-Geräte-IP wird im API-Vertrag aus Kompatibilitätsgründen weiterhin als
 `management_ip` bezeichnet und ist nach der Registrierung unveränderlich. Das schützt vor
@@ -794,8 +799,15 @@ Vorschauübertragung. Die lokale Kanalverarbeitung bleibt davon unabhängig.
 
 ### 11.2 Ergebnisse und Replay
 
-Der Edge schreibt Ergebnisse lokal mit `boot_id` und monotoner `sequence` in
-eine Outbox. Der Server:
+Der Edge überträgt nur ausdrücklich aktivierte Ergebnis-Historie: Im Kanal unter
+**Konfiguration → Datenerfassung & Historie** die Historie aktivieren und im
+**Result output** die gewünschten Felder auf das Ziel `history` projizieren.
+Der Sampling-Abstand des Kanals gilt bereits auf dem Edge. Ohne Historie wird
+kein Ausführungsbericht pro Bild in die Outbox geschrieben; HTTP-Antwort,
+Live-Vorschau und Leistungsstatistiken funktionieren trotzdem.
+
+Nur diese ausgewählten Ergebnisse schreibt der Edge mit `boot_id` und monotoner
+`sequence` in den begrenzten Übertragungspuffer. Der Server:
 
 1. liest ab der letzten bestätigten Sequenz;
 2. persistiert das Ergebnis zentral;
@@ -805,15 +817,78 @@ eine Outbox. Der Server:
 Bei Netzunterbrechung werden nicht bestätigte Ergebnisse erneut geliefert. Ein
 Neustart erzeugt eine neue Boot-ID und damit eine neue Sequenzdomäne. Outbox-
 Quoten und freien Speicher in der Geräteansicht überwachen; bei Speicherdruck
-werden neue Aufgaben beeinträchtigt.
+werden neue Schreibvorgänge abgelehnt, bestehende unbestätigte Ergebnisse bleiben
+erhalten. Neue Installationen verwenden 64 MiB beziehungsweise 10.000 Ergebnisse
+als Obergrenze. Vorhandene Werte in `device.env` bleiben beim Runtime-Update erhalten.
+Nach der Bestätigung werden die lokalen Ergebnisse gelöscht. Die SQLite-Datei
+kann ihre bisherige Größe behalten und freie Seiten wiederverwenden.
+
+Details, Grenzen und Einführung: [Edge-Speicherverhalten](edge-result-storage.md).
 
 ### 11.3 Plant-/SPS-Trigger
 
+Im Node **Result output → Edge HTTP-Antwort** lässt sich der Antwortumfang festlegen:
+
+| Auswahl | HTTP-Antwort |
+| --- | --- |
+| Nur konfigurierte Ergebnisfelder | Direkt die Result projections mit Ziel `response`, z. B. `{"result":"LKW wartend"}`. Weitere Felder wie Score, Anzahl oder Messwerte werden in derselben Projektionstabelle hinzugefügt. |
+| Ergebnisfelder + ausgewählte Metadaten | `{"data":{"result":"LKW wartend"},"meta":{"duration_ms":237.5}}`; ausschließlich die ausgewählten Metadaten werden ergänzt. |
+| Vollständiger Ausführungsbericht | Der bisherige Bericht mit `execution_result`, Zwischenergebnissen und Laufzeiten; bleibt aus Kompatibilitätsgründen die Voreinstellung. |
+
+Die Auswahl verkleinert den tatsächlichen HTTP-Body. Die Historie wird unabhängig
+davon ausdrücklich aktiviert; Vorschau und Gerätestatistiken benötigen keine
+Ergebnispersistierung. **Metadaten in der Historie**
+steuert bei Result projections die Zuordnungsfelder der Historie, unabhängig von
+der HTTP-Antwort. Mehrere Result-Output-Nodes einer Pipeline müssen dieselben
+Edge-HTTP-Antworteinstellungen verwenden. Fehler bleiben strukturierte HTTP-Fehler;
+auch im kompakten Modus wird eine fehlgeschlagene Ausführung nicht als erfolgreiches
+Ergebnis zurückgegeben. `last-result` liefert weiterhin den Diagnosebericht.
+
+Im Node **HTTP trigger → Edge HTTP-Trigger** ist **Idempotenzschlüssel am Edge
+verlangen** standardmäßig ausgeschaltet. Ohne Schlüssel startet jeder PUT eine neue
+Verarbeitung; ein leerer Body genügt. Ein freiwillig gesetzter `X-Idempotency-Key`
+verhindert fünf Minuten lang doppelte Verarbeitung. Bei eingeschalteter Pflicht wird ein
+Aufruf ohne Schlüssel vor der Ausführung mit HTTP 422 abgelehnt.
+
+Die neuen Einstellungen betreffen den lokalen Edge-Endpunkt auf Port 9444. Dafür
+Zentrale und Edge-Runtime aktualisieren, die Pipeline speichern/veröffentlichen
+und die aktualisierte Pipeline am Edge aktivieren. Bereits gespeicherte Aufträge
+behalten bei Wiederholung mit demselben Schlüssel ihre damaligen Ergebnisse und
+das damalige Antwortformat innerhalb dieser fünf Minuten, auch nach einem Neustart
+oder Pipeline-Update. Für neue Vorgänge neue Schlüssel verwenden. Nach Ablauf
+kann derselbe Schlüssel wieder eine Verarbeitung auslösen. Ohne übertragene
+Historie ist `result_sequence` im vollständigen Bericht beziehungsweise in den
+ausgewählten Metadaten `null`.
+
+Beispiel für **Nur konfigurierte Ergebnisfelder**, ohne Schlüsselpflicht:
+
+```powershell
+$uri = "http://172.23.27.245:9444/edge-plant/v1/channels/chn_d516a5a7b48f4f9cbb76e96a1f6b7109/trigger"
+$result = Invoke-RestMethod -Method Put -Uri $uri -TimeoutSec 15
+$result | ConvertTo-Json -Depth 10
+# {"result":"LKW wartend"}
+```
+
+Die folgenden Beispiele verwenden das bisherige vollständige Antwortformat.
+
 Der Kanal muss als Trigger-Pipeline veröffentlicht, dem Edge zugewiesen und
 `running` sein. Der Edge hält den neuesten Kameraframe lokal. Jeder SPS-Zyklus
-erhält einen eindeutigen, bei Wiederholungen unveränderten Idempotency-Key.
+startet mit einem einfachen PUT ohne zusätzliche Header und ohne Body eine neue
+Ausführung:
 
-Beispiel von der freigegebenen SPS-/Teststation:
+```powershell
+$channelId = "<channel-id>"
+$result = Invoke-RestMethod -Method Put `
+  -Uri "http://192.168.50.21:9444/edge-plant/v1/channels/$channelId/trigger"
+$result.execution_result.final_response
+```
+
+Ein optionaler `X-Idempotency-Key` schützt vor doppelter Ausführung, falls ein
+Client denselben Auftrag nach einem verlorenen HTTP-Response wiederholt.
+Ohne diesen Header ist jeder PUT ein neuer Trigger.
+
+Beispiel mit optionalem Key und zusätzlicher Nutzlast von der freigegebenen
+SPS-/Teststation:
 
 ```powershell
 $channelId = "<channel-id>"
@@ -831,7 +906,7 @@ $result = Invoke-RestMethod -Method Put `
 $result.execution_result.final_response
 ```
 
-Bei verlorenem Response denselben Key mit identischem Body wiederholen. Der
+Bei verlorenem Response innerhalb von fünf Minuten denselben Key mit identischem Body wiederholen. Der
 Edge liefert das persistierte Ergebnis mit `duplicate=true`; ein anderer Body
 mit demselben Key wird abgelehnt. Alternativ:
 
@@ -842,8 +917,10 @@ Invoke-RestMethod `
 
 Ein HTTP `429` bedeutet Rate- oder Parallelitätsgrenze, `504` eine
 überschrittene Antwortfrist. Ein bereits laufender GPU-Auftrag wird bei `504`
-nicht unsicher abgebrochen; sein Ergebnis wird weiterhin in der Outbox und im
-Last-Result persistiert. Das SPS-Programm muss Fehler und `retryable` auswerten
+nicht unsicher abgebrochen. Die letzte Antwort bleibt kurzzeitig im RAM; mit
+Idempotenzschlüssel bleibt sie für das Wiederholungsfenster auf dem Datenträger.
+Eine Outbox entsteht nur bei ausdrücklich aktivierter Historie. Das SPS-Programm
+muss Fehler und `retryable` auswerten
 und darf bei Unsicherheit keine unkontrollierte Maschinenaktion auslösen.
 
 ### 11.4 SPS-Schreiben aus einer Edge-Pipeline

@@ -121,8 +121,11 @@ class TritonHttpControlClient:
         self.endpoint_url = endpoint_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
-    def load_model(self, model_name: str) -> None:
-        self._post(f"/v2/repository/models/{model_name}/load")
+    def load_model(self, model_name: str, *, config: dict[str, Any] | None = None) -> None:
+        self._post(
+            f"/v2/repository/models/{model_name}/load",
+            json={"parameters": {"config": json.dumps(config)}} if config is not None else None,
+        )
 
     def unload_model(self, model_name: str) -> None:
         self._post(f"/v2/repository/models/{model_name}/unload")
@@ -163,6 +166,39 @@ class RepositoryStageResult:
 class TritonRepositoryManager:
     def __init__(self, settings: PlatformSettings) -> None:
         self.settings = settings
+
+    def load_required_versions(
+        self, *, target_path: TargetPath, stable_model_name: str,
+        versions: list[int], package_manifest: dict[str, Any],
+        triton_client: TritonHttpControlClient,
+    ) -> None:
+        """Override the load configuration without rewriting immutable repository metadata."""
+        variant = self._variant_for_target(package_manifest, target_path)
+        def tensors(items):
+            return [
+                {"name": item["name"], "data_type": triton_dtype(item["data_type"]),
+                 "dims": [int(_render_dim(dim)) for dim in item.get("dims", [])],
+                 **({"format": "FORMAT_NCHW"} if item.get("layout") == "NCHW" else {})}
+                for item in items
+            ]
+        config = {
+            "name": stable_model_name,
+            "platform": _platform_for_artifact_format(str(variant.get("artifact_format") or "tensorrt_plan")),
+            "default_model_filename": str(variant.get("artifact_file") or "model.plan"),
+            "max_batch_size": int(variant["max_batch_size"]),
+            "version_policy": {"specific": {"versions": sorted(set(versions))}},
+            "input": tensors(package_manifest["io_schema"]["input_tensors"]),
+            "output": [{key: value for key, value in item.items() if key != "format"}
+                       for item in tensors(package_manifest["io_schema"]["output_tensors"])],
+            "instance_group": [{"kind": "KIND_GPU", "count": self._target_settings(target_path).instance_group_count}],
+            "parameters": {"cv_platform_task_type": {"string_value": str(package_manifest["task_type"])}},
+        }
+        if target_path == TargetPath.BATCH:
+            config["dynamic_batching"] = {
+                "preferred_batch_size": list(variant.get("preferred_batch_sizes") or []),
+                "max_queue_delay_microseconds": 2000,
+            }
+        triton_client.load_model(stable_model_name, config=config)
 
     def compatibility_report(
         self,

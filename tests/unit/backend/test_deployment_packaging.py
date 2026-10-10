@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy import select
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -166,6 +167,7 @@ def test_build_deployment_package_creates_immutable_package_structure(
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["model_version_id"] == version.id
+    assert manifest["trainer_backend"] == "unit-test-backend"
     assert manifest["compatible_targets"] == ["realtime", "batch"]
     assert manifest["class_count"] == 2
     assert len(manifest["variants"]) == 2
@@ -193,6 +195,52 @@ def test_realtime_instance_group_count_follows_serving_configuration(
     )
     assert realtime_variant["instance_group_count"] == 2
     assert "    count: 2" in config_text
+
+
+def test_legacy_classification_package_is_rebuilt_with_model_class_order(
+    engine: Engine,
+    settings: PlatformSettings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from cv_deploy.packaging import build_deployment_package as build_package
+    from cv_deploy.packaging import sha256_file
+    from inference_gateway.runtime.resolver import _class_labels
+
+    with Session(engine, expire_on_commit=False) as session:
+        version = seed_model_version(session, tmp_path=tmp_path, suffix="classmap")
+        session.commit()
+    # First reproduce a previously built package with the full snapshot class map.
+    build_deployment_package(version.id)
+    copy_manifest = json.loads(json.dumps(version.export_manifest))
+    copy_manifest["trainer_backend"] = "ultralytics-yolo"
+    monkeypatch.setattr(
+        "cv_deploy.packaging._onnx_graph_io_schema",
+        lambda _path: {
+            "input_name": "images", "input_shape": [-1, 3, 640, 640],
+            "outputs": [{"name": "output0", "shape": [-1, 1], "data_type": "FP32"}],
+            "metadata": {"names": "{0: '001_rework'}"},
+        },
+    )
+    manifest = build_package(
+        settings=settings, model_version_id=version.id, model_family_id=version.model_family_id,
+        model_family_slug="classification", version_no=1, task_type="classification",
+        contract_major=1, immutable_metadata_sha256=None, export_manifest=copy_manifest,
+        artifact_manifest=version.artifact_manifest,
+        export_manifest_uri=version.export_manifest_uri,
+        artifact_manifest_uri=version.artifact_manifest_uri,
+    )
+    class_map_path = Path(manifest["package_root"]) / "source" / "class_map.json"
+    assert json.loads(class_map_path.read_text(encoding="utf-8")) == ["rework"]
+    assert manifest["class_count"] == 1
+    assert manifest["class_map_sha256"] == sha256_file(class_map_path)
+    assert manifest["postprocessing"]["class_map"] == ["rework"]
+    assert manifest["io_schema"]["output_tensors"][0]["dims"] == [1]
+    assert _class_labels(manifest) == ["rework"]
+    exported = json.loads((class_map_path.parent / "export_manifest.json").read_text("utf-8"))
+    assert exported["class_count"] == 1
+    assert exported["postprocessing"]["class_map"] == ["rework"]
+    assert copy_manifest["postprocessing"]["class_map"] == ["accepted", "rework"]
 
 
 def test_deployment_runtime_engine_build_normalizes_hardware_profile(
@@ -924,7 +972,7 @@ def test_stage_release_blocks_incompatible_gpu_profile(
     assert not (model_root / str(release.triton_model_version)).exists()
 
 
-def test_stage_release_blocks_real_triton_load_failures_in_dev(
+def test_stage_release_defers_model_load_until_channel_start(
     engine,
     settings: PlatformSettings,
     tmp_path: Path,
@@ -940,8 +988,7 @@ def test_stage_release_blocks_real_triton_load_failures_in_dev(
         promotion_id = approve_and_request_staging(session, model_version_id=version.id)
         session.commit()
 
-    with pytest.raises(RuntimeError, match="simulated triton load failure"):
-        stage_model_release(promotion_id)
+    stage_model_release(promotion_id)
 
     with Session(engine, expire_on_commit=False) as session:
         release = session.scalar(
@@ -949,9 +996,11 @@ def test_stage_release_blocks_real_triton_load_failures_in_dev(
         )
 
     assert release is not None
-    assert release.status == DeploymentReleaseStatus.ACTIVATION_FAILED.value
+    assert release.status == DeploymentReleaseStatus.ACTIVATED.value
     assert release.smoke_report["passed"] is False
-    assert release.smoke_report["checks"][0]["metadata"]["error"] == "simulated triton load failure"
+    assert release.smoke_report["runtime_validation_pending"] is True
+    assert release.smoke_report["package_verified"] is True
+    assert fake_triton_client.loaded_models == []
 
 
 def test_packaging_derives_onnx_schema_and_ultralytics_preprocessing(
@@ -1197,7 +1246,7 @@ def test_rollback_reactivates_previous_release_without_rebuilding(
     assert len(version_dirs) == 2
 
 
-def test_deployment_worker_unloads_and_reloads_retained_model(
+def test_deployment_worker_reactivation_does_not_load_without_channel(
     engine,
     tmp_path: Path,
     fake_triton_client: FakeTritonClient,
@@ -1209,7 +1258,8 @@ def test_deployment_worker_unloads_and_reloads_retained_model(
 
     staged = stage_model_release(promotion_id)
     release_id = staged["deployment_release_id"]
-    model_name = staged["triton_model_name"]
+    with Session(engine) as session:
+        model_name = session.get(DeploymentRelease, release_id).triton_model_name
     unloaded: list[str] = []
     fake_triton_client.repository_index = lambda *, ready_only=False: [
         {"name": model_name, "version": "1", "state": "READY"}
@@ -1228,7 +1278,7 @@ def test_deployment_worker_unloads_and_reloads_retained_model(
     activated = activate_deployment_model(release_id)
 
     assert activated["status"] == DeploymentReleaseStatus.ACTIVATED.value
-    assert fake_triton_client.loaded_models[-1] == model_name
+    assert fake_triton_client.loaded_models == []
     with Session(engine, expire_on_commit=False) as session:
         release = session.get(DeploymentRelease, release_id)
     assert release is not None

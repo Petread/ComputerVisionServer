@@ -30,6 +30,7 @@ from cv_db import (
     update_training_job_state,
 )
 from cv_deploy import build_export_manifest_payload, build_training_artifact_manifest_payload
+from cv_deploy.packaging import normalize_classification_export_manifest
 from cv_status import QueueName, SnapshotStatus, TaskType, TrainingJobStatus
 from cv_training.paths import (
     TrainingJobPaths,
@@ -1543,6 +1544,7 @@ def _register_successful_training(
             "cancelled": cancelled,
         }
     )
+    export_manifest = normalize_classification_export_manifest(export_manifest, onnx_path)
     if context.task_type == TaskType.ANOMALY:
         anomaly_metadata = dict((result.runtime_metadata or {}).get("anomaly") or {})
         threshold = float(
@@ -1678,7 +1680,7 @@ def _register_successful_training(
         "artifact_validation": artifact_validation.__dict__,
         "onnx_uri": str(onnx_path),
         "checkpoint_uri": str(checkpoint_path),
-        "class_map_sha256": None if temporal_training else class_map_sha256,
+        "class_map_sha256": export_manifest.get("class_map_sha256"),
         "head_class_order_sha256": class_map_sha256 if temporal_training else None,
         "temporal_artifact_hashes": {
             name: sha256_file(path) for name, path in temporal_artifacts.items()

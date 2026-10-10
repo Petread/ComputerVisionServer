@@ -333,10 +333,9 @@ class EdgeResultSynchronizer:
         overlay_payload = metadata.get("overlay_primitives") or []
         overlays: list[RuntimeOverlayPrimitiveState] = []
         for item in overlay_payload if isinstance(overlay_payload, list) else []:
-            try:
-                overlays.append(RuntimeOverlayPrimitiveState.model_validate(item))
-            except Exception:
-                continue
+            overlay = _edge_overlay_primitive(item, preview=preview)
+            if overlay is not None:
+                overlays.append(overlay)
         state = RuntimeLiveViewState(
             channel_id=preview.channel_id,
             runtime_instance_id=edge_live_view_runtime_id(preview.channel_id),
@@ -372,7 +371,8 @@ class EdgeResultSynchronizer:
                 source_fps=_optional_float(metadata.get("source_fps")),
                 processed_fps=_optional_float(metadata.get("processed_fps")),
                 latency_ms=_optional_float(metadata.get("latency_ms")),
-                frame_count=preview.sequence,
+                frame_count=_nonnegative_count(metadata.get("processed_frames"), preview.sequence),
+                acquired_frame_count=_nonnegative_count(metadata.get("acquired_frames")),
                 last_frame_at=preview.captured_at,
                 connected_clients=1,
             ),
@@ -384,6 +384,11 @@ class EdgeResultSynchronizer:
             diagnostics=RuntimeLiveDiagnostics(
                 source_type="edge_preview",
                 stream_transport="edge-http-lease-relay",
+                pipeline_node_timings=(
+                    metadata.get("pipeline_node_timings")
+                    if isinstance(metadata.get("pipeline_node_timings"), list)
+                    else []
+                ),
                 warnings=(
                     []
                     if metadata.get("overlay_included")
@@ -398,6 +403,51 @@ class EdgeResultSynchronizer:
 def _relay_lease_id(edge_device_id: str, channel_id: str) -> str:
     digest = hashlib.sha256(f"{edge_device_id}:{channel_id}".encode()).hexdigest()
     return f"relay-{digest[:32]}"
+
+
+def _edge_overlay_primitive(
+    item: object,
+    *,
+    preview: object,
+) -> RuntimeOverlayPrimitiveState | None:
+    """Accept shared-runtime provenance fields without dropping the whole primitive."""
+    if not isinstance(item, dict):
+        return None
+    payload = {
+        key: value
+        for key, value in item.items()
+        if key in RuntimeOverlayPrimitiveState.model_fields
+    }
+    geometry = payload.get("geometry")
+    if isinstance(geometry, dict):
+        payload.setdefault("coordinate_system", geometry.get("coordinate_system"))
+    payload["coordinate_system"] = payload.get("coordinate_system") or "image_pixels"
+    payload.setdefault(
+        "resolution",
+        {"width": getattr(preview, "width", None), "height": getattr(preview, "height", None)},
+    )
+    producer = {
+        key: item[key]
+        for key in ("node_key", "node_type", "output_port")
+        if item.get(key) is not None
+    }
+    if producer:
+        metadata = payload.get("metadata")
+        payload["metadata"] = {
+            **(metadata if isinstance(metadata, dict) else {}),
+            "producer": producer,
+        }
+    try:
+        return RuntimeOverlayPrimitiveState.model_validate(payload)
+    except Exception:
+        return None
+
+
+def _nonnegative_count(value: object, default: int = 0) -> int:
+    try:
+        return max(0, int(value)) if value is not None else default
+    except (TypeError, ValueError, OverflowError):
+        return default
 
 
 def _optional_float(value: object) -> float | None:

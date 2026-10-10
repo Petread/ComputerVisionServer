@@ -289,7 +289,7 @@ components:
         timeout_ms:
           anyOf:
           - type: integer
-            maximum: 30000.0
+            maximum: 120000.0
             minimum: 50.0
           - type: 'null'
           title: Timeout Ms

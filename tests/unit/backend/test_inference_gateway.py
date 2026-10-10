@@ -8,6 +8,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -22,13 +23,21 @@ from cv_core.settings import (
     StorageRoots,
 )
 from cv_db import Base
-from cv_db.models import DeploymentRelease, DeploymentTarget, ModelFamily, ModelVersion
+from cv_db.models import DeploymentRelease, DeploymentTarget, ModelFamily, ModelVersion, RuntimeChannel, RuntimeExecution
 from cv_db.session import _session_factories
 from cv_status import DeploymentReleaseStatus, TargetPath, TaskType
 from fastapi.testclient import TestClient
-from inference_gateway.dependencies import RequestIdentity, _is_internal_runtime_identity
+from inference_gateway.dependencies import (
+    RequestIdentity,
+    _is_internal_runtime_identity,
+    require_runtime_inference,
+)
 from inference_gateway.main_batch import app as batch_app
 from inference_gateway.main_realtime import app as realtime_app
+from inference_gateway.runtime.admission import (
+    operator_direct_inference,
+    runtime_inference_releases,
+)
 from inference_gateway.runtime.public_service import (
     PublicBatchGatewayService,
     PublicRealtimeGatewayService,
@@ -46,6 +55,7 @@ from inference_gateway.runtime.service import (
     _classification_labels_from_scores,
     _classification_image_size,
     _deployment_artifact_path,
+    _detection_tensor,
     _detection_predictions_from_outputs,
     _rows_from_model_output,
     _segmentation_predictions_from_outputs,
@@ -93,6 +103,44 @@ def test_only_internal_runtime_identity_bypasses_realtime_rate_limit() -> None:
     assert _is_internal_runtime_identity(external) is False
 
 
+def test_browser_session_can_bind_an_active_release_for_direct_operator_inference(
+    engine,
+    tmp_path: Path,
+) -> None:
+    configure_session_factories(engine)
+    with Session(engine, expire_on_commit=False) as session:
+        release_id = seed_public_release(
+            session,
+            tmp_path=tmp_path,
+            target_path=TargetPath.REALTIME,
+            family_slug="operator-test-classifier",
+            task_type=TaskType.CLASSIFICATION,
+        )
+        session.commit()
+
+    settings = build_settings(
+        "inference-gateway-rt",
+        tmp_path,
+        api_keys=[("rt-client", "rt-secret", ["realtime.predict"], "inference_client", "rt-unit")],
+    )
+    request = SimpleNamespace(
+        method="POST",
+        query_params={"deployment_release_id": release_id},
+        headers={},
+    )
+    identity = RequestIdentity(auth_mode="session", principal_id="operator")
+
+    async def assert_direct_binding() -> None:
+        dependency = require_runtime_inference(request, settings, identity)
+        await anext(dependency)
+        assert runtime_inference_releases.get() == frozenset({release_id})
+        assert operator_direct_inference.get() is True
+        with pytest.raises(StopAsyncIteration):
+            await anext(dependency)
+
+    asyncio.run(assert_direct_binding())
+
+
 @pytest.fixture()
 def engine():
     engine = create_engine(
@@ -115,6 +163,9 @@ def build_settings(
     secret_root = tmp_path / "secrets"
     secret_root.mkdir(parents=True, exist_ok=True)
     bootstrap_keys: list[ApiKeyBootstrapConfig] = []
+    if service_name == "inference-gateway-rt" and api_keys:
+        api_keys = [*api_keys, ("ybb-inference-runtime", "runtime-secret", ["realtime.predict"],
+                               "service", "runtime-inference-client")]
     for index, (key_id, secret_value, scopes, subject_type, subject_id) in enumerate(api_keys or []):
         secret_path = secret_root / f"api_key_{index}_{key_id}"
         secret_path.write_text(secret_value, encoding="utf-8")
@@ -155,6 +206,32 @@ def configure_session_factories(engine) -> None:
     _session_factories["inference-gateway-rt"] = factory
     _session_factories["inference-gateway-batch"] = factory
     _session_factories["batch-worker"] = factory
+
+
+def runtime_auth_headers(engine) -> dict[str, str]:
+    """Seed a started channel so backend/transport tests exercise real admission."""
+    with Session(engine) as session:
+        if session.get(RuntimeExecution, "rex_gateway_test") is None:
+            session.add(RuntimeChannel(
+                id="chn_gateway_test", slug="gateway-test", name="Gateway test",
+                technical_place="test", desired_state="running", observed_state="running",
+                pipeline_version_id="plv_gateway_test", active_runtime_execution_id="rex_gateway_test",
+            ))
+            session.add(RuntimeExecution(
+                id="rex_gateway_test", channel_id="chn_gateway_test",
+                pipeline_version_id="plv_gateway_test", executor_service="realtime-executor",
+                status="running", actual_state="running", desired_state="running",
+                runtime_plan={"binding_signature": {"model_bindings": [
+                    {"deployment_release_id": release.id}
+                    for release in session.query(DeploymentRelease).all()
+                ]}},
+            ))
+            session.commit()
+    return {
+        "Authorization": "Bearer ybb-inference-runtime.runtime-secret",
+        "X-Runtime-Execution-Id": "rex_gateway_test",
+        "X-Runtime-Pipeline-Version-Id": "plv_gateway_test",
+    }
 
 
 def seed_release(
@@ -343,7 +420,7 @@ def test_real_artifact_routes_do_not_use_hash_simulation(tmp_path: Path) -> None
     assert _uses_simulated_inference(fixture_route) is True
 
 
-def test_capabilities_hide_unready_triton_releases(tmp_path: Path) -> None:
+def test_capabilities_keep_deployed_models_selectable_before_channel_start(tmp_path: Path) -> None:
     settings = build_settings("inference-gateway-rt", tmp_path)
     service = RealtimeGatewayService(
         settings,
@@ -374,7 +451,7 @@ def test_capabilities_hide_unready_triton_releases(tmp_path: Path) -> None:
 
     response = asyncio.run(service.list_capabilities())
 
-    assert [item.deployment_release_id for item in response.items] == ["rel_ready"]
+    assert [item.deployment_release_id for item in response.items] == ["rel_unready", "rel_ready"]
 
 
 def test_status_probe_does_not_block_gateway_event_loop(tmp_path: Path) -> None:
@@ -465,6 +542,176 @@ def test_detection_outputs_are_decoded_from_model_tensors() -> None:
     assert detections[0].label == "hand"
     assert detections[0].box.x_min == pytest.approx(0.1)
     assert detections[0].box.x_max == pytest.approx(0.4)
+
+
+def test_ultralytics_two_class_raw_detection_output_uses_xywh_and_class_scores() -> None:
+    route = _classification_route(
+        task_type=TaskType.DETECTION,
+        manifest={
+            "io_schema": {"input_tensors": [{"dims": [3, 100, 100]}]},
+            "nms": {"enabled": False},
+        },
+        class_labels=["Eine Spur", "Zwei Spuren"],
+    )
+    rows = [
+        [50.0, 40.0, 80.0, 5.0, 0.52, 0.20],
+        [50.0, 70.0, 60.0, 8.0, 0.10, 0.90],
+        *([[0.0] * 6] * 8),
+    ]
+    values = [
+        row[channel]
+        for channel in range(6)
+        for row in rows
+    ]
+
+    detections = _detection_predictions_from_outputs(
+        route=route,
+        outputs={"output0": _OutputTensor("output0", [1, 6, 10], values)},
+        max_detections=10,
+        score_threshold=0.5,
+    )
+
+    assert [(item.label, item.score) for item in detections] == [
+        ("Zwei Spuren", 0.9),
+        ("Eine Spur", 0.52),
+    ]
+    assert detections[0].box.x_min == pytest.approx(0.2)
+    assert detections[0].box.y_min == pytest.approx(0.66)
+    assert detections[0].box.x_max == pytest.approx(0.8)
+    assert detections[0].box.y_max == pytest.approx(0.74)
+    assert detections[1].box.x_min == pytest.approx(0.1)
+    assert detections[1].box.y_min == pytest.approx(0.375)
+    assert detections[1].box.x_max == pytest.approx(0.9)
+    assert detections[1].box.y_max == pytest.approx(0.425)
+
+
+def test_ultralytics_one_class_raw_detection_output_is_not_discarded() -> None:
+    route = _classification_route(
+        task_type=TaskType.DETECTION,
+        manifest={
+            "io_schema": {"input_tensors": [{"dims": [3, 100, 100]}]},
+        },
+        class_labels=["Eine Spur"],
+    )
+    rows = [[50.0, 40.0, 80.0, 5.0, 0.8], *([[0.0] * 5] * 5)]
+    values = [row[channel] for channel in range(5) for row in rows]
+
+    detections = _detection_predictions_from_outputs(
+        route=route,
+        outputs={"output0": _OutputTensor("output0", [1, 5, 6], values)},
+        max_detections=10,
+        score_threshold=0.5,
+    )
+
+    assert len(detections) == 1
+    assert detections[0].label == "Eine Spur"
+    assert detections[0].box.y_min == pytest.approx(0.375)
+    assert detections[0].box.y_max == pytest.approx(0.425)
+
+
+def test_ultralytics_post_nms_detection_output_remains_xyxy() -> None:
+    route = _classification_route(
+        task_type=TaskType.DETECTION,
+        manifest={
+            "io_schema": {"input_tensors": [{"dims": [3, 100, 100]}]},
+        },
+        class_labels=["Eine Spur", "Zwei Spuren"],
+    )
+    rows = [
+        [10.0, 20.0, 90.0, 30.0, 0.8, 1.0],
+        *([[0.0] * 6] * 9),
+    ]
+
+    detections = _detection_predictions_from_outputs(
+        route=route,
+        outputs={
+            "output0": _OutputTensor(
+                "output0",
+                [1, 10, 6],
+                [value for row in rows for value in row],
+            )
+        },
+        max_detections=10,
+        score_threshold=0.5,
+    )
+
+    assert len(detections) == 1
+    assert detections[0].label == "Zwei Spuren"
+    assert detections[0].box.x_min == pytest.approx(0.1)
+    assert detections[0].box.y_min == pytest.approx(0.2)
+    assert detections[0].box.x_max == pytest.approx(0.9)
+    assert detections[0].box.y_max == pytest.approx(0.3)
+
+
+def test_detection_nms_keeps_overlapping_different_classes() -> None:
+    route = _classification_route(
+        task_type=TaskType.DETECTION,
+        manifest={
+            "io_schema": {"input_tensors": [{"dims": [3, 100, 100]}]},
+            "nms": {"enabled": True, "iou_threshold": 0.5},
+        },
+        class_labels=["Eine Spur", "Zwei Spuren"],
+    )
+    rows = [
+        [50.0, 50.0, 80.0, 10.0, 0.9, 0.1],
+        [50.0, 50.0, 80.0, 10.0, 0.1, 0.8],
+        *([[0.0] * 6] * 8),
+    ]
+    values = [row[channel] for channel in range(6) for row in rows]
+
+    detections = _detection_predictions_from_outputs(
+        route=route,
+        outputs={"output0": _OutputTensor("output0", [1, 6, 10], values)},
+        max_detections=10,
+        score_threshold=0.5,
+    )
+
+    assert [(item.label, item.score) for item in detections] == [
+        ("Eine Spur", 0.9),
+        ("Zwei Spuren", 0.8),
+    ]
+
+
+def test_detection_letterbox_is_applied_and_removed_from_returned_coordinates() -> None:
+    Image = pytest.importorskip("PIL.Image")
+    buffer = io.BytesIO()
+    Image.new("RGB", (200, 100), (255, 0, 0)).save(buffer, format="PNG")
+    route = _classification_route(
+        task_type=TaskType.DETECTION,
+        manifest={
+            "io_schema": {"input_tensors": [{"dims": [3, 100, 100]}]},
+            "preprocessing": {
+                "resize": 100,
+                "resize_mode": "letterbox",
+                "letterbox": {"enabled": True, "padding_value": 114, "center": True},
+            },
+        },
+        class_labels=["Eine Spur", "Zwei Spuren"],
+    )
+
+    tensor, transform = _detection_tensor(buffer.getvalue(), route)
+    rows = [[50.0, 50.0, 80.0, 20.0, 0.9, 0.1], *([[0.0] * 6] * 9)]
+    values = [row[channel] for channel in range(6) for row in rows]
+    detections = _detection_predictions_from_outputs(
+        route=route,
+        outputs={"output0": _OutputTensor("output0", [1, 6, 10], values)},
+        max_detections=10,
+        score_threshold=0.5,
+        preprocessing_transform=transform,
+    )
+
+    assert tensor.shape == (1, 3, 100, 100)
+    assert transform.resized_width == 100
+    assert transform.resized_height == 50
+    assert transform.pad_left == 0
+    assert transform.pad_top == 25
+    assert tensor[0, :, 0, 0].tolist() == pytest.approx([114 / 255.0] * 3)
+    assert tensor[0, :, 50, 50].tolist() == pytest.approx([1.0, 0.0, 0.0])
+    assert len(detections) == 1
+    assert detections[0].box.x_min == pytest.approx(0.1)
+    assert detections[0].box.y_min == pytest.approx(0.3)
+    assert detections[0].box.x_max == pytest.approx(0.9)
+    assert detections[0].box.y_max == pytest.approx(0.7)
 
 
 def test_segmentation_outputs_are_decoded_from_model_tensors() -> None:
@@ -1243,7 +1490,7 @@ def test_oriented_detection_postprocessing_returns_corners_and_axis_box() -> Non
     assert detections[0].box.y_min < detections[0].box.y_max
 
 
-def test_realtime_classify_uses_active_release_and_exposes_status(engine, tmp_path: Path, monkeypatch) -> None:
+def test_realtime_classify_uses_channel_selected_release_and_exposes_status(engine, tmp_path: Path, monkeypatch) -> None:
     configure_session_factories(engine)
     with Session(engine, expire_on_commit=False) as session:
         active_release_id, _ = seed_realtime_releases(session, tmp_path=tmp_path)
@@ -1256,6 +1503,7 @@ def test_realtime_classify_uses_active_release_and_exposes_status(engine, tmp_pa
     )
     monkeypatch.setattr(realtime_app.state, "settings", settings, raising=False)
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = RealtimeGatewayService(
@@ -1267,12 +1515,13 @@ def test_realtime_classify_uses_active_release_and_exposes_status(engine, tmp_pa
             "/api/v1/realtime/classify",
             json={
                 "deployment_target": "widget-inspection-rt",
+                "deployment_release_id": "rel_rt_primary",
                 "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg==",
                 "top_k": 2,
             },
-            headers=REALTIME_AUTH_HEADERS,
+            headers=runtime_headers,
         )
-        status = client.get("/api/v1/realtime/models/status", headers=REALTIME_AUTH_HEADERS)
+        status = client.get("/api/v1/realtime/models/status", headers=runtime_headers)
 
     assert response.status_code == 200
     body = response.json()
@@ -1300,6 +1549,7 @@ def test_realtime_detect_routes_to_explicit_release(engine, tmp_path: Path) -> N
         api_keys=[("rt-client", "rt-secret", ["realtime.predict"], "inference_client", "rt-unit")],
     )
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = RealtimeGatewayService(
@@ -1315,7 +1565,7 @@ def test_realtime_detect_routes_to_explicit_release(engine, tmp_path: Path) -> N
                 "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg==",
                 "max_detections": 2,
             },
-            headers=REALTIME_AUTH_HEADERS,
+            headers=runtime_headers,
         )
 
     assert response.status_code == 200
@@ -1341,6 +1591,7 @@ def test_realtime_detect_accepts_binary_image_transport(
         api_keys=[("rt-client", "rt-secret", ["realtime.predict"], "inference_client", "rt-unit")],
     )
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = RealtimeGatewayService(
@@ -1358,7 +1609,7 @@ def test_realtime_detect_accepts_binary_image_transport(
             },
             content=sample_png_bytes,
             headers={
-                **REALTIME_AUTH_HEADERS,
+                **runtime_headers,
                 "Content-Type": "image/png",
             },
         )
@@ -1387,6 +1638,7 @@ def test_realtime_overload_returns_explicit_error_model(engine, tmp_path: Path) 
     )
     service.gate.current_inflight = service.gate.limit
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = service
@@ -1394,9 +1646,10 @@ def test_realtime_overload_returns_explicit_error_model(engine, tmp_path: Path) 
             "/api/v1/realtime/classify",
             json={
                 "deployment_target": "widget-inspection-rt",
+                "deployment_release_id": "rel_rt_primary",
                 "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg==",
             },
-            headers=REALTIME_AUTH_HEADERS,
+            headers=runtime_headers,
         )
 
     assert response.status_code == 429
@@ -1427,7 +1680,8 @@ def test_realtime_triton_request_uses_realtime_timeout_budget(
         captured["timeout_seconds"] = timeout_seconds
         captured["payload_len"] = len(payload_bytes)
         captured["tensor_len"] = len(tensor_bytes)
-        return object()
+        from types import SimpleNamespace
+        return SimpleNamespace(headers={}, json=lambda: {"outputs": []})
 
     monkeypatch.setattr(TritonInferenceBackend, "_post_triton_binary_request", fake_post)
     monkeypatch.setattr(
@@ -1497,6 +1751,7 @@ def test_realtime_invalid_base64_returns_api_error(engine, tmp_path: Path) -> No
         api_keys=[("rt-client", "rt-secret", ["realtime.predict"], "inference_client", "rt-unit")],
     )
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = RealtimeGatewayService(
@@ -1508,16 +1763,17 @@ def test_realtime_invalid_base64_returns_api_error(engine, tmp_path: Path) -> No
             "/api/v1/realtime/classify",
             json={
                 "deployment_target": "widget-inspection-rt",
+                "deployment_release_id": "rel_rt_primary",
                 "image_base64": "not-base64-payload###",
             },
-            headers=REALTIME_AUTH_HEADERS,
+            headers=runtime_headers,
         )
 
     assert response.status_code == 422
     assert response.json()["code"] == "invalid_image_payload"
 
 
-def test_batch_job_lifecycle_materializes_chunks_and_results(
+def test_batch_job_submission_without_channel_is_rejected(
     engine,
     tmp_path: Path,
     monkeypatch,
@@ -1567,31 +1823,9 @@ def test_batch_job_lifecycle_materializes_chunks_and_results(
             },
             headers=BATCH_AUTH_HEADERS,
         )
-        assert response.status_code == 202
-        job_id = response.json()["job_id"]
-
-        materialize = batch_jobs.materialize_batch_input(job_id)
-        assert materialize["status"] == "queued"
-        assert materialize["chunk_count"] == 1
-
-        chunk_result = batch_jobs.run_batch_chunk(job_id, 1)
-        assert chunk_result["status"] == "completed"
-
-        detail = client.get(f"/api/v1/batch/jobs/{job_id}", headers=BATCH_AUTH_HEADERS)
-        results = client.get(f"/api/v1/batch/jobs/{job_id}/results", headers=BATCH_AUTH_HEADERS)
-
-    assert ENQUEUED[0][0] == "batch_worker.jobs.materialize_batch_input"
-    assert detail.status_code == 200
-    detail_body = detail.json()
-    assert detail_body["status"] == "completed"
-    assert detail_body["progress"]["progress_percent"] == 100
-    assert Path(detail_body["result_package"]["bundle_uri"]).exists()
-
-    assert results.status_code == 200
-    results_body = results.json()
-    assert results_body["model_id"] == "batch_primary-classification"
-    assert len(results_body["items"]) == 2
-    assert results_body["progress"]["completed_items"] == 2
+        assert response.status_code == 409
+        assert response.json()["code"] == "runtime_pipeline_required"
+    assert ENQUEUED == []
 
 
 def test_public_model_discovery_lists_parallel_realtime_and_batch_models(
@@ -1761,7 +1995,7 @@ def test_public_anomaly_model_detail_uses_anomaly_schema_and_parameters(
     ]
 
 
-def test_public_realtime_classify_accepts_multipart_and_normalizes_response(
+def test_public_realtime_classify_requires_channel_pipeline(
     engine,
     tmp_path: Path,
     sample_png_bytes: bytes,
@@ -1793,15 +2027,8 @@ def test_public_realtime_classify_accepts_multipart_and_normalizes_response(
             headers=REALTIME_AUTH_HEADERS,
         )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["model_id"] == "quality-classifier"
-    assert body["task_type"] == "classification"
-    assert body["model_version"] == 1
-    assert body["input"]["content_type"] == "image/png"
-    assert body["input"]["width"] == 1
-    assert len(body["predictions"]) == 2
-    assert body["timing"]["total_ms"] >= 0
+    assert response.status_code == 409
+    assert response.json()["code"] == "runtime_pipeline_required"
 
 
 def test_internal_realtime_timeout_is_retryable(
@@ -1837,14 +2064,15 @@ def test_internal_realtime_timeout_is_retryable(
 
     service.backend.segment = timeout_segment  # type: ignore[method-assign]
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = service
         response = client.post(
             "/api/v1/realtime/segment-bytes",
-            params={"deployment_target": "realtime"},
+            params={"deployment_target": "realtime", "deployment_release_id": "rel_timeout-segmenter_realtime"},
             content=sample_png_bytes,
-            headers={**REALTIME_AUTH_HEADERS, "Content-Type": "image/png"},
+            headers={**runtime_headers, "Content-Type": "image/png"},
         )
 
     assert response.status_code == 504
@@ -1896,14 +2124,15 @@ def test_internal_segmentation_reports_backend_phase_timings(
 
     service.backend.segment = timed_segment  # type: ignore[method-assign]
 
+    runtime_headers = runtime_auth_headers(engine)
     with TestClient(realtime_app) as client:
         realtime_app.state.settings = settings
         realtime_app.state.realtime_gateway_service = service
         response = client.post(
             "/api/v1/realtime/segment-bytes",
-            params={"deployment_target": "realtime"},
+            params={"deployment_target": "realtime", "deployment_release_id": "rel_timed-segmenter_realtime"},
             content=sample_png_bytes,
-            headers={**REALTIME_AUTH_HEADERS, "Content-Type": "image/png"},
+            headers={**runtime_headers, "Content-Type": "image/png"},
         )
 
     assert response.status_code == 200
@@ -1949,7 +2178,7 @@ def test_public_realtime_detect_rejects_model_specific_unsupported_parameter(
     assert response.json()["code"] == "unsupported_parameter"
 
 
-def test_public_realtime_segment_accepts_multipart_and_returns_response(
+def test_public_realtime_segment_requires_channel_pipeline(
     engine,
     tmp_path: Path,
     sample_png_bytes: bytes,
@@ -2001,16 +2230,11 @@ def test_public_realtime_segment_accepts_multipart_and_returns_response(
             headers=REALTIME_AUTH_HEADERS,
         )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["model_id"] == "wood-segmenter"
-    assert body["task_type"] == "segmentation"
-    assert body["image_width"] == 1
-    assert body["image_height"] == 1
-    assert isinstance(body["segments"], list)
+    assert response.status_code == 409
+    assert response.json()["code"] == "runtime_pipeline_required"
 
 
-def test_public_batch_job_endpoints_follow_submit_status_results_clear_flow(
+def test_public_batch_job_submission_requires_channel_pipeline(
     engine,
     tmp_path: Path,
     monkeypatch,
@@ -2056,23 +2280,6 @@ def test_public_batch_job_endpoints_follow_submit_status_results_clear_flow(
             },
             headers={**BATCH_AUTH_HEADERS, "Idempotency-Key": "job-quality-1"},
         )
-        assert response.status_code == 202
-        job_id = response.json()["job_id"]
-
-        batch_jobs.materialize_batch_input(job_id)
-        batch_jobs.run_batch_chunk(job_id, 1)
-
-        detail = client.get(f"/api/v1/batch/jobs/{job_id}", headers=BATCH_AUTH_HEADERS)
-        results = client.get(f"/api/v1/batch/jobs/{job_id}/results", headers=BATCH_AUTH_HEADERS)
-        deleted = client.delete(f"/api/v1/batch/jobs/{job_id}", headers=BATCH_AUTH_HEADERS)
-        expired = client.get(f"/api/v1/batch/jobs/{job_id}/results", headers=BATCH_AUTH_HEADERS)
-
-    assert detail.status_code == 200
-    assert detail.json()["status"] == "completed"
-    assert detail.json()["model_id"] == "quality-classifier"
-    assert results.status_code == 200
-    assert results.json()["items"][0]["predictions"]
-    assert deleted.status_code == 200
-    assert deleted.json()["action"] == "cleared"
-    assert expired.status_code == 410
-    assert expired.json()["code"] == "batch_job_expired"
+        assert response.status_code == 409
+        assert response.json()["code"] == "runtime_pipeline_required"
+    assert ENQUEUED == []

@@ -337,6 +337,7 @@ class LatestFrameBuffer:
 class _QueuedHighRateFrame:
     packet: FramePacket
     received_perf: float
+    generation: int = 0
 
 
 class _OrderedHighRateFrameBuffer:
@@ -348,7 +349,7 @@ class _OrderedHighRateFrameBuffer:
         self._condition = threading.Condition()
         self._closed = False
 
-    def push(self, packet: FramePacket) -> int:
+    def push(self, packet: FramePacket, *, generation: int = 0) -> int:
         dropped = 0
         with self._condition:
             if self._closed:
@@ -357,7 +358,9 @@ class _OrderedHighRateFrameBuffer:
                 self._items.popleft()
                 dropped += 1
             self._items.append(
-                _QueuedHighRateFrame(packet=packet, received_perf=time.perf_counter())
+                _QueuedHighRateFrame(
+                    packet=packet, received_perf=time.perf_counter(), generation=generation
+                )
             )
             self._condition.notify()
         return dropped
@@ -380,6 +383,10 @@ class _OrderedHighRateFrameBuffer:
             count = len(self._items)
             self._items.clear()
             return count
+
+    def notify(self) -> None:
+        with self._condition:
+            self._condition.notify_all()
 
 
 class _OrderedStatefulNodeGate:
@@ -498,6 +505,7 @@ class _HighRateStemPhaseRuntime:
         self.config = HighRatePhaseConfig.from_mapping(phase_node.config or {})
         self.bridge = HighRateStemPhaseBridge(self.config)
         self._buffer = _OrderedHighRateFrameBuffer(self.config.phase_frame_queue_size)
+        self.bridge.set_worker_wakeup(self._buffer.notify)
         self._state: dict[str, Any] = {}
         self._thread: threading.Thread | None = None
         self._stop_event: threading.Event | None = None
@@ -506,6 +514,9 @@ class _HighRateStemPhaseRuntime:
         self._rate_tokens = 1.0
         self._last_source_perf = 0.0
         self._last_source_reconnect_count = 0
+        self._last_source_sequence = 0
+        self._ring_metrics: dict[str, float] = {}
+        self._closed = threading.Event()
 
     @classmethod
     def from_graph(
@@ -580,9 +591,22 @@ class _HighRateStemPhaseRuntime:
         self._thread.start()
 
     def submit(self, packet: FramePacket) -> None:
+        source_generation = str(packet.metadata.get("frame_ring_generation")
+                                or self._last_source_reconnect_count)
+        self.bridge.observe_source_generation(source_generation)
+        packet.metadata["high_rate_phase_source_generation"] = source_generation
         self.bridge.record_source_frame()
-        now = time.perf_counter()
+        for key in ("frame_ring_overwritten_frames", "frame_ring_skipped_frames"):
+            self._ring_metrics[key] = float(packet.metadata.get(key, 0))
+        # Rate-limit by capture time, so draining intermediate ring frames does
+        # not misclassify them as a simultaneous burst.
+        capture_ns = packet.metadata.get("capture_monotonic_ns")
+        now = float(capture_ns) / 1e9 if capture_ns else time.perf_counter()
         with self._rate_lock:
+            if packet.sequence <= self._last_source_sequence:
+                self.bridge.record_duplicate_frame()
+                return
+            self._last_source_sequence = packet.sequence
             if self._last_source_perf:
                 elapsed = max(now - self._last_source_perf, 0.0)
                 self._rate_tokens = min(
@@ -590,11 +614,11 @@ class _HighRateStemPhaseRuntime:
                     2.0,
                 )
             self._last_source_perf = now
-            if self._rate_tokens < 1.0:
+            if self._rate_tokens < 1.0 - 1e-6:
                 self.bridge.record_rate_skip()
                 return
-            self._rate_tokens -= 1.0
-        dropped = self._buffer.push(packet)
+            self._rate_tokens = max(self._rate_tokens - 1.0, 0.0)
+        dropped = self._buffer.push(packet, generation=self.bridge.generation)
         if dropped:
             self.bridge.record_queue_drop(dropped)
 
@@ -603,28 +627,49 @@ class _HighRateStemPhaseRuntime:
         if reconnect_count <= self._last_source_reconnect_count:
             return
         self._last_source_reconnect_count = reconnect_count
+        with self._rate_lock:
+            self._last_source_sequence = 0
+            self._last_source_perf = 0.0
+            self._rate_tokens = 1.0
         dropped = self._buffer.clear()
         self.bridge.reset("PHASE_CAMERA_RECONNECT_RESET")
         if dropped:
             self.bridge.record_queue_drop(dropped)
 
     def close(self) -> None:
+        self._closed.set()
+        self.bridge.reset("PHASE_HIGH_RATE_WORKER_STOPPED")
         self._buffer.close()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
-        self.bridge.reset("PHASE_HIGH_RATE_WORKER_STOPPED")
 
     def metrics(self) -> dict[str, float]:
-        return self.bridge.metrics()
+        import cv2
+
+        return {**self.bridge.metrics(), **self._ring_metrics,
+                "executor_opencv_threads": float(cv2.getNumThreads())}
 
     def _run(self) -> None:
-        while self._stop_event is not None and not self._stop_event.is_set():
+        while (self._stop_event is not None and not self._stop_event.is_set()
+               and not self._closed.is_set()):
+            self.bridge.process_pending_seed()
             queued = self._buffer.pop()
             if queued is None:
                 continue
             packet = queued.packet
+            if queued.generation != self.bridge.generation:
+                self.bridge.record_obsolete_frame()
+                continue
+            capture_ns = packet.metadata.get("capture_monotonic_ns")
+            age_ms = (time.perf_counter() - queued.received_perf) * 1000
+            if isinstance(capture_ns, int) and capture_ns > 0:
+                age_ms = max(age_ms, (time.monotonic_ns() - capture_ns) / 1e6)
+            if age_ms > self.config.phase_replay_window_ms:
+                self.bridge.record_stale_frame()
+                continue
             try:
+                preprocessing_started = time.perf_counter()
                 frame = _frame_payload_from_packet(
                     packet,
                     runtime_execution_id=self.runtime_execution_id,
@@ -665,13 +710,17 @@ class _HighRateStemPhaseRuntime:
                 image = canonical.cached_cv2_frame()
                 if image is None:
                     raise RuntimeError("High-rate canonical frame was unexpectedly materialized.")
+                self.bridge.record_stage_timing(
+                    "preprocessing_ms", (time.perf_counter() - preprocessing_started) * 1000,
+                )
                 self.bridge.process_frame(
                     HighRatePhaseFrame(
                         image_bgr=image,
                         frame_sequence=packet.sequence,
                         timestamp=packet.source_timestamp,
                         received_perf=queued.received_perf,
-                    )
+                    ),
+                    generation=queued.generation,
                 )
                 self._last_error = None
             except Exception as exc:
@@ -679,6 +728,7 @@ class _HighRateStemPhaseRuntime:
                 self.bridge.record_processing_failure(
                     frame_sequence=packet.sequence,
                     timestamp=packet.source_timestamp,
+                    generation=queued.generation,
                 )
                 LOGGER.warning(
                     "High-rate stem phase frame failed: channel_id=%s sequence=%s error=%s",
@@ -733,7 +783,7 @@ class RealtimeRuntimeWorker:
             drop_policy=self.settings.runtime.realtime_drop_policy,
         )
         pipeline_state: dict[str, Any] = {}
-        model_resolver = _CachedRuntimeModelResolver(settings=self.settings)
+        model_resolver = _CachedRuntimeModelResolver(settings=self.settings, runtime_execution_id=self.runtime_execution_id)
         try:
             with session_scope(self.settings) as session:
                 execution, loaded = get_ready_runtime_execution_binding(
@@ -807,6 +857,7 @@ class RealtimeRuntimeWorker:
                     runtime_dir=self.settings.runtime.camera_media_runtime_dir,
                     channel_id=self.channel_id,
                     source_type=source_type,
+                    ordered=self._high_rate_phase_runtime is not None,
                 )
                 if uses_shared_camera_source
                 else self.source_factory(source_type, source_config, source_secret_refs)
@@ -821,6 +872,9 @@ class RealtimeRuntimeWorker:
                 else None
             )
             inference_client = self.inference_client_factory(self.settings)
+            if isinstance(inference_client, HttpInferenceGatewayClient):
+                inference_client.runtime_execution_id = self.runtime_execution_id
+                inference_client.pipeline_version_id = loaded.version.id
             if self._high_rate_phase_runtime is not None:
                 self._high_rate_phase_runtime.start(stop_event)
             acquisition_thread = threading.Thread(
@@ -1002,6 +1056,7 @@ class RealtimeRuntimeWorker:
                         buffer_wait_ms=buffer_wait_ms,
                         throttle_wait_ms=throttle_wait_ms,
                         queued_perf=queued_perf,
+                        deadline_perf=queued_perf + pipeline_work_deadline_seconds,
                         executable=executable,
                         pipeline_version_id=pipeline_version_id,
                         source_config=source_config,
@@ -1095,6 +1150,7 @@ class RealtimeRuntimeWorker:
         model_resolver: Callable[[RuntimeLogicalModelRef], RuntimeModelBinding],
         pipeline_state: dict[str, Any],
         high_rate_phase_bridge: HighRateStemPhaseBridge | None,
+        deadline_perf: float | None = None,
         ordered_stateful_node_gate: _OrderedStatefulNodeGate | None = None,
         ordered_stateful_node_keys: tuple[str, ...] = (),
     ) -> _PipelineWorkResult:
@@ -1140,6 +1196,7 @@ class RealtimeRuntimeWorker:
                     self._stem_rotation_priority_control
                 ),
                 "high_rate_stem_phase_bridge": high_rate_phase_bridge,
+                "pipeline_deadline_perf": deadline_perf,
                 "ordered_stateful_node_gate": ordered_stateful_node_gate,
                 "ordered_stateful_node_keys": ordered_stateful_node_keys,
                 "parallel_node_keys": _stem_measurement_parallel_node_keys(executable),
@@ -1393,6 +1450,7 @@ class RealtimeRuntimeWorker:
         inference_nodes: list[str],
     ) -> int:
         stage_timings_ms = dict(work.stage_timings_ms)
+        stage_timings_ms.update(work.result.timing.get("stem_stage_timings_ms", {}))
         high_rate_phase_runtime = getattr(self, "_high_rate_phase_runtime", None)
         if high_rate_phase_runtime is not None:
             stage_timings_ms.update(high_rate_phase_runtime.metrics())
@@ -2032,8 +2090,9 @@ class _CachedModelBinding:
 
 
 class _CachedRuntimeModelResolver:
-    def __init__(self, *, settings: PlatformSettings) -> None:
+    def __init__(self, *, settings: PlatformSettings, runtime_execution_id: str | None = None) -> None:
         self.settings = settings
+        self.runtime_execution_id = runtime_execution_id
         inference_limits = getattr(settings, "inference_limits", None)
         self.ttl_seconds = max(
             float(getattr(inference_limits, "routing_cache_ttl_seconds", 5) or 5),
@@ -2048,7 +2107,14 @@ class _CachedRuntimeModelResolver:
         if not unique_refs:
             return
         with session_scope(self.settings) as session:
-            resolve = build_runtime_model_resolver(session)
+            if self.runtime_execution_id:
+                from cv_db.runtime_model_store import build_execution_model_resolver
+                execution = session.get(RuntimeExecution, self.runtime_execution_id)
+                if execution is None:
+                    raise ValueError("Runtime execution no longer exists.")
+                resolve = build_execution_model_resolver(session, execution, execution.pipeline_version_id)
+            else:
+                resolve = build_runtime_model_resolver(session)
             bindings = {key: resolve(model_ref) for key, model_ref in unique_refs.items()}
         with self._lock:
             # Replace the dictionary as one immutable snapshot. Frame workers
@@ -2060,6 +2126,8 @@ class _CachedRuntimeModelResolver:
         prebound = self._prebound.get(key)
         if prebound is not None:
             return prebound
+        if self.runtime_execution_id:
+            raise ValueError("Model is not bound to the started runtime pipeline.")
         now = time.perf_counter()
         with self._lock:
             cached = self._cache.get(key)

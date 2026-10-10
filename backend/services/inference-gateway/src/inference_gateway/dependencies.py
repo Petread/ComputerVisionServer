@@ -251,6 +251,67 @@ def _is_internal_runtime_identity(identity: RequestIdentity) -> bool:
     )
 
 
+async def require_runtime_inference(
+    request: Request,
+    settings: Annotated[PlatformSettings, Depends(get_settings)],
+    identity: Annotated[RequestIdentity, Depends(require_realtime_access)],
+):
+    if request.method != "POST":
+        yield
+        return
+    from cv_db.models import DeploymentRelease
+    from cv_db.runtime_model_store import lock_runtime_use, pipeline_release_ids, require_runtime_pipeline
+    from cv_status import DeploymentReleaseStatus, TargetPath
+    from inference_gateway.runtime.admission import (
+        operator_direct_inference,
+        runtime_inference_releases,
+    )
+    if identity.auth_mode == "session":
+        deployment_release_id = request.query_params.get("deployment_release_id")
+        if not deployment_release_id:
+            raise PlatformError(
+                code="deployment_release_required",
+                message="Direct operator inference requires an explicit realtime deployment release.",
+                status_code=422,
+            )
+        with session_scope(settings) as session:
+            release = session.get(DeploymentRelease, deployment_release_id)
+            if (
+                release is None
+                or release.target_path != TargetPath.REALTIME.value
+                or release.status != DeploymentReleaseStatus.ACTIVATED.value
+                or release.retired_at is not None
+                or release.deleted_at is not None
+            ):
+                raise PlatformError(
+                    code="deployment_release_unavailable",
+                    message="The selected realtime deployment release is not available for direct operator inference.",
+                    status_code=404,
+                )
+        release_token = runtime_inference_releases.set(frozenset({deployment_release_id}))
+        direct_token = operator_direct_inference.set(True)
+        try:
+            yield
+        finally:
+            operator_direct_inference.reset(direct_token)
+            runtime_inference_releases.reset(release_token)
+        return
+    if settings.api_keys.enabled and not _is_internal_runtime_identity(identity):
+        raise PlatformError(code="runtime_pipeline_required", status_code=409,
+                            message="Use a started channel's trigger endpoint for inference.")
+    execution_id = request.headers.get("X-Runtime-Execution-Id", "")
+    pipeline_id = request.headers.get("X-Runtime-Pipeline-Version-Id", "")
+    with session_scope(settings) as session:
+        lock_runtime_use(session, execution_id)
+        execution = require_runtime_pipeline(session, execution_id=execution_id,
+                                             pipeline_version_id=pipeline_id, allow_draining=True)
+        token = runtime_inference_releases.set(frozenset(pipeline_release_ids(execution, pipeline_id)))
+        try:
+            yield
+        finally:
+            runtime_inference_releases.reset(token)
+
+
 def _audit_machine_auth_failure(
     settings: PlatformSettings,
     *,

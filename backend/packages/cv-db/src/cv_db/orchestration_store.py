@@ -2126,17 +2126,17 @@ def _training_summary(job: TrainingJob | None):
 
 def _endpoint_examples(*, task_type: TaskType, endpoint_name: str) -> list[EndpointRouteExample]:
     if task_type == TaskType.CLASSIFICATION:
-        realtime_path = "/infer/classify"
+        realtime_path = "/api/v1/infer/classify"
     elif task_type in {TaskType.DETECTION, TaskType.ORIENTED_DETECTION}:
-        realtime_path = "/infer/detect"
+        realtime_path = "/api/v1/infer/detect"
     elif task_type == TaskType.ANOMALY:
-        realtime_path = "/infer/anomaly"
+        realtime_path = "/api/v1/infer/anomaly"
     else:
-        realtime_path = "/infer/segment"
+        realtime_path = "/api/v1/infer/segment"
     return [
         EndpointRouteExample(
             method="GET",
-            path=f"/models/{endpoint_name}",
+            path=f"/api/v1/models/{endpoint_name}",
             description="Discover the public contract and current availability for this logical endpoint.",
         ),
         EndpointRouteExample(

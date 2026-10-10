@@ -58,6 +58,7 @@ describe('channel execution placement', () => {
         desired_state: 'stopped',
         observed_state: 'stopped',
         status: 'stopped',
+        placement: { target: 'server' },
         runtime_state: null
       })
     ).toBe(true);
@@ -66,6 +67,7 @@ describe('channel execution placement', () => {
         desired_state: 'running',
         observed_state: 'degraded',
         status: 'degraded',
+        placement: { target: 'server' },
         runtime_state: null
       })
     ).toBe(false);
@@ -74,6 +76,7 @@ describe('channel execution placement', () => {
         desired_state: 'stopped',
         observed_state: 'starting',
         status: 'starting',
+        placement: { target: 'server' },
         runtime_state: null
       })
     ).toBe(false);

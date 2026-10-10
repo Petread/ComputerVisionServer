@@ -97,6 +97,7 @@ namespace Ybb.Edge.BundleBuilder
         public int RtspPort { get; set; }
 
         [Category("SPS-Ausgabe"), DisplayName("SPS-Schreiben aus Pipeline erlauben")]
+        [ReadOnly(true)]
         [Description("Globales Sicherheits-Gate. Erst zusammen mit einem aktivierten Siemens-SPS-Schreibknoten und deaktiviertem Dry-Run darf die Edge-Runtime auf SPS-IP und DB-/Byte-/Bit-Adresse schreiben.")]
         public bool AllowPlcWrites { get; set; }
 
@@ -154,7 +155,7 @@ namespace Ybb.Edge.BundleBuilder
             PlantAllowedIpv4s = ""; ControlPort = 9443; PlantApiPort = 9444; RtspPort = 8554;
             AllowPlcWrites = false;
             StateRoot = "/var/lib/ybb-edge"; ArtifactQuotaBytes = 34359738368;
-            OutboxQuotaBytes = 2147483648; MinimumDiskFreeBytes = 2147483648;
+            OutboxQuotaBytes = 67108864; MinimumDiskFreeBytes = 2147483648;
             EngineBuilderMode = "trtexec"; TrtExecPath = "trtexec";
             CameraAdapters = "rtsp,usb_opencv,gstreamer,aravis_gige,basler_pylon,flir_spinnaker";
             NvmeDevice = "/dev/nvme0n1p1"; WindowsInterfaceAlias = "Ethernet";
@@ -207,7 +208,7 @@ namespace Ybb.Edge.BundleBuilder
             return value;
         }
 
-        public RuntimeUpdateDialog(string outputDirectory, string defaultSigningKey)
+        public RuntimeUpdateDialog(string outputDirectory, string defaultSigningKey, string previousBundle)
         {
             Text = "Runtime-Update erstellen";
             Width = 900; Height = 465; MinimumSize = new Size(760, 465);
@@ -216,6 +217,8 @@ namespace Ybb.Edge.BundleBuilder
             release.Text = "edge-runtime-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
             output.Text = Path.Combine(outputDirectory, release.Text + ".zip");
             signingKey.Text = defaultSigningKey;
+            source.Text = previousBundle;
+            Font = new Font("Segoe UI", 10);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 3, RowCount = 7 };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135));
@@ -302,7 +305,81 @@ namespace Ybb.Edge.BundleBuilder
         }
     }
 
-    internal sealed class MainForm : Form
+    internal sealed class ReleaseKeyDialog : Form
+    {
+        private readonly CheckBox create = new CheckBox { Text = "Neues Schlüsselpaar erzeugen", AutoSize = true };
+        private readonly TextBox privateKey = new TextBox();
+        private readonly TextBox publicKey = new TextBox();
+        private readonly TextBox passphrase = new TextBox { UseSystemPasswordChar = true };
+        private readonly TextBox confirmation = new TextBox { UseSystemPasswordChar = true };
+        public bool Generate { get { return create.Checked; } }
+        public string PrivatePath { get { return Path.GetFullPath(privateKey.Text.Trim()); } }
+        public string PublicPath { get { return Path.GetFullPath(publicKey.Text.Trim()); } }
+        public string TakePassphrase() { var value = passphrase.Text; passphrase.Clear(); confirmation.Clear(); return value; }
+
+        public ReleaseKeyDialog(string existingKey)
+        {
+            Text = "RSA-Schlüssel verwalten"; Width = 880; Height = 440;
+            MinimumSize = new Size(760, 440); StartPosition = FormStartPosition.CenterParent;
+            Font = new Font("Segoe UI", 10); privateKey.Text = existingKey;
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(20), ColumnCount = 3 };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            var info = new Label { AutoSize = true, Dock = DockStyle.Fill, Text =
+                "Bestehender Jetson: den bisherigen privaten Release-Schlüssel auswählen.\n" +
+                "Nur für eine neue Vertrauenskette ein neues Paar erzeugen. Neue private Schlüssel werden verschlüsselt.\n" +
+                "Auf Zentrale und Edge gehört ausschließlich der öffentliche Schlüssel. Fingerabdrücke vergleichen." };
+            layout.Controls.Add(info, 0, 0); layout.SetColumnSpan(info, 3);
+            layout.Controls.Add(create, 0, 1); layout.SetColumnSpan(create, 3);
+            var fields = new[] { privateKey, publicKey, passphrase, confirmation };
+            var labels = new[] { "Privater Schlüssel", "Öffentlicher Export", "Passphrase", "Passphrase wiederholen" };
+            for (var i = 0; i < fields.Length; i++)
+            {
+                layout.Controls.Add(new Label { Text = labels[i], AutoSize = true, Anchor = AnchorStyles.Left }, 0, i + 2);
+                fields[i].Dock = DockStyle.Fill; fields[i].Margin = new Padding(3, 12, 3, 8);
+                layout.Controls.Add(fields[i], 1, i + 2);
+            }
+            confirmation.Enabled = false;
+            create.CheckedChanged += delegate { confirmation.Enabled = create.Checked; };
+            var browsePrivate = new Button { Text = "Auswählen …", AutoSize = true };
+            browsePrivate.Click += delegate {
+                using (FileDialog dialog = create.Checked ? (FileDialog)new SaveFileDialog() : new OpenFileDialog())
+                {
+                    dialog.Filter = "RSA-Schlüssel (*.pem;*.key)|*.pem;*.key";
+                    if (dialog.ShowDialog(this) == DialogResult.OK) privateKey.Text = dialog.FileName;
+                }
+            };
+            var browsePublic = new Button { Text = "Speichern …", AutoSize = true };
+            browsePublic.Click += delegate {
+                using (var dialog = new SaveFileDialog { Filter = "Öffentlicher Schlüssel (*.pem)|*.pem", FileName = "release-signing-public.pem" })
+                    if (dialog.ShowDialog(this) == DialogResult.OK) publicKey.Text = dialog.FileName;
+            };
+            layout.Controls.Add(browsePrivate, 2, 2); layout.Controls.Add(browsePublic, 2, 3);
+            var accept = new Button { Text = "Prüfen und übernehmen", AutoSize = true };
+            accept.Click += delegate {
+                try {
+                    if (String.IsNullOrWhiteSpace(privateKey.Text) || String.IsNullOrWhiteSpace(publicKey.Text))
+                        throw new InvalidDataException("Bitte beide Dateipfade auswählen.");
+                    if (PrivatePath == PublicPath || File.Exists(PublicPath) || (Generate && File.Exists(PrivatePath)))
+                        throw new InvalidDataException("Bestehende Schlüssel werden nicht überschrieben. Einen neuen Exportnamen wählen.");
+                    if (!Generate && !File.Exists(PrivatePath)) throw new FileNotFoundException("Privater Schlüssel fehlt.");
+                    if (passphrase.Text.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+                        throw new InvalidDataException("Passphrase darf keinen Zeilenumbruch enthalten.");
+                    if (Generate && (passphrase.Text.Length < 12 || passphrase.Text != confirmation.Text))
+                        throw new InvalidDataException("Mindestens 12 Zeichen verwenden und identisch wiederholen.");
+                    DialogResult = DialogResult.OK;
+                } catch (Exception ex) { MessageBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            };
+            var cancel = new Button { Text = "Abbrechen", DialogResult = DialogResult.Cancel, AutoSize = true };
+            var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
+            actions.Controls.Add(accept); actions.Controls.Add(cancel);
+            layout.Controls.Add(actions, 0, 6); layout.SetColumnSpan(actions, 3);
+            Controls.Add(layout); AcceptButton = accept; CancelButton = cancel;
+        }
+    }
+
+    public sealed class MainForm : Form
     {
         private readonly PropertyGrid propertyGrid = new PropertyGrid();
         private readonly RichTextBox log = new RichTextBox();
@@ -312,34 +389,126 @@ namespace Ybb.Edge.BundleBuilder
         private readonly FlowLayoutPanel toolbar = new FlowLayoutPanel();
         private BundleOptions options = new BundleOptions();
         private string repositoryRoot;
+        private string previousBundle = "";
+        private readonly TabControl tasks = new TabControl();
+        private readonly Label profileSummary = new Label();
+        private Process activeProcess;
+        public bool IsBusy { get { return activeProcess != null; } }
+        private string ProfilePath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "YBB", "Deployment", "edge-builder.json"); } }
 
-        public MainForm()
+        public MainForm() : this(null) { }
+        public MainForm(string root)
         {
-            Text = "YBB Edge Offline-Bundle-Builder";
+            Text = "YBB · Edge-Updates und Installation";
             Width = 1050; Height = 780; MinimumSize = new Size(820, 600);
             StartPosition = FormStartPosition.CenterScreen;
-            repositoryRoot = FindRepositoryRoot(AppDomain.CurrentDomain.BaseDirectory) ?? Environment.CurrentDirectory;
+            Font = new Font("Segoe UI", 10); BackColor = Color.FromArgb(244, 247, 250);
+            repositoryRoot = root ?? FindRepositoryRoot(AppDomain.CurrentDomain.BaseDirectory) ?? Environment.CurrentDirectory;
+            try {
+                if (File.Exists(ProfilePath)) {
+                    var saved = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(ProfilePath)) as Dictionary<string, object>;
+                    if (saved != null) { Apply(saved); if (saved.ContainsKey("previous_bundle")) previousBundle = Convert.ToString(saved["previous_bundle"]); }
+                }
+            } catch (Exception) { Append("Gespeichertes Profil konnte nicht gelesen werden. Standardwerte werden verwendet."); }
 
             toolbar.Dock = DockStyle.Top; toolbar.AutoSize = true; toolbar.Padding = new Padding(6);
-            toolbar.Controls.Add(MakeButton("Neu", delegate { options = new BundleOptions(); propertyGrid.SelectedObject = options; }));
+            toolbar.Controls.Add(MakeButton("Profil zurücksetzen", delegate { options = new BundleOptions(); previousBundle = ""; propertyGrid.SelectedObject = options; RefreshProfile(); }));
             toolbar.Controls.Add(MakeButton("Konfiguration laden", LoadConfiguration));
             toolbar.Controls.Add(MakeButton("Konfiguration speichern", SaveConfiguration));
-            toolbar.Controls.Add(MakeButton("Pfade prüfen", ValidateConfiguration));
+            toolbar.Controls.Add(MakeButton("RSA-Schlüssel verwalten …", ManageKeys));
             prepareButton.Text = "Online-Inhalte vorbereiten (Internet)"; prepareButton.AutoSize = true; prepareButton.Click += PrepareWheelhouse;
-            toolbar.Controls.Add(prepareButton);
             buildButton.Text = "Bundle bauen"; buildButton.AutoSize = true; buildButton.Click += BuildBundle;
-            toolbar.Controls.Add(buildButton);
             runtimeUpdateButton.Text = "Runtime-Update erstellen …"; runtimeUpdateButton.AutoSize = true;
-            runtimeUpdateButton.Click += BuildRuntimeUpdate; toolbar.Controls.Add(runtimeUpdateButton);
+            runtimeUpdateButton.Click += BuildRuntimeUpdate;
             toolbar.Controls.Add(MakeButton("Ausgabe öffnen", OpenOutput));
 
-            var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 500 };
+            var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, Size = new Size(980, 650), SplitterDistance = 465 };
             propertyGrid.Dock = DockStyle.Fill; propertyGrid.SelectedObject = options; propertyGrid.HelpVisible = true;
             propertyGrid.PropertyValueChanged += PlatformChanged;
             log.Dock = DockStyle.Fill; log.ReadOnly = true; log.BackColor = Color.FromArgb(25, 25, 25); log.ForeColor = Color.Gainsboro;
-            split.Panel1.Controls.Add(propertyGrid); split.Panel2.Controls.Add(log);
+            tasks.Dock = DockStyle.Fill;
+            var update = new TabPage("Runtime aktualisieren") { Padding = new Padding(20), AutoScroll = true };
+            var install = new TabPage("Erstinstallation") { Padding = new Padding(20), AutoScroll = true };
+            var advanced = new TabPage("Expertenoptionen") { Padding = new Padding(10) };
+            var updateLayout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            updateLayout.Controls.Add(Heading("Bestehendes Edge-Gerät aktualisieren"));
+            updateLayout.Controls.Add(Description("1   Einmalig den bisherigen RSA-Schlüssel übernehmen oder ein Schlüsselpaar erzeugen.\n" +
+                "2   Aus einem vorhandenen Edge-Build ein signiertes Runtime-Update erstellen.\n" +
+                "3   ZIP in der Admin-Web-App unter Edge-Orchestrierung importieren und ausrollen.\n\n" +
+                "Gerätekonfiguration, Daten und Kalibrierungen bleiben erhalten. Die Kanäle pausieren beim Runtime-Wechsel."));
+            profileSummary.AutoSize = true; profileSummary.Margin = new Padding(0, 16, 0, 16);
+            updateLayout.Controls.Add(profileSummary);
+            runtimeUpdateButton.BackColor = Color.FromArgb(24, 103, 111); runtimeUpdateButton.ForeColor = Color.White;
+            runtimeUpdateButton.FlatStyle = FlatStyle.Flat; runtimeUpdateButton.Padding = new Padding(12, 8, 12, 8);
+            updateLayout.Controls.Add(runtimeUpdateButton); update.Controls.Add(updateLayout);
+            var installLayout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            installLayout.Controls.Add(Heading("Neues Gerät vorbereiten"));
+            installLayout.Controls.Add(Description("Zielplattform und Netzwerk festlegen, Inhalte vorbereiten und Offline-Installer bauen.\n" +
+                "Für einen bereits eingerichteten Jetson genügt normalerweise ein Runtime-Update."));
+            var platform = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 450 };
+            platform.Items.AddRange(new object[] { "Jetson Orin Nano", "Jetson AGX Orin", "Windows 11 / NVIDIA" });
+            platform.SelectedIndex = (int)options.TargetPlatform;
+            var refreshingPlatform = false;
+            platform.SelectedIndexChanged += delegate { if (!refreshingPlatform) { options.TargetPlatform = (TargetPlatform)platform.SelectedIndex; ApplyPlatformDefaults(); RefreshProfile(); } };
+            tasks.SelectedIndexChanged += delegate { refreshingPlatform = true; platform.SelectedIndex = (int)options.TargetPlatform; refreshingPlatform = false; };
+            installLayout.Controls.Add(platform);
+            AddBasicField(installLayout, "Hostname", "DeviceHostname");
+            AddBasicField(installLayout, "Edge-Geräte-IP", "DeviceIpv4");
+            AddBasicField(installLayout, "Orchestrierungsserver-IP", "ServerIpv4");
+            AddBasicField(installLayout, "Ausgabeverzeichnis", "OutputDirectory");
+            var buildActions = new FlowLayoutPanel { AutoSize = true };
+            buildActions.Controls.Add(prepareButton); buildActions.Controls.Add(buildButton);
+            installLayout.Controls.Add(buildActions); install.Controls.Add(installLayout);
+            advanced.Controls.Add(propertyGrid);
+            tasks.TabPages.Add(update); tasks.TabPages.Add(install); tasks.TabPages.Add(advanced);
+            split.Panel1.Controls.Add(tasks); split.Panel2.Controls.Add(log);
             Controls.Add(split); Controls.Add(toolbar);
+            RefreshProfile();
+            FormClosing += delegate(object sender, FormClosingEventArgs e) {
+                if (IsBusy) { e.Cancel = true; MessageBox.Show(this, "Bitte den laufenden Vorgang zuerst abschließen lassen."); }
+                else SaveProfile();
+            };
             Append("Repository: " + repositoryRoot);
+        }
+
+        private static Label Heading(string text) { return new Label { Text = text, AutoSize = true, Font = new Font("Segoe UI", 16, FontStyle.Bold), Margin = new Padding(0, 0, 0, 14) }; }
+        private static Label Description(string text) { return new Label { Text = text, AutoSize = true, MaximumSize = new Size(800, 0), Margin = new Padding(0, 0, 0, 16) }; }
+        private void AddBasicField(FlowLayoutPanel parent, string label, string property)
+        {
+            var row = new FlowLayoutPanel { AutoSize = true };
+            row.Controls.Add(new Label { Text = label, Width = 210 });
+            var field = new TextBox { Width = 420 };
+            field.Text = Convert.ToString(typeof(BundleOptions).GetProperty(property).GetValue(options, null));
+            field.TextChanged += delegate { typeof(BundleOptions).GetProperty(property).SetValue(options, field.Text, null); propertyGrid.Refresh(); };
+            tasks.SelectedIndexChanged += delegate { field.Text = Convert.ToString(typeof(BundleOptions).GetProperty(property).GetValue(options, null)); };
+            row.Controls.Add(field); parent.Controls.Add(row);
+        }
+        private void RefreshProfile() { profileSummary.Text = "Signaturschlüssel: " + (String.IsNullOrWhiteSpace(options.SigningPrivateKey) ? "Noch nicht eingerichtet · RSA-Schlüssel verwalten öffnen" : options.SigningPrivateKey) + "\nBasis-Build: " + (String.IsNullOrWhiteSpace(previousBundle) ? "Wird beim ersten Update ausgewählt" : previousBundle); }
+        private void SaveProfile()
+        {
+            try {
+                Directory.CreateDirectory(Path.GetDirectoryName(ProfilePath));
+                var map = options.ToDictionary(); map["previous_bundle"] = previousBundle;
+                File.WriteAllText(ProfilePath, new JavaScriptSerializer().Serialize(map), new UTF8Encoding(false));
+            } catch (Exception ex) { Append("Profil konnte nicht gespeichert werden: " + ex.Message); }
+        }
+        private void ManageKeys(object sender, EventArgs e)
+        {
+            try {
+                using (var dialog = new ReleaseKeyDialog(options.SigningPrivateKey)) {
+                    if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                    var privatePath = dialog.PrivatePath; var publicPath = dialog.PublicPath;
+                    var script = Path.Combine(repositoryRoot, "scripts", "release", "build_edge_runtime_update.py");
+                    RunProcess(Quote(script) + " --key-action " + (dialog.Generate ? "create" : "export") +
+                        " --signing-key " + Quote(privatePath) + " --output " + Quote(publicPath) +
+                        " --openssl " + Quote(options.OpenSslExecutable) + " --signing-passphrase-stdin",
+                        "RSA-Schlüssel", "RSA-Schlüssel wird geprüft …", "Schlüssel geprüft. Öffentlichen Export auf Zentrale und Edge verwenden; SHA-256-Fingerabdrücke vergleichen.",
+                        null, dialog.TakePassphrase(), delegate {
+                            options.SigningPrivateKey = privatePath; options.SigningPublicKey = publicPath;
+                            options.RequireSignature = true; propertyGrid.Refresh(); RefreshProfile(); SaveProfile();
+                        });
+                }
+            } catch (Exception ex) { SetActionsEnabled(true); ShowError(ex); }
         }
 
         private Button MakeButton(string text, EventHandler handler)
@@ -357,7 +526,7 @@ namespace Ybb.Edge.BundleBuilder
                 {
                     var map = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(dialog.FileName)) as Dictionary<string, object>;
                     if (map == null) throw new InvalidDataException("JSON-Objekt erwartet.");
-                    Apply(map); propertyGrid.Refresh(); Append("Geladen: " + dialog.FileName);
+                    Apply(map); propertyGrid.Refresh(); RefreshProfile(); SaveProfile(); Append("Geladen: " + dialog.FileName);
                 }
                 catch (Exception ex) { ShowError(ex); }
             }
@@ -406,6 +575,11 @@ namespace Ybb.Edge.BundleBuilder
         private void PlatformChanged(object sender, PropertyValueChangedEventArgs e)
         {
             if (e.ChangedItem == null || e.ChangedItem.PropertyDescriptor == null || e.ChangedItem.PropertyDescriptor.Name != "TargetPlatform") return;
+            ApplyPlatformDefaults();
+        }
+
+        private void ApplyPlatformDefaults()
+        {
             if (options.TargetPlatform == TargetPlatform.Windows11)
             {
                 options.WheelhouseDirectory = @"dist\wheelhouse\windows_11";
@@ -467,7 +641,20 @@ namespace Ybb.Edge.BundleBuilder
             try
             {
                 ValidateOptions();
-                RunBackend(BackendScript(), "build", "Build gestartet …", "Bundle erfolgreich erstellt.");
+                string passphrase = "";
+                if (!String.IsNullOrWhiteSpace(options.SigningPrivateKey)) {
+                    using (var dialog = new Form { Text = "Bundle signieren", Width = 600, Height = 210, StartPosition = FormStartPosition.CenterParent, Font = Font }) {
+                        var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), FlowDirection = FlowDirection.TopDown };
+                        layout.Controls.Add(new Label { Text = "Passphrase des privaten RSA-Schlüssels (leer bei unverschlüsseltem Schlüssel)", AutoSize = true });
+                        var secret = new TextBox { UseSystemPasswordChar = true, Width = 530 };
+                        layout.Controls.Add(secret);
+                        var accept = new Button { Text = "Signiert bauen", AutoSize = true, DialogResult = DialogResult.OK };
+                        layout.Controls.Add(accept); dialog.Controls.Add(layout); dialog.AcceptButton = accept;
+                        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                        passphrase = secret.Text; secret.Clear();
+                    }
+                }
+                RunBackend(BackendScript(), "build", "Build gestartet …", "Bundle erfolgreich erstellt.", passphrase);
             }
             catch (Exception ex) { SetActionsEnabled(true); ShowError(ex); }
         }
@@ -486,9 +673,11 @@ namespace Ybb.Edge.BundleBuilder
                 var script = Path.Combine(repositoryRoot, "scripts", "release", "build_edge_runtime_update.py");
                 if (!File.Exists(script)) throw new FileNotFoundException("Runtime-Update-Exporter fehlt. Bitte das Repository aktualisieren.", script);
                 using (var dialog = new RuntimeUpdateDialog(Absolute(options.OutputDirectory),
-                    String.IsNullOrWhiteSpace(options.SigningPrivateKey) ? "" : Absolute(options.SigningPrivateKey)))
+                    String.IsNullOrWhiteSpace(options.SigningPrivateKey) ? "" : Absolute(options.SigningPrivateKey), previousBundle))
                 {
                     if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                    previousBundle = dialog.BundlePath; options.SigningPrivateKey = dialog.SigningKeyPath;
+                    RefreshProfile(); SaveProfile();
                     var arguments = Quote(script) + " --bundle " + Quote(dialog.BundlePath) +
                         " --output " + Quote(dialog.OutputPath) + " --release-id " + Quote(dialog.ReleaseId) +
                         " --signing-key " + Quote(dialog.SigningKeyPath) + " --refresh-runtime --signing-passphrase-stdin" +
@@ -504,14 +693,15 @@ namespace Ybb.Edge.BundleBuilder
             catch (Exception ex) { SetActionsEnabled(true); ShowError(ex); }
         }
 
-        private void RunBackend(string script, string command, string startedMessage, string successMessage)
+        private void RunBackend(string script, string command, string startedMessage, string successMessage, string passphrase = null)
         {
             var temporary = Path.Combine(Path.GetTempPath(), "ybb-edge-bundle-" + Guid.NewGuid().ToString("N") + ".json");
             File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(options.ToDictionary()), new UTF8Encoding(false));
-            RunProcess(Quote(script) + " " + command + " --config " + Quote(temporary), command, startedMessage, successMessage, temporary);
+            RunProcess(Quote(script) + " " + command + " --config " + Quote(temporary) +
+                (command == "build" ? " --signing-passphrase-stdin" : ""), command, startedMessage, successMessage, temporary, passphrase);
         }
 
-        private void RunProcess(string arguments, string command, string startedMessage, string successMessage, string temporary, string standardInput = null)
+        private void RunProcess(string arguments, string command, string startedMessage, string successMessage, string temporary, string standardInput = null, Action onSuccess = null)
         {
             var process = new Process();
             process.StartInfo = new ProcessStartInfo
@@ -525,14 +715,20 @@ namespace Ybb.Edge.BundleBuilder
             };
             process.EnableRaisingEvents = true;
             process.StartInfo.EnvironmentVariables["PIP_DISABLE_PIP_VERSION_CHECK"] = "1";
+            process.StartInfo.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
+            process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+            process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
             process.OutputDataReceived += delegate(object o, DataReceivedEventArgs a) { if (a.Data != null) BeginInvoke((Action)(() => Append(a.Data))); };
             process.ErrorDataReceived += delegate(object o, DataReceivedEventArgs a) { if (!String.IsNullOrWhiteSpace(a.Data)) BeginInvoke((Action)(() => Append(a.Data))); };
             process.Exited += delegate
             {
+                process.WaitForExit(); // Drain asynchronous output before disposing the process.
                 BeginInvoke((Action)(() =>
                 {
                     var succeeded = process.ExitCode == 0;
+                    activeProcess = null;
                     SetActionsEnabled(true);
+                    if (succeeded && onSuccess != null) onSuccess();
                     Append(succeeded ? successMessage : command + " fehlgeschlagen (Exit " + process.ExitCode + ").");
                     process.Dispose();
                     try { if (temporary != null) File.Delete(temporary); } catch { }
@@ -540,7 +736,7 @@ namespace Ybb.Edge.BundleBuilder
             };
             try
             {
-                SetActionsEnabled(false); Append(startedMessage);
+                SaveProfile(); activeProcess = process; SetActionsEnabled(false); Append(startedMessage);
                 process.Start(); process.BeginOutputReadLine(); process.BeginErrorReadLine();
                 if (standardInput != null)
                 {
@@ -557,6 +753,7 @@ namespace Ybb.Edge.BundleBuilder
             }
             catch
             {
+                activeProcess = null;
                 process.Dispose();
                 try { if (temporary != null) File.Delete(temporary); } catch { }
                 throw;
@@ -570,6 +767,7 @@ namespace Ybb.Edge.BundleBuilder
             runtimeUpdateButton.Enabled = enabled;
             toolbar.Enabled = enabled;
             propertyGrid.Enabled = enabled;
+            tasks.Enabled = enabled;
         }
 
         private string PlatformDisplayName()
@@ -651,7 +849,15 @@ namespace Ybb.Edge.BundleBuilder
             options.WindowsInstallerExecutable = str("windows_installer_executable", options.WindowsInstallerExecutable);
             options.DeviceHostname = str("device_hostname", options.DeviceHostname); options.DeviceIpv4 = str("device_ipv4", options.DeviceIpv4);
             options.ServerIpv4 = str("server_ipv4", options.ServerIpv4); options.PlantAllowedIpv4s = str("plant_allowed_ipv4s", options.PlantAllowedIpv4s);
-            options.AllowPlcWrites = boolean("allow_plc_writes", options.AllowPlcWrites);
+            options.AllowPlcWrites = false;
+            options.PrefixLength = (int)lng("prefix_length", options.PrefixLength);
+            options.GatewayIpv4 = str("gateway_ipv4", options.GatewayIpv4); options.DnsServers = str("dns_servers", options.DnsServers);
+            options.TimeZone = str("timezone", options.TimeZone);
+            options.ControlPort = (int)lng("control_port", options.ControlPort); options.PlantApiPort = (int)lng("plant_api_port", options.PlantApiPort); options.RtspPort = (int)lng("rtsp_port", options.RtspPort);
+            options.ArtifactQuotaBytes = lng("artifact_quota_bytes", options.ArtifactQuotaBytes); options.OutboxQuotaBytes = lng("outbox_quota_bytes", options.OutboxQuotaBytes);
+            options.MinimumDiskFreeBytes = lng("minimum_disk_free_bytes", options.MinimumDiskFreeBytes);
+            options.EngineBuilderMode = str("engine_builder_mode", options.EngineBuilderMode); options.TrtExecPath = str("trtexec_path", options.TrtExecPath);
+            options.NvmeDevice = str("nvme_device", options.NvmeDevice); options.WindowsInterfaceAlias = str("windows_interface_alias", options.WindowsInterfaceAlias);
             options.StateRoot = str("state_root", options.StateRoot); options.CameraAdapters = str("camera_adapters", options.CameraAdapters);
             options.RequireSignature = boolean("require_signature", options.RequireSignature); options.SigningPrivateKey = str("signing_private_key", options.SigningPrivateKey);
             options.SigningPublicKey = str("signing_public_key", options.SigningPublicKey); options.OpenSslExecutable = str("openssl_executable", options.OpenSslExecutable);

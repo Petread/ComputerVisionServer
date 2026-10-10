@@ -20,6 +20,7 @@ from cv_status import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from cv_contracts.bark import StemBarkJob
 from cv_contracts.common import ResponseMeta
 
 
@@ -29,6 +30,7 @@ class StrictRuntimeModel(BaseModel):
 
 class RuntimeLogicalModelRef(StrictRuntimeModel):
     model_family_slug: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,119}$")
+    label_project_id: str | None = Field(default=None, min_length=3, max_length=64)
     target_path: TargetPath = TargetPath.REALTIME
     contract_major: int = Field(default=1, ge=1)
     selection_policy: Literal["active_production", "staged_test", "explicit_release"] = (
@@ -471,6 +473,16 @@ class RuntimeManualCaptureTargetListResponse(StrictRuntimeModel):
     meta: ResponseMeta
 
 
+class RuntimePipelineCaptureImage(StrictRuntimeModel):
+    """An operator-selected snapshot, not a request for the next live frame."""
+
+    node_key: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    output_port: str = Field(min_length=1, max_length=64)
+    pipeline_version_id: str | None = Field(default=None, max_length=64)
+    frame: RuntimeLiveFrame
+    eligibility: dict[str, Any] | None = None
+
+
 class RuntimeManualCaptureRequest(StrictRuntimeModel):
     capture_target_id: str = Field(min_length=3, max_length=64)
     capture_source: RuntimeManualCaptureSource = "LIVE_VIEW_FRAME"
@@ -479,10 +491,23 @@ class RuntimeManualCaptureRequest(StrictRuntimeModel):
     request_predictions: bool = True
     live_session_id: str | None = Field(default=None, min_length=3, max_length=128)
     idempotency_key: str | None = Field(default=None, min_length=3, max_length=160)
+    pipeline_image: RuntimePipelineCaptureImage | None = None
+
+    @model_validator(mode="after")
+    def validate_pipeline_image_source(self) -> RuntimeManualCaptureRequest:
+        if self.pipeline_image is not None and self.capture_source != "PIPELINE_IMAGE_OUTPUT":
+            raise ValueError("A selected pipeline image requires PIPELINE_IMAGE_OUTPUT.")
+        return self
 
 
 class RuntimeManualIntervalCaptureStartRequest(RuntimeManualCaptureRequest):
     interval_seconds: int = Field(default=10, ge=1, le=3600)
+
+    @model_validator(mode="after")
+    def reject_fixed_interval_image(self) -> RuntimeManualIntervalCaptureStartRequest:
+        if self.pipeline_image is not None:
+            raise ValueError("A selected pipeline snapshot supports single capture only.")
+        return self
 
 
 class RuntimeManualIntervalCaptureStopRequest(StrictRuntimeModel):
@@ -637,6 +662,7 @@ class RuntimeNodePropertySpec(StrictRuntimeModel):
         "slider",
         "boolean",
         "select",
+        "multi_select",
         "channel_ref",
         "image_upload",
         "image_upload_list",
@@ -970,11 +996,13 @@ class RuntimePipelinePreviewRequest(StrictRuntimeModel):
     graph: RuntimePipelineGraph | None = None
     authoring_graph: RuntimePipelineAuthoringGraph | None = None
     preview_frame: RuntimeLiveFrame | None = None
+    bark_job: StemBarkJob | None = None
     selected_node_key: str | None = Field(
         default=None,
         pattern=r"^[a-z][a-z0-9_]{1,63}$",
     )
     include_capture_outputs: bool = False
+    include_execution_result: bool = False
 
     @model_validator(mode="after")
     def validate_graph_input(self) -> RuntimePipelinePreviewRequest:
@@ -1099,7 +1127,7 @@ class RuntimeTriggerExecutionRequest(StrictRuntimeModel):
     images_by_role: dict[Literal["upper", "lower", "end_face"], RuntimeTriggerCameraImage] = Field(
         default_factory=dict
     )
-    timeout_ms: int | None = Field(default=None, ge=50, le=30_000)
+    timeout_ms: int | None = Field(default=None, ge=50, le=120_000)
     board_format: RuntimeBoardFormat | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -1657,9 +1685,9 @@ class RuntimeStemCurvatureReferencePlane(StrictRuntimeModel):
 
 
 class RuntimeStemCurvatureProcessCalibrationProvenance(StrictRuntimeModel):
-    method: Literal["MANUAL_REFERENCE_POINT_HOMOGRAPHY"] = (
-        "MANUAL_REFERENCE_POINT_HOMOGRAPHY"
-    )
+    method: Literal[
+        "MANUAL_REFERENCE_POINT_HOMOGRAPHY", "CALIBRATED_XY_Z_PNP_V1"
+    ] = "MANUAL_REFERENCE_POINT_HOMOGRAPHY"
     created_at: str = Field(min_length=10, max_length=64)
     operator_user_id: str | None = Field(default=None, max_length=120)
     reference_frame_timestamp: str | None = Field(default=None, max_length=64)
@@ -1668,6 +1696,23 @@ class RuntimeStemCurvatureProcessCalibrationProvenance(StrictRuntimeModel):
         pattern=r"^[a-f0-9]{64}$",
     )
     notes: str = Field(default="", max_length=1000)
+
+
+class RuntimeStemSpatialCalibration(StrictRuntimeModel):
+    """Metric camera pose in the right-handed machine XYZ frame, for undistorted pixels."""
+
+    method: Literal["CALIBRATED_XY_Z_PNP_V1"] = "CALIBRATED_XY_Z_PNP_V1"
+    camera_matrix: list[float] = Field(min_length=9, max_length=9)
+    rotation_world_to_camera: list[float] = Field(min_length=9, max_length=9)
+    translation_world_to_camera_mm: list[float] = Field(min_length=3, max_length=3)
+    camera_center_mm: list[float] = Field(min_length=3, max_length=3)
+    projection_matrix: list[float] = Field(min_length=12, max_length=12)
+    reference_point_count: int = Field(ge=5)
+    rms_reprojection_error_px: float = Field(ge=0)
+    maximum_reprojection_error_px: float = Field(ge=0)
+    z_reprojection_error_px: float = Field(ge=0)
+    z_reference_displacement_px: float = Field(gt=0)
+    pose_condition_number: float = Field(ge=1)
 
 
 class RuntimeStemCurvatureProcessCalibrationProfile(StrictRuntimeModel):
@@ -1686,6 +1731,7 @@ class RuntimeStemCurvatureProcessCalibrationProfile(StrictRuntimeModel):
         max_length=64,
     )
     coordinate_frame_definition: RuntimeStemCurvatureCoordinateFrameDefinition | None = None
+    spatial_calibration: RuntimeStemSpatialCalibration | None = None
     measurement_geometry_mode: Literal[
         "EXPLICIT_GEOMETRY_V1",
         "CANONICAL_VIEW_CORRIDOR_V1",
@@ -1754,6 +1800,8 @@ class RuntimeStemCurvatureProcessCalibrationCalculateRequest(StrictRuntimeModel)
         max_length=64,
     )
     coordinate_frame_definition: RuntimeStemCurvatureCoordinateFrameDefinition | None = None
+    spatial_calibration_enabled: bool = False
+    intrinsic_calibration: RuntimeCameraIntrinsicCalibrationProfile | None = None
     measurement_geometry_mode: Literal[
         "EXPLICIT_GEOMETRY_V1",
         "CANONICAL_VIEW_CORRIDOR_V1",
@@ -2580,6 +2628,7 @@ class RuntimeLiveViewState(StrictRuntimeModel):
 class RuntimeLiveViewResponse(StrictRuntimeModel):
     schema_version: Literal["runtime.live-view.state.v1"] = "runtime.live-view.state.v1"
     state: RuntimeLiveViewState
+    execution_result: dict[str, Any] | None = None
     meta: ResponseMeta
 
 
@@ -2786,7 +2835,7 @@ class RuntimeTriggerEndpointCreateRequest(StrictRuntimeModel):
     auth_required: bool = False
     auth_scope: str = Field(default="runtime.trigger.invoke", min_length=3, max_length=128)
     auth_policy: dict[str, Any] = Field(default_factory=dict)
-    timeout_ms: int = Field(default=2500, ge=50, le=30_000)
+    timeout_ms: int = Field(default=2500, ge=50, le=120_000)
     rate_limit_per_minute: int = Field(default=60, ge=1, le=60_000)
     burst_limit: int = Field(default=4, ge=1, le=1_000)
     response_policy: RuntimeTriggerResponsePolicy = Field(
@@ -2807,7 +2856,7 @@ class RuntimeTriggerEndpointUpdateRequest(StrictRuntimeModel):
     auth_required: bool | None = None
     auth_scope: str | None = Field(default=None, min_length=3, max_length=128)
     auth_policy: dict[str, Any] | None = None
-    timeout_ms: int | None = Field(default=None, ge=50, le=30_000)
+    timeout_ms: int | None = Field(default=None, ge=50, le=120_000)
     rate_limit_per_minute: int | None = Field(default=None, ge=1, le=60_000)
     burst_limit: int | None = Field(default=None, ge=1, le=1_000)
     response_policy: RuntimeTriggerResponsePolicy | None = None
@@ -2834,7 +2883,7 @@ class RuntimeTriggerEndpointSummary(StrictRuntimeModel):
     trigger_node_key: str | None = None
     derived_from_pipeline: bool = False
     pipeline_label: str | None = None
-    timeout_ms: int = Field(ge=50, le=30_000)
+    timeout_ms: int = Field(ge=50, le=120_000)
     rate_limit_per_minute: int = Field(ge=1, le=60_000)
     burst_limit: int = Field(ge=1, le=1_000)
     status: RuntimeResourceStatus

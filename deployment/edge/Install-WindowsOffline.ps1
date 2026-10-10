@@ -46,9 +46,12 @@ if ($signaturePolicy -in @("signed", "required")) {
     if (-not (Test-Path -LiteralPath $TrustedReleasePublicKey -PathType Leaf) -or -not (Test-Path -LiteralPath $signature -PathType Leaf)) {
         throw "Signed release is missing its signature or pinned release public key"
     }
-    if (-not (Get-Command $OpenSslExecutable -ErrorAction SilentlyContinue)) { throw "OpenSSL is required for signed releases" }
-    & $OpenSslExecutable dgst -sha256 -verify $TrustedReleasePublicKey -signature $signature $checksumFile
-    if ($LASTEXITCODE -ne 0) { throw "Release signature verification failed" }
+    $verifier = Join-Path $BundleRoot "deployment\edge\WindowsReleaseSignatureVerifier.cs"
+    if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) { throw "Windows release signature verifier missing" }
+    Add-Type -Path $verifier -ErrorAction Stop
+    if (-not [Ybb.Edge.WindowsReleaseSignatureVerifier]::Verify($TrustedReleasePublicKey, $signature, $checksumFile)) {
+        throw "Release signature verification failed"
+    }
 } elseif ($signaturePolicy -ne "prepared") {
     throw "Unsupported SIGNATURE_POLICY: $signaturePolicy"
 }
@@ -97,6 +100,11 @@ $env:PATH = "$cudaBin;$env:PATH"
 
 New-Item -ItemType Directory -Force -Path $InstallRoot, $StateRoot | Out-Null
 $existingService = Get-Service -Name YBBEdgeAgent -ErrorAction SilentlyContinue
+$existingSettingsTask = Get-ScheduledTask -TaskName 'YBB Edge Settings' -ErrorAction SilentlyContinue
+if ($existingSettingsTask) {
+    Disable-ScheduledTask -TaskName 'YBB Edge Settings' | Out-Null
+    Stop-ScheduledTask -TaskName 'YBB Edge Settings'
+}
 if ($existingService) { Stop-Service -Name YBBEdgeAgent -Force }
 Copy-Item -LiteralPath $winsw -Destination (Join-Path $InstallRoot "ybb-edge-service.exe") -Force
 if (-not $PythonExecutable) {
@@ -154,6 +162,7 @@ foreach ($candidate in $plantAllowed) {
     }
 }
 $values["YBB_EDGE_DATA_ROOT"] = $StateRoot
+$values["YBB_EDGE_SETTINGS_ROOT"] = $InstallRoot
 $opensslCommand = Get-Command $OpenSslExecutable -ErrorAction SilentlyContinue
 if ($opensslCommand) { $values["YBB_EDGE_OPENSSL_EXECUTABLE"] = $opensslCommand.Source }
 $values["YBB_EDGE_TRUSTED_RELEASE_KEY"] = $TrustedReleasePublicKey
@@ -165,6 +174,8 @@ $environmentXml = ($values.GetEnumerator() | Sort-Object Name | ForEach-Object {
 $launcher = Join-Path $InstallRoot "edge-runtime-launcher.py"
 Copy-Item -LiteralPath (Join-Path $BundleRoot "deployment\edge\edge-runtime-launcher.py") -Destination $launcher -Force
 Copy-Item -LiteralPath (Join-Path $BundleRoot "deployment\edge\check-runtime-dependencies.py") -Destination $InstallRoot -Force
+Copy-Item -LiteralPath (Join-Path $BundleRoot "deployment\edge\edge-settings-helper.py") -Destination $InstallRoot -Force
+Copy-Item -LiteralPath (Join-Path $BundleRoot "deployment\edge\edge_environment.py") -Destination $InstallRoot -Force
 $xml = @"
 <service>
   <id>YBBEdgeAgent</id><name>YBB Edge Agent</name>
@@ -193,6 +204,13 @@ if ($plantAllowed.Count -gt 0) {
     Write-Host "No remote SPS/HTTP trigger clients are allowed on TCP $plantPort."
 }
 Write-Host "YBB Edge Runtime installed fully offline."
+$settingsHelper = Join-Path $InstallRoot "edge-settings-helper.py"
+$settingsAction = New-ScheduledTaskAction -Execute $python -Argument "-I `"$settingsHelper`" --config-root `"$InstallRoot`" --data-root `"$StateRoot`""
+$settingsTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
+$settingsPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+$settingsTaskOptions = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName 'YBB Edge Settings' -Action $settingsAction -Trigger $settingsTrigger -Principal $settingsPrincipal -Settings $settingsTaskOptions -Force | Out-Null
+Start-ScheduledTask -TaskName 'YBB Edge Settings'
 if ($rebootRequired) {
     Write-Host "A Windows restart is required to activate the bundled NVIDIA driver."
 }

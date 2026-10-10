@@ -48,6 +48,7 @@ def verify_software_package(path: Path, trusted_key: Path) -> EdgeSoftwareReleas
         raw = archive.read("release.json")
         manifest = EdgeSoftwareRelease.model_validate_json(raw)
         expected = {"release.json", "release.sig"} | {f"wheelhouse/{n}" for n in manifest.wheels}
+        expected |= {f"system-packages/{n}" for n in manifest.system_packages}
         if set(names) != expected:
             raise ValueError("Runtime package contains undeclared files.")
         try:
@@ -90,13 +91,26 @@ def verify_software_package(path: Path, trusted_key: Path) -> EdgeSoftwareReleas
                     "key used by the builder, and that the package is unchanged. "
                     f"OpenSSL exit status: {result.returncode}."
                 )
-        for name, expected_hash in manifest.wheels.items():
-            if not re.fullmatch(r"[A-Za-z0-9_.+-]+\.whl", name):
-                raise ValueError("Runtime wheel filename is invalid.")
-            with archive.open(f"wheelhouse/{name}") as wheel:
-                digest = hashlib.file_digest(wheel, "sha256").hexdigest()
-            if digest != expected_hash:
-                raise ValueError(f"Wheel checksum mismatch: {name}")
+        if manifest.system_packages and (
+            manifest.platform == "windows_11"
+            or not {"manifest.json", "Packages"} <= manifest.system_packages.keys()
+        ):
+            raise ValueError("Invalid runtime system package inventory.")
+        for folder, files, pattern in (
+            ("wheelhouse", manifest.wheels, r"[A-Za-z0-9_.+-]+\.whl"),
+            (
+                "system-packages", manifest.system_packages,
+                r"(?:manifest\.json|Packages|[A-Za-z0-9_.+~%-]+\.deb)",
+            ),
+        ):
+            for name, expected_hash in files.items():
+                if not re.fullmatch(pattern, name) or not re.fullmatch(r"[a-f0-9]{64}", expected_hash):
+                    raise ValueError("Runtime package filename or checksum is invalid.")
+                with archive.open(f"{folder}/{name}") as item:
+                    actual = hashlib.file_digest(item, "sha256").hexdigest()
+                if actual != expected_hash:
+                    label = "Wheel" if folder == "wheelhouse" else "System package"
+                    raise ValueError(f"{label} checksum mismatch: {name}")
         return manifest
 
 

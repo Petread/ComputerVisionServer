@@ -1,0 +1,1236 @@
+{
+  "schema_version": "ybb.edge.ubuntu-packages.v1",
+  "ubuntu_codename": "noble",
+  "architecture": "arm64",
+  "install": [
+    "ufw"
+  ],
+  "source_date": "2026-09-22",
+  "packages": [
+    {
+      "name": "debconf",
+      "version": "1.5.86ubuntu1",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/d/debconf/debconf_1.5.86ubuntu1_all.deb",
+      "size_bytes": 124096,
+      "sha256": "bb390da466a7461bfc87aa3e6b7cd145dae84af3e26bf437f2c0c218ba226294",
+      "control": {
+        "Provides": "debconf-2.0",
+        "Conflicts": "debconf-tiny, whiptail-utf8 (<= 0.50.17-13)",
+        "Replaces": "debconf-tiny",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "493",
+        "Section": "admin",
+        "Priority": "required",
+        "Description": "Debian configuration management system"
+      }
+    },
+    {
+      "name": "dpkg",
+      "version": "1.22.6ubuntu6",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/d/dpkg/dpkg_1.22.6ubuntu6_arm64.deb",
+      "size_bytes": 1265468,
+      "sha256": "4e95eb1b7442b15561b17349f293da82a786f6a95346ef3196fb39b7998348d4",
+      "control": {
+        "Depends": "tar (>= 1.28-1)",
+        "Pre-Depends": "libbz2-1.0, libc6 (>= 2.38), liblzma5 (>= 5.4.0), libmd0 (>= 0.0.0), libselinux1 (>= 3.1~), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)",
+        "Breaks": "libapt-pkg5.0 (<< 1.7~b), lsb-base (<< 10.2019031300)",
+        "Multi-Arch": "foreign",
+        "Essential": "yes",
+        "Installed-Size": "6473",
+        "Section": "admin",
+        "Priority": "required",
+        "Description": "Debian package management system"
+      }
+    },
+    {
+      "name": "dpkg",
+      "version": "1.22.6ubuntu6.6",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/d/dpkg/dpkg_1.22.6ubuntu6.6_arm64.deb",
+      "size_bytes": 1264616,
+      "sha256": "c34117a1f62fe8a2026cfba7bde0ec3fedd5d39abad7515bdd45fffcec764288",
+      "control": {
+        "Depends": "tar (>= 1.28-1)",
+        "Pre-Depends": "libbz2-1.0, libc6 (>= 2.38), liblzma5 (>= 5.4.0), libmd0 (>= 0.0.0), libselinux1 (>= 3.1~), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)",
+        "Breaks": "libapt-pkg5.0 (<< 1.7~b), lsb-base (<< 10.2019031300)",
+        "Multi-Arch": "foreign",
+        "Essential": "yes",
+        "Installed-Size": "6474",
+        "Section": "admin",
+        "Priority": "required",
+        "Description": "Debian package management system"
+      }
+    },
+    {
+      "name": "gcc-14-base",
+      "version": "14-20240412-0ubuntu1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-14/gcc-14-base_14-20240412-0ubuntu1_arm64.deb",
+      "size_bytes": 47626,
+      "sha256": "a473987e9704cbfa2c795b7c94b57f38ed2b27f7068c8338e1deed9bbf279877",
+      "control": {
+        "Breaks": "gnat (<< 7)",
+        "Multi-Arch": "same",
+        "Installed-Size": "110",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "GCC, the GNU Compiler Collection (base package)"
+      }
+    },
+    {
+      "name": "gcc-14-base",
+      "version": "14.2.0-4ubuntu2~24.04.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-14/gcc-14-base_14.2.0-4ubuntu2~24.04.1_arm64.deb",
+      "size_bytes": 50984,
+      "sha256": "bddbe21061fdc73a23e7de79ece91693bf61aa22d634d1c69c5048385c114968",
+      "control": {
+        "Breaks": "gnat (<< 7)",
+        "Multi-Arch": "same",
+        "Installed-Size": "113",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "GCC, the GNU Compiler Collection (base package)"
+      }
+    },
+    {
+      "name": "iptables",
+      "version": "1.8.10-3ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/i/iptables/iptables_1.8.10-3ubuntu2_arm64.deb",
+      "size_bytes": 387762,
+      "sha256": "cbaacdb34f19a9b29f569205cdbf1e5851f63fde60777c5cf539a2b46c0c2fc7",
+      "control": {
+        "Depends": "libip4tc2 (= 1.8.10-3ubuntu2), libip6tc2 (= 1.8.10-3ubuntu2), libxtables12 (= 1.8.10-3ubuntu2), netbase (>= 6.0), libc6 (>= 2.38), libmnl0 (>= 1.0.3-4~), libnetfilter-conntrack3 (>= 1.0.6), libnfnetlink0 (>= 1.0.2), libnftnl11 (>= 1.1.6)",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "8431",
+        "Section": "net",
+        "Priority": "standard",
+        "Description": "administration tools for packet filtering and NAT"
+      }
+    },
+    {
+      "name": "libacl1",
+      "version": "2.3.2-1build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/a/acl/libacl1_2.3.2-1build1_arm64.deb",
+      "size_bytes": 17036,
+      "sha256": "9085ce0c1a9ff8da0ffdbfa3aaf34c2f7504c46ba17198d3a6b9c968398ce495",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Multi-Arch": "same",
+        "Installed-Size": "101",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "access control list - shared library"
+      }
+    },
+    {
+      "name": "libacl1",
+      "version": "2.3.2-1build1.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/a/acl/libacl1_2.3.2-1build1.1_arm64.deb",
+      "size_bytes": 17050,
+      "sha256": "ebc53ded654fcf4449df250cb563ff05f10d851e904e638f698dc7e921ffa47b",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Multi-Arch": "same",
+        "Installed-Size": "101",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "access control list - shared library"
+      }
+    },
+    {
+      "name": "libbz2-1.0",
+      "version": "1.0.8-5.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/b/bzip2/libbz2-1.0_1.0.8-5.1_arm64.deb",
+      "size_bytes": 35656,
+      "sha256": "89eefec795475ab9fd9bd13d74412a4ec49b06bffb3a3fbd3af78aed60941aa9",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Multi-Arch": "same",
+        "Installed-Size": "86",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "high-quality block-sorting file compressor library - runtime"
+      }
+    },
+    {
+      "name": "libbz2-1.0",
+      "version": "1.0.8-5.1ubuntu0.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/b/bzip2/libbz2-1.0_1.0.8-5.1ubuntu0.1_arm64.deb",
+      "size_bytes": 35936,
+      "sha256": "1a92811105f89bf948a629de99715ef23941ef93c901e0942883029069db3f94",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Multi-Arch": "same",
+        "Installed-Size": "86",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "high-quality block-sorting file compressor library - runtime"
+      }
+    },
+    {
+      "name": "libc6",
+      "version": "2.39-0ubuntu8",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/libc6_2.39-0ubuntu8_arm64.deb",
+      "size_bytes": 2774086,
+      "sha256": "04d7cb73e608b41713b63ef915577f7f5d75e95b1b33174e82e05687fdb6cfaf",
+      "control": {
+        "Depends": "libgcc-s1",
+        "Provides": "libc6-lse",
+        "Conflicts": "libc6-lse",
+        "Breaks": "chrony (<< 4.2-3~), cyrus-imapd (<< 3.6.1-2ubuntu1), fakechroot (<< 2.19-3.5), firefox (<< 91~), firefox-esr (<< 91~), gnumach-image-1.8-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-486-dbg (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486-dbg (<< 2:1.8+git20210923~), hurd (<< 1:0.9.git20220301-2), locales (<< 2.39), locales-all (<< 2.39), nscd (<< 2.39), python3-iptables (<< 1.0.0-2), scipy (<< 1.10.1-10build1), tinydns (<< 1:1.05-14), valgrind (<< 1:3.19.0-1~)",
+        "Replaces": "libc6-lse",
+        "Multi-Arch": "same",
+        "Installed-Size": "23350",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "GNU C Library: Shared libraries"
+      }
+    },
+    {
+      "name": "libc6",
+      "version": "2.39-0ubuntu8.9",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/libc6_2.39-0ubuntu8.9_arm64.deb",
+      "size_bytes": 2776414,
+      "sha256": "ad109797c5f78a5eeb6d4c296bfbaae68b239111a0c9ac0eb97b8d430284ac45",
+      "control": {
+        "Depends": "libgcc-s1",
+        "Provides": "libc6-lse",
+        "Conflicts": "libc6-lse",
+        "Breaks": "chrony (<< 4.2-3~), cyrus-imapd (<< 3.6.1-2ubuntu1), fakechroot (<< 2.19-3.5), firefox (<< 91~), firefox-esr (<< 91~), gnumach-image-1.8-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-486-dbg (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486-dbg (<< 2:1.8+git20210923~), hurd (<< 1:0.9.git20220301-2), locales (<< 2.39), locales-all (<< 2.39), nscd (<< 2.39), python3-iptables (<< 1.0.0-2), scipy (<< 1.10.1-10build1), tinydns (<< 1:1.05-14), valgrind (<< 1:3.19.0-1~)",
+        "Replaces": "libc6-lse",
+        "Multi-Arch": "same",
+        "Installed-Size": "23352",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "GNU C Library: Shared libraries"
+      }
+    },
+    {
+      "name": "libcrypt1",
+      "version": "1:4.4.36-4build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcrypt/libcrypt1_4.4.36-4build1_arm64.deb",
+      "size_bytes": 85888,
+      "sha256": "5cd73ba112507dabd8e43b528ca9f530719a370e014b8e3e797770e6e940cccf",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Conflicts": "libpam0g (<< 1.4.0-10)",
+        "Replaces": "libc6 (<< 2.29-4)",
+        "Multi-Arch": "same",
+        "Installed-Size": "225",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "libcrypt shared library"
+      }
+    },
+    {
+      "name": "libdb5.3t64",
+      "version": "5.3.28+dfsg2-7",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-7_arm64.deb",
+      "size_bytes": 732284,
+      "sha256": "b04d246b871e2e745538fa71ce2d1a127dfd65e7b1438bc6b8e2bb86538f519e",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Provides": "libdb5.3 (= 5.3.28+dfsg2-7)",
+        "Breaks": "libdb5.3 (<< 5.3.28+dfsg2-7)",
+        "Replaces": "libdb5.3",
+        "Multi-Arch": "same",
+        "Installed-Size": "1701",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "Berkeley v5.3 Database Libraries [runtime]"
+      }
+    },
+    {
+      "name": "libexpat1",
+      "version": "2.6.1-2build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/libexpat1_2.6.1-2build1_arm64.deb",
+      "size_bytes": 76070,
+      "sha256": "f6cea0cbe617519480ab3501166eab7092a9a75332cb186c30eee8107da381b9",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Multi-Arch": "same",
+        "Installed-Size": "436",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "XML parsing C library - runtime library"
+      }
+    },
+    {
+      "name": "libexpat1",
+      "version": "2.6.1-2ubuntu0.5",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/libexpat1_2.6.1-2ubuntu0.5_arm64.deb",
+      "size_bytes": 86188,
+      "sha256": "c202f80537790929983f52220cbf29145652a6a2a7d9977be0c66fcc1ef72dcc",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Multi-Arch": "same",
+        "Installed-Size": "440",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "XML parsing C library - runtime library"
+      }
+    },
+    {
+      "name": "libffi8",
+      "version": "3.4.6-1build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libf/libffi/libffi8_3.4.6-1build1_arm64.deb",
+      "size_bytes": 22716,
+      "sha256": "a4d4607144bc599328a913d7312761fd8f4a650d67c7d5058f1f3667d771d37c",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Provides": "libffi8ubuntu1 (= 3.4.6-1build1)",
+        "Breaks": "libffi8ubuntu1 (<< 3.4.2-1)",
+        "Replaces": "libffi8ubuntu1 (<< 3.4.2-1)",
+        "Multi-Arch": "same",
+        "Installed-Size": "92",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "Foreign Function Interface library runtime"
+      }
+    },
+    {
+      "name": "libgcc-s1",
+      "version": "14-20240412-0ubuntu1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-14/libgcc-s1_14-20240412-0ubuntu1_arm64.deb",
+      "size_bytes": 61720,
+      "sha256": "bb1c262f2ac9aeb357d3344a06f22f1057306694f6200896775a03ecced08b13",
+      "control": {
+        "Depends": "gcc-14-base (= 14-20240412-0ubuntu1), libc6 (>= 2.35)",
+        "Provides": "libgcc1 (= 1:14-20240412-0ubuntu1)",
+        "Breaks": "libgcc-7-dev (<< 7.5.0-4), libgcc-8-dev (<< 8.3.0-27), libgcc-9-dev (<< 9.2.1-26)",
+        "Replaces": "libgcc1 (<< 1:10)",
+        "Multi-Arch": "same",
+        "Installed-Size": "148",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "GCC support library"
+      }
+    },
+    {
+      "name": "libgcc-s1",
+      "version": "14.2.0-4ubuntu2~24.04.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/gcc-14/libgcc-s1_14.2.0-4ubuntu2~24.04.1_arm64.deb",
+      "size_bytes": 61884,
+      "sha256": "5b191f79ad985a9a653dbba45214619f729f9178a9bdf92f7c68db06c50d070b",
+      "control": {
+        "Depends": "gcc-14-base (= 14.2.0-4ubuntu2~24.04.1), libc6 (>= 2.35)",
+        "Provides": "libgcc1 (= 1:14.2.0-4ubuntu2~24.04.1)",
+        "Breaks": "libgcc-7-dev (<< 7.5.0-4), libgcc-8-dev (<< 8.3.0-27), libgcc-9-dev (<< 9.2.1-26)",
+        "Replaces": "libgcc1 (<< 1:10)",
+        "Multi-Arch": "same",
+        "Installed-Size": "148",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "GCC support library"
+      }
+    },
+    {
+      "name": "libip4tc2",
+      "version": "1.8.10-3ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/i/iptables/libip4tc2_1.8.10-3ubuntu2_arm64.deb",
+      "size_bytes": 23352,
+      "sha256": "e692da5dffee228ed346474a6e9e21511acbb7329bc304b4ae6dbbc25b2831a2",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Multi-Arch": "same",
+        "Installed-Size": "99",
+        "Section": "libs",
+        "Priority": "standard",
+        "Description": "netfilter libip4tc library"
+      }
+    },
+    {
+      "name": "libip6tc2",
+      "version": "1.8.10-3ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/i/iptables/libip6tc2_1.8.10-3ubuntu2_arm64.deb",
+      "size_bytes": 23728,
+      "sha256": "4438956b281410ee6d58ce59d1f9588e30f4abf7167e110fdb4f26a99fa5dee7",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Multi-Arch": "same",
+        "Installed-Size": "99",
+        "Section": "libs",
+        "Priority": "standard",
+        "Description": "netfilter libip6tc library"
+      }
+    },
+    {
+      "name": "liblzma5",
+      "version": "5.6.1+really5.4.5-1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xz-utils/liblzma5_5.6.1+really5.4.5-1_arm64.deb",
+      "size_bytes": 125356,
+      "sha256": "649856baf5e43a011c46b0fd3a2a1bad574f4663e0b90c39a3ac609f297d60b7",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Breaks": "liblzma2 (<< 5.1.1alpha+20110809-3~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "373",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "XZ-format compression library"
+      }
+    },
+    {
+      "name": "liblzma5",
+      "version": "5.6.1+really5.4.5-1ubuntu0.3",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xz-utils/liblzma5_5.6.1+really5.4.5-1ubuntu0.3_arm64.deb",
+      "size_bytes": 125976,
+      "sha256": "2f58fd7de725efd0dbebe9d4442049fdacd7c2e8242f4288a13a688d50507245",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Breaks": "liblzma2 (<< 5.1.1alpha+20110809-3~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "374",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "XZ-format compression library"
+      }
+    },
+    {
+      "name": "libmd0",
+      "version": "1.1.0-2build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libm/libmd/libmd0_1.1.0-2build1_arm64.deb",
+      "size_bytes": 24590,
+      "sha256": "9d957330c83693dfd870a56794317395b9519b385a69933828ff8e8e14829aa0",
+      "control": {
+        "Depends": "libc6 (>= 2.33)",
+        "Multi-Arch": "same",
+        "Installed-Size": "90",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "message digest functions from BSD systems - shared library"
+      }
+    },
+    {
+      "name": "libmd0",
+      "version": "1.1.0-2build1.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libm/libmd/libmd0_1.1.0-2build1.1_arm64.deb",
+      "size_bytes": 24616,
+      "sha256": "c28583825f7191cdc8b6b71c6150e2cbfc29616d6570680e5284fabc19765ea5",
+      "control": {
+        "Depends": "libc6 (>= 2.33)",
+        "Multi-Arch": "same",
+        "Installed-Size": "90",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "message digest functions from BSD systems - shared library"
+      }
+    },
+    {
+      "name": "libmnl0",
+      "version": "1.0.5-2build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libm/libmnl/libmnl0_1.0.5-2build1_arm64.deb",
+      "size_bytes": 12372,
+      "sha256": "9442f15a4bbc6148e527045adaf85c86ae3ffe159176d6a5f3b471b49150e470",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Multi-Arch": "same",
+        "Installed-Size": "85",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "minimalistic Netlink communication library"
+      }
+    },
+    {
+      "name": "libncursesw6",
+      "version": "6.4+20240113-1ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/ncurses/libncursesw6_6.4+20240113-1ubuntu2_arm64.deb",
+      "size_bytes": 145424,
+      "sha256": "b301f776112fadae74852adb953e9b3f8ce5f896a4b927a916b402e51d8b08a9",
+      "control": {
+        "Depends": "libtinfo6 (= 6.4+20240113-1ubuntu2), libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "569",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "shared libraries for terminal handling (wide character support)"
+      }
+    },
+    {
+      "name": "libncursesw6",
+      "version": "6.4+20240113-1ubuntu2.2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/ncurses/libncursesw6_6.4+20240113-1ubuntu2.2_arm64.deb",
+      "size_bytes": 145566,
+      "sha256": "70c7edddf49520a7d0e620ad7d82da8e4b8c2ba7bd8caf156d5666ea19836e94",
+      "control": {
+        "Depends": "libtinfo6 (= 6.4+20240113-1ubuntu2.2), libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "569",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "shared libraries for terminal handling (wide character support)"
+      }
+    },
+    {
+      "name": "libnetfilter-conntrack3",
+      "version": "1.0.9-6build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libn/libnetfilter-conntrack/libnetfilter-conntrack3_1.0.9-6build1_arm64.deb",
+      "size_bytes": 45596,
+      "sha256": "7b152f919dbd3ffd9ca3ac95d96fdac0cdd139656eb284a0abbc46fce6063301",
+      "control": {
+        "Depends": "libc6 (>= 2.17), libmnl0 (>= 1.0.3-4~), libnfnetlink0 (>= 1.0.2)",
+        "Multi-Arch": "same",
+        "Installed-Size": "151",
+        "Section": "libs",
+        "Priority": "standard",
+        "Description": "Netfilter netlink-conntrack library"
+      }
+    },
+    {
+      "name": "libnfnetlink0",
+      "version": "1.0.2-2build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libn/libnfnetlink/libnfnetlink0_1.0.2-2build1_arm64.deb",
+      "size_bytes": 14720,
+      "sha256": "c7c64d90793ce4d7df262aad50d99eb45ca848fa9421f1bccb22665c350bdb2f",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Multi-Arch": "same",
+        "Installed-Size": "83",
+        "Section": "libs",
+        "Priority": "standard",
+        "Description": "Netfilter netlink library"
+      }
+    },
+    {
+      "name": "libnftnl11",
+      "version": "1.2.6-2build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libn/libnftnl/libnftnl11_1.2.6-2build1_arm64.deb",
+      "size_bytes": 66210,
+      "sha256": "678792e1aa102892b594e0ee13ee93b763011674bddba800a3974a68a83c6ed1",
+      "control": {
+        "Depends": "libc6 (>= 2.34), libmnl0 (>= 1.0.3-4~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "293",
+        "Section": "libs",
+        "Priority": "standard",
+        "Description": "Netfilter nftables userspace API library"
+      }
+    },
+    {
+      "name": "libpcre2-8-0",
+      "version": "10.42-4ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/pcre2/libpcre2-8-0_10.42-4ubuntu2_arm64.deb",
+      "size_bytes": 211682,
+      "sha256": "9ebb6ce8788d75beeb127ee13ebd28746511cf6f2d0499cab5f8f031858152ee",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "603",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "New Perl Compatible Regular Expression Library- 8 bit runtime files"
+      }
+    },
+    {
+      "name": "libpcre2-8-0",
+      "version": "10.42-4ubuntu2.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/pcre2/libpcre2-8-0_10.42-4ubuntu2.1_arm64.deb",
+      "size_bytes": 211856,
+      "sha256": "7581764969752953aa1f991ce143bea594d2c5d0c36c2cc98c3c614c172aba93",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "603",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "New Perl Compatible Regular Expression Library- 8 bit runtime files"
+      }
+    },
+    {
+      "name": "libpython3-stdlib",
+      "version": "3.12.3-0ubuntu1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3-defaults/libpython3-stdlib_3.12.3-0ubuntu1_arm64.deb",
+      "size_bytes": 9896,
+      "sha256": "f6fb3faf5bba564776a040f2911233dc56caccb7627c81cebae3bc919f5d5d0a",
+      "control": {
+        "Depends": "libpython3.12-stdlib (>= 3.12.3-0~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "27",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "interactive high-level object-oriented language (default python3 version)"
+      }
+    },
+    {
+      "name": "libpython3-stdlib",
+      "version": "3.12.3-0ubuntu2.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3-defaults/libpython3-stdlib_3.12.3-0ubuntu2.1_arm64.deb",
+      "size_bytes": 10088,
+      "sha256": "b6bd0a5e6fa11f2bae6da48707abe6b8245412cbf34e376cb3b9af0968b7122a",
+      "control": {
+        "Depends": "libpython3.12-stdlib (>= 3.12.3-0~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "27",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "interactive high-level object-oriented language (default python3 version)"
+      }
+    },
+    {
+      "name": "libpython3.12-minimal",
+      "version": "3.12.3-1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/libpython3.12-minimal_3.12.3-1_arm64.deb",
+      "size_bytes": 828606,
+      "sha256": "905e0dfd142df77fe170c6a4b19512cc627d95ee1df98a7d919936a3aad265f6",
+      "control": {
+        "Depends": "libc6 (>= 2.17), libssl3t64 (>= 3.0.0)",
+        "Conflicts": "binfmt-support (<< 1.1.2)",
+        "Multi-Arch": "same",
+        "Installed-Size": "5184",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Minimal subset of the Python language (version 3.12)"
+      }
+    },
+    {
+      "name": "libpython3.12-minimal",
+      "version": "3.12.3-1ubuntu0.17",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/libpython3.12-minimal_3.12.3-1ubuntu0.17_arm64.deb",
+      "size_bytes": 835130,
+      "sha256": "11790e3fc5deb4867c7fb762aa5f4f710093501f62b60ef16dd427ea2495bcc6",
+      "control": {
+        "Depends": "libc6 (>= 2.17), libssl3t64 (>= 3.0.0)",
+        "Conflicts": "binfmt-support (<< 1.1.2)",
+        "Multi-Arch": "same",
+        "Installed-Size": "5199",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Minimal subset of the Python language (version 3.12)"
+      }
+    },
+    {
+      "name": "libpython3.12-stdlib",
+      "version": "3.12.3-1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/libpython3.12-stdlib_3.12.3-1_arm64.deb",
+      "size_bytes": 2036086,
+      "sha256": "f5669a5361bcb028bbbcf88d5811f83298278ae8247eff249164a5e0333c9a7e",
+      "control": {
+        "Depends": "libpython3.12-minimal (= 3.12.3-1), media-types | mime-support, netbase, tzdata, libbz2-1.0, libc6 (>= 2.38), libcrypt1 (>= 1:4.1.0), libdb5.3t64, libffi8 (>= 3.4), liblzma5 (>= 5.1.1alpha+20120614), libncursesw6 (>= 6.1), libreadline8t64 (>= 7.0~beta), libsqlite3-0 (>= 3.36.0), libtinfo6 (>= 6)",
+        "Breaks": "libpython3.12-testsuite (<< 3.12.0-3~), python3-gdbm (<< 3.9.9-1~)",
+        "Replaces": "libpython3.12-testsuite (<< 3.12.0-3~), python3-gdbm (<< 3.9.9-1~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "10453",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Interactive high-level object-oriented language (standard library, version 3.12)"
+      }
+    },
+    {
+      "name": "libpython3.12-stdlib",
+      "version": "3.12.3-1ubuntu0.17",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/libpython3.12-stdlib_3.12.3-1ubuntu0.17_arm64.deb",
+      "size_bytes": 2038562,
+      "sha256": "b9462bf2f55bfffaf304a597c7964354e0d49ab20eed028f55f7183f2210581e",
+      "control": {
+        "Depends": "libpython3.12-minimal (= 3.12.3-1ubuntu0.17), media-types | mime-support, netbase, tzdata, libbz2-1.0, libc6 (>= 2.38), libcrypt1 (>= 1:4.1.0), libdb5.3t64, libffi8 (>= 3.4), liblzma5 (>= 5.1.1alpha+20120614), libncursesw6 (>= 6.1), libreadline8t64 (>= 7.0~beta), libsqlite3-0 (>= 3.36.0), libtinfo6 (>= 6)",
+        "Breaks": "libpython3.12-testsuite (<< 3.12.0-3~), python3-gdbm (<< 3.9.9-1~)",
+        "Replaces": "libpython3.12-testsuite (<< 3.12.0-3~), python3-gdbm (<< 3.9.9-1~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "10471",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Interactive high-level object-oriented language (standard library, version 3.12)"
+      }
+    },
+    {
+      "name": "libreadline8t64",
+      "version": "8.2-4build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/readline/libreadline8t64_8.2-4build1_arm64.deb",
+      "size_bytes": 153046,
+      "sha256": "7f46b2f3ca588cd2f05d2cfb6844017309760b4201105cdfda4b339f9e6c69da",
+      "control": {
+        "Depends": "readline-common, libc6 (>= 2.38), libtinfo6 (>= 6)",
+        "Provides": "libreadline8 (= 8.2-4build1)",
+        "Breaks": "libreadline8 (<< 8.2-4build1)",
+        "Replaces": "libreadline8",
+        "Multi-Arch": "same",
+        "Installed-Size": "554",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "GNU readline and history libraries, run-time libraries"
+      }
+    },
+    {
+      "name": "libselinux1",
+      "version": "3.5-2ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libs/libselinux/libselinux1_3.5-2ubuntu2_arm64.deb",
+      "size_bytes": 79892,
+      "sha256": "07a4937bc8eb5a30373a6dcbd54f72761981d4dc342cd62b2e5fb5efe7f0b9b7",
+      "control": {
+        "Depends": "libc6 (>= 2.38), libpcre2-8-0 (>= 10.22)",
+        "Multi-Arch": "same",
+        "Installed-Size": "224",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "SELinux runtime shared libraries"
+      }
+    },
+    {
+      "name": "libselinux1",
+      "version": "3.5-2ubuntu2.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libs/libselinux/libselinux1_3.5-2ubuntu2.1_arm64.deb",
+      "size_bytes": 79946,
+      "sha256": "56630c4f009754e76808bf755072e634f8785a4dfbc8b1445213149e682f1502",
+      "control": {
+        "Depends": "libc6 (>= 2.38), libpcre2-8-0 (>= 10.22)",
+        "Multi-Arch": "same",
+        "Installed-Size": "224",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "SELinux runtime shared libraries"
+      }
+    },
+    {
+      "name": "libsqlite3-0",
+      "version": "3.45.1-1ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1ubuntu2_arm64.deb",
+      "size_bytes": 703114,
+      "sha256": "b71c08ea650c212b2c8fa5bbcef9957e5e85c8f5c484a85cfb8961a8271bf376",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Breaks": "crowdsec (<< 1.4), python-migrate (<< 0.11.0-4~), python3-migrate (<< 0.11.0-4~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "1786",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "SQLite 3 shared library"
+      }
+    },
+    {
+      "name": "libsqlite3-0",
+      "version": "3.45.1-1ubuntu2.8",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1ubuntu2.8_arm64.deb",
+      "size_bytes": 690864,
+      "sha256": "85925089ef6820a5b6ed80bb490d187465e49687c388333895680fda54e3ee06",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Breaks": "crowdsec (<< 1.4), python-migrate (<< 0.11.0-4~), python3-migrate (<< 0.11.0-4~)",
+        "Multi-Arch": "same",
+        "Installed-Size": "1787",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "SQLite 3 shared library"
+      }
+    },
+    {
+      "name": "libssl3t64",
+      "version": "3.0.13-0ubuntu3",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/o/openssl/libssl3t64_3.0.13-0ubuntu3_arm64.deb",
+      "size_bytes": 1793064,
+      "sha256": "d2207f12435060893997880a34d7ed91d14e163862d5d1394d51918d0723d7e0",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Provides": "libssl3 (= 3.0.13-0ubuntu3)",
+        "Breaks": "libssl3 (<< 3.0.13-0ubuntu3)",
+        "Replaces": "libssl3",
+        "Multi-Arch": "same",
+        "Installed-Size": "6055",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "Secure Sockets Layer toolkit - shared libraries"
+      }
+    },
+    {
+      "name": "libssl3t64",
+      "version": "3.0.13-0ubuntu3.15",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/o/openssl/libssl3t64_3.0.13-0ubuntu3.15_arm64.deb",
+      "size_bytes": 1836826,
+      "sha256": "bf0b51fb18187c4e1b03900e1049dc219047080ff511aa3bf691dbe24e14d24a",
+      "control": {
+        "Depends": "libc6 (>= 2.38)",
+        "Provides": "libssl3 (= 3.0.13-0ubuntu3.15)",
+        "Breaks": "libssl3 (<< 3.0.13-0ubuntu3.15)",
+        "Replaces": "libssl3",
+        "Multi-Arch": "same",
+        "Installed-Size": "6123",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "Secure Sockets Layer toolkit - shared libraries"
+      }
+    },
+    {
+      "name": "libtinfo6",
+      "version": "6.4+20240113-1ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/ncurses/libtinfo6_6.4+20240113-1ubuntu2_arm64.deb",
+      "size_bytes": 104360,
+      "sha256": "e8d06277be81d0f6e7d49ce796a477a9fc88e755bf3048e0afe44fc14a310b72",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Breaks": "tmux (<< 3.3a-4)",
+        "Multi-Arch": "same",
+        "Installed-Size": "604",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "shared low-level terminfo library for terminal handling"
+      }
+    },
+    {
+      "name": "libtinfo6",
+      "version": "6.4+20240113-1ubuntu2.2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/ncurses/libtinfo6_6.4+20240113-1ubuntu2.2_arm64.deb",
+      "size_bytes": 104652,
+      "sha256": "00570dce13bd89b31e4f433001fb0a55436e57a76370afbae6c5ac491b3dd3e9",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Breaks": "tmux (<< 3.3a-4)",
+        "Multi-Arch": "same",
+        "Installed-Size": "604",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "shared low-level terminfo library for terminal handling"
+      }
+    },
+    {
+      "name": "libxtables12",
+      "version": "1.8.10-3ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/i/iptables/libxtables12_1.8.10-3ubuntu2_arm64.deb",
+      "size_bytes": 35914,
+      "sha256": "72cd6add0f8eaaa45f44dd5c0903df083ab3847091d0633b4e46e8f80443718a",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "102",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "netfilter xtables library"
+      }
+    },
+    {
+      "name": "libzstd1",
+      "version": "1.5.5+dfsg2-2build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libz/libzstd/libzstd1_1.5.5+dfsg2-2build1_arm64.deb",
+      "size_bytes": 271224,
+      "sha256": "98568129024af1a71702d5a13f2e01c53afd5e2c3f71b2ee97fdd9a19cd97eda",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "665",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "fast lossless compression algorithm"
+      }
+    },
+    {
+      "name": "libzstd1",
+      "version": "1.5.5+dfsg2-2build1.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libz/libzstd/libzstd1_1.5.5+dfsg2-2build1.1_arm64.deb",
+      "size_bytes": 271278,
+      "sha256": "ea7d6e9fde577ea14dbf07fdfb74d6287eb09c6cba4a9d63abdcb87b0ec54bcc",
+      "control": {
+        "Depends": "libc6 (>= 2.34)",
+        "Multi-Arch": "same",
+        "Installed-Size": "665",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "fast lossless compression algorithm"
+      }
+    },
+    {
+      "name": "media-types",
+      "version": "10.1.0",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/media-types/media-types_10.1.0_all.deb",
+      "size_bytes": 27474,
+      "sha256": "31bfb7eec55ab6d34a50ba995150e1498d4cb897714085d8025e330d3b529747",
+      "control": {
+        "Breaks": "mime-support (<< 3.65)",
+        "Replaces": "mime-support (<< 3.65)",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "93",
+        "Section": "net",
+        "Priority": "important",
+        "Description": "List of standard media types and their usual file extension"
+      }
+    },
+    {
+      "name": "netbase",
+      "version": "6.4",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/netbase/netbase_6.4_all.deb",
+      "size_bytes": 13112,
+      "sha256": "8cdbc9c3dca01e660759bf9d840f72e45ac72faf5d19ca1faecacaf6a60c1a87",
+      "control": {
+        "Breaks": "ebtables (<< 2.0.11-2)",
+        "Replaces": "ebtables (<< 2.0.11-2)",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "36",
+        "Section": "admin",
+        "Priority": "important",
+        "Description": "Basic TCP/IP networking system"
+      }
+    },
+    {
+      "name": "python3",
+      "version": "3.12.3-0ubuntu1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3-defaults/python3_3.12.3-0ubuntu1_arm64.deb",
+      "size_bytes": 24100,
+      "sha256": "6ee6fcd0dae8beaa3090704c21864cf44121646444d14127cf675131ced5d6cb",
+      "control": {
+        "Depends": "python3.12 (>= 3.12.3-0~), libpython3-stdlib (= 3.12.3-0ubuntu1)",
+        "Pre-Depends": "python3-minimal (= 3.12.3-0ubuntu1)",
+        "Provides": "python3-profiler, python3-supported-max (= 3.12), python3-supported-min (= 3.12)",
+        "Conflicts": "python3-distutils",
+        "Replaces": "python3-minimal (<< 3.1.2-2)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "82",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "interactive high-level object-oriented language (default python3 version)"
+      }
+    },
+    {
+      "name": "python3",
+      "version": "3.12.3-0ubuntu2.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3-defaults/python3_3.12.3-0ubuntu2.1_arm64.deb",
+      "size_bytes": 23004,
+      "sha256": "ea792b91e0fc9e249b96b960d14e04a8b7107029988546e8dd3511b74a693a6c",
+      "control": {
+        "Depends": "python3.12 (>= 3.12.3-0~), libpython3-stdlib (= 3.12.3-0ubuntu2.1)",
+        "Pre-Depends": "python3-minimal (= 3.12.3-0ubuntu2.1)",
+        "Provides": "python3-profiler, python3-supported-max (= 3.12), python3-supported-min (= 3.12)",
+        "Conflicts": "python3-distutils",
+        "Replaces": "python3-minimal (<< 3.1.2-2)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "81",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "interactive high-level object-oriented language (default python3 version)"
+      }
+    },
+    {
+      "name": "python3-minimal",
+      "version": "3.12.3-0ubuntu1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3-defaults/python3-minimal_3.12.3-0ubuntu1_arm64.deb",
+      "size_bytes": 27214,
+      "sha256": "7aed0e332aeb4de38ae918a35c8853e9ac1c85e50f16790395bb50a7cee29c7b",
+      "control": {
+        "Depends": "dpkg (>= 1.13.20)",
+        "Pre-Depends": "python3.12-minimal (>= 3.12.3-0~)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "111",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "minimal subset of the Python language (default python3 version)"
+      }
+    },
+    {
+      "name": "python3-minimal",
+      "version": "3.12.3-0ubuntu2.1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3-defaults/python3-minimal_3.12.3-0ubuntu2.1_arm64.deb",
+      "size_bytes": 27444,
+      "sha256": "883f362e7ea23d3de5483c0b5c31774f75897cc46d34840371b5fe7a0cc3a83c",
+      "control": {
+        "Depends": "dpkg (>= 1.13.20)",
+        "Pre-Depends": "python3.12-minimal (>= 3.12.3-0~)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "112",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "minimal subset of the Python language (default python3 version)"
+      }
+    },
+    {
+      "name": "python3.12",
+      "version": "3.12.3-1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/python3.12_3.12.3-1_arm64.deb",
+      "size_bytes": 650732,
+      "sha256": "c73fb14a5bdbdc9a026d62d4bee3aeec0f1d5df0c40abd6cc136403b1b24df9a",
+      "control": {
+        "Depends": "python3.12-minimal (= 3.12.3-1), libpython3.12-stdlib (= 3.12.3-1), media-types | mime-support, tzdata",
+        "Breaks": "python3-all (<< 3.6.5~rc1-1), python3-dev (<< 3.6.5~rc1-1), python3-venv (<< 3.6.5-2)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "735",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Interactive high-level object-oriented language (version 3.12)"
+      }
+    },
+    {
+      "name": "python3.12",
+      "version": "3.12.3-1ubuntu0.17",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/python3.12_3.12.3-1ubuntu0.17_arm64.deb",
+      "size_bytes": 650732,
+      "sha256": "4dcc676815989c3d32ef43f8b98d37ecfd60cff8a47022152120246f21903cf0",
+      "control": {
+        "Depends": "python3.12-minimal (= 3.12.3-1ubuntu0.17), libpython3.12-stdlib (= 3.12.3-1ubuntu0.17), media-types | mime-support, tzdata",
+        "Breaks": "python3-all (<< 3.6.5~rc1-1), python3-dev (<< 3.6.5~rc1-1), python3-venv (<< 3.6.5-2)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "739",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Interactive high-level object-oriented language (version 3.12)"
+      }
+    },
+    {
+      "name": "python3.12-minimal",
+      "version": "3.12.3-1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/python3.12-minimal_3.12.3-1_arm64.deb",
+      "size_bytes": 2251184,
+      "sha256": "c5ce70a0cc04dbe9e7e6a1bdf21c0989f7d7c69ef2fd53ff98a6d3ac00d02d5f",
+      "control": {
+        "Depends": "libpython3.12-minimal (= 3.12.3-1), libexpat1 (>= 2.6.0), zlib1g (>= 1:1.2.0)",
+        "Pre-Depends": "libc6 (>= 2.38)",
+        "Conflicts": "binfmt-support (<< 1.1.2)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "7751",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Minimal subset of the Python language (version 3.12)"
+      }
+    },
+    {
+      "name": "python3.12-minimal",
+      "version": "3.12.3-1ubuntu0.17",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/python3.12/python3.12-minimal_3.12.3-1ubuntu0.17_arm64.deb",
+      "size_bytes": 2253306,
+      "sha256": "be39fa8380f1e65fc02701cdbc8652acd924d8576b4ba1bd772141040a22b15f",
+      "control": {
+        "Depends": "libpython3.12-minimal (= 3.12.3-1ubuntu0.17), libexpat1 (>= 2.6.0), zlib1g (>= 1:1.2.0)",
+        "Pre-Depends": "libc6 (>= 2.38)",
+        "Conflicts": "binfmt-support (<< 1.1.2)",
+        "Multi-Arch": "allowed",
+        "Installed-Size": "7757",
+        "Section": "python",
+        "Priority": "important",
+        "Description": "Minimal subset of the Python language (version 3.12)"
+      }
+    },
+    {
+      "name": "readline-common",
+      "version": "8.2-4build1",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/readline/readline-common_8.2-4build1_all.deb",
+      "size_bytes": 56484,
+      "sha256": "879bfd7f8a9bc4c0f7cdc777cdd8bc6de5f8c4a2ac80c060322a1b22f13504bb",
+      "control": {
+        "Conflicts": "libreadline-common, libreadline5 (<< 5.0-11)",
+        "Replaces": "libreadline-common, libreadline4 (<< 4.3-16), libreadline5 (<< 5.0-11)",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "77",
+        "Section": "utils",
+        "Priority": "important",
+        "Description": "GNU readline and history libraries, common files"
+      }
+    },
+    {
+      "name": "sensible-utils",
+      "version": "0.0.22",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/sensible-utils/sensible-utils_0.0.22_all.deb",
+      "size_bytes": 22462,
+      "sha256": "410c29ff82c6916d14e235b511287e67a45cb78d509b19aab48608acdc941254",
+      "control": {
+        "Multi-Arch": "foreign",
+        "Installed-Size": "63",
+        "Section": "utils",
+        "Priority": "required",
+        "Description": "Utilities for sensible alternative selection"
+      }
+    },
+    {
+      "name": "tar",
+      "version": "1.35+dfsg-3build1",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/t/tar/tar_1.35+dfsg-3build1_arm64.deb",
+      "size_bytes": 247906,
+      "sha256": "2df76253d79fd27b8e10b4b1426e2a229c1f374406a80607878eb66bdc1edcf6",
+      "control": {
+        "Pre-Depends": "libacl1 (>= 2.2.23), libc6 (>= 2.38), libselinux1 (>= 3.1~)",
+        "Conflicts": "cpio (<= 2.4.2-38)",
+        "Breaks": "dpkg-dev (<< 1.14.26)",
+        "Replaces": "cpio (<< 2.4.2-39)",
+        "Multi-Arch": "foreign",
+        "Essential": "yes",
+        "Installed-Size": "760",
+        "Section": "utils",
+        "Priority": "required",
+        "Description": "GNU version of the tar archiving utility"
+      }
+    },
+    {
+      "name": "tar",
+      "version": "1.35+dfsg-3ubuntu0.4",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/t/tar/tar_1.35+dfsg-3ubuntu0.4_arm64.deb",
+      "size_bytes": 252352,
+      "sha256": "3302932e6125f1be306a9be67cf58a81f94911d92a99c9eeb0aff59c2c457fd7",
+      "control": {
+        "Pre-Depends": "libacl1 (>= 2.2.23), libc6 (>= 2.38), libselinux1 (>= 3.1~)",
+        "Conflicts": "cpio (<= 2.4.2-38)",
+        "Breaks": "dpkg-dev (<< 1.14.26)",
+        "Replaces": "cpio (<< 2.4.2-39)",
+        "Multi-Arch": "foreign",
+        "Essential": "yes",
+        "Installed-Size": "760",
+        "Section": "utils",
+        "Priority": "required",
+        "Description": "GNU version of the tar archiving utility"
+      }
+    },
+    {
+      "name": "tzdata",
+      "version": "2024a-2ubuntu1",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/t/tzdata/tzdata_2024a-2ubuntu1_all.deb",
+      "size_bytes": 273318,
+      "sha256": "f5bca0c788a4fc465c435f7e8a54b2594e9cbf1a22abb263a59e393f1cb666e1",
+      "control": {
+        "Depends": "debconf (>= 0.5) | debconf-2.0",
+        "Provides": "tzdata-trixie",
+        "Breaks": "tzdata-legacy (= 2023c-8ubuntu1)",
+        "Replaces": "tzdata-legacy (= 2023c-8ubuntu1)",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "1381",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "time zone and daylight-saving time data"
+      }
+    },
+    {
+      "name": "tzdata",
+      "version": "2026c-0ubuntu0.24.04.1",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/t/tzdata/tzdata_2026c-0ubuntu0.24.04.1_all.deb",
+      "size_bytes": 279816,
+      "sha256": "ef12c9ef81905b5ac558504b2f8c20da9be5f28861020b3fb5e8b15fb3fae2f6",
+      "control": {
+        "Depends": "debconf (>= 0.5) | debconf-2.0",
+        "Provides": "tzdata-trixie",
+        "Breaks": "tzdata-legacy (= 2023c-8ubuntu1)",
+        "Replaces": "tzdata-legacy (= 2023c-8ubuntu1)",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "1387",
+        "Section": "libs",
+        "Priority": "important",
+        "Description": "time zone and daylight-saving time data"
+      }
+    },
+    {
+      "name": "ucf",
+      "version": "3.0043+nmu1",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/u/ucf/ucf_3.0043+nmu1_all.deb",
+      "size_bytes": 56522,
+      "sha256": "397e541af11db776ed7facf1674ee37b56e7de51348c9f077d7a283912c4b458",
+      "control": {
+        "Depends": "debconf (>= 0.5) | debconf-2.0, sensible-utils",
+        "Multi-Arch": "foreign",
+        "Installed-Size": "214",
+        "Section": "utils",
+        "Priority": "important",
+        "Description": "Update Configuration File(s): preserve user changes to config files"
+      }
+    },
+    {
+      "name": "ufw",
+      "version": "0.36.2-6",
+      "architecture": "all",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/u/ufw/ufw_0.36.2-6_all.deb",
+      "size_bytes": 169082,
+      "sha256": "096eb403ecaf6740d160bb306970f025222ef71324319cc1cb78d06dfa462ef1",
+      "control": {
+        "Depends": "iptables, ucf, python3:any, debconf (>= 0.5) | debconf-2.0",
+        "Breaks": "iptables-persistent, netfilter-persistent",
+        "Installed-Size": "849",
+        "Section": "admin",
+        "Priority": "standard",
+        "Description": "program for managing a Netfilter firewall"
+      }
+    },
+    {
+      "name": "zlib1g",
+      "version": "1:1.3.dfsg-3.1ubuntu2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/zlib1g_1.3.dfsg-3.1ubuntu2_arm64.deb",
+      "size_bytes": 61682,
+      "sha256": "66aaebb68401a88b4f70a5f48e1a516b611fdcaae15208d8aee677c556d2cf01",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Provides": "libz1",
+        "Conflicts": "zlib1 (<= 1:1.0.4-7)",
+        "Breaks": "libxml2 (<< 2.7.6.dfsg-2), texlive-binaries (<< 2023.20230311.66589-8)",
+        "Multi-Arch": "same",
+        "Installed-Size": "182",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "compression library - runtime"
+      }
+    },
+    {
+      "name": "zlib1g",
+      "version": "1:1.3.dfsg-3.1ubuntu2.2",
+      "architecture": "arm64",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/zlib1g_1.3.dfsg-3.1ubuntu2.2_arm64.deb",
+      "size_bytes": 61898,
+      "sha256": "e55ab3b4fb7b6edc4a628e28ec13f8780b08abe427d33ae148f030d8586d0e9a",
+      "control": {
+        "Depends": "libc6 (>= 2.17)",
+        "Provides": "libz1",
+        "Conflicts": "zlib1 (<= 1:1.0.4-7)",
+        "Breaks": "libxml2 (<< 2.7.6.dfsg-2), texlive-binaries (<< 2023.20230311.66589-8)",
+        "Multi-Arch": "same",
+        "Installed-Size": "183",
+        "Section": "libs",
+        "Priority": "required",
+        "Description": "compression library - runtime"
+      }
+    }
+  ]
+}

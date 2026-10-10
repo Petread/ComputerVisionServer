@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import getpass
 import hashlib
 import json
@@ -17,6 +16,11 @@ import tarfile
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
+
+try:
+    from scripts.release import edge_system_packages
+except ImportError:  # Direct script execution.
+    import edge_system_packages
 
 
 def _resolve_openssl(executable: str) -> str:
@@ -155,6 +159,86 @@ def _validate_signing_key(openssl: str, key: Path, passphrase: str) -> None:
         )
 
 
+def manage_release_key(
+    private_key: Path,
+    public_key: Path,
+    *,
+    generate: bool = False,
+    passphrase: str = "",
+    openssl_executable: str = "openssl",
+) -> str:
+    """Create an encrypted RSA key or export an existing key's public half.
+
+    Never replace keys. Only public data and its canonical SPKI fingerprint may
+    leave this operation; passphrases use OpenSSL's private stdin pipe.
+    """
+    openssl = _resolve_openssl(openssl_executable)
+    private_key, public_key = private_key.resolve(), public_key.resolve()
+    if private_key == public_key:
+        raise ValueError("Private und öffentliche Schlüsseldatei müssen verschieden sein.")
+    if public_key.exists():
+        raise ValueError("Die öffentliche Ausgabedatei existiert bereits. Neuen Namen wählen.")
+    secret = _passphrase_input(passphrase)
+    created = False
+    try:
+        if generate:
+            if private_key.exists():
+                raise ValueError("Der private Schlüssel existiert bereits und wird nicht ersetzt.")
+            if len(passphrase) < 12:
+                raise ValueError(
+                    "Für neue Schlüssel mindestens 12 Zeichen als Passphrase verwenden."
+                )
+            result = subprocess.run(
+                [
+                    openssl,
+                    "genpkey",
+                    "-algorithm",
+                    "RSA",
+                    "-pkeyopt",
+                    "rsa_keygen_bits:3072",
+                    "-aes-256-cbc",
+                    "-pass",
+                    "stdin",
+                ],
+                input=secret,
+                capture_output=True,
+                check=False,
+                timeout=120,
+            )
+            if result.returncode:
+                raise ValueError("Der verschlüsselte RSA-Schlüssel konnte nicht erzeugt werden.")
+            descriptor = os.open(private_key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            created = True
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(result.stdout)
+        _validate_signing_key(openssl, private_key, passphrase)
+        result = subprocess.run(
+            [openssl, "pkey", "-in", str(private_key), "-passin", "stdin", "-pubout"],
+            input=secret,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        if result.returncode:
+            raise ValueError("Der öffentliche Schlüssel konnte nicht abgeleitet werden.")
+        der = subprocess.run(
+            [openssl, "pkey", "-pubin", "-outform", "DER"],
+            input=result.stdout,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        if der.returncode:
+            raise ValueError("Der öffentliche Schlüssel konnte nicht geprüft werden.")
+        with public_key.open("xb") as stream:
+            stream.write(result.stdout)
+        return hashlib.sha256(der.stdout).hexdigest()
+    except BaseException:
+        if created:
+            private_key.unlink(missing_ok=True)
+        raise
+
+
 def export_runtime_update(
     bundle: Path,
     destination: Path,
@@ -259,50 +343,11 @@ def export_runtime_update(
             digest.update(b"\0")
             digest.update(wheel.read(name).decode("utf-8-sig").replace("\r\n", "\n").encode())
             digest.update(b"\0")
-        # Read literal registry metadata without importing target-native dependencies.
-        tree = ast.parse(wheel.read("cv_runtime/registry.py"))
-        distribution = ast.parse(wheel.read("cv_runtime/distribution.py"))
-        unavailable = next(
-            set(ast.literal_eval(item.value.args[0]))
-            for item in distribution.body
-            if isinstance(item, ast.Assign)
-            and any(
-                isinstance(target, ast.Name) and target.id == "EDGE_UNAVAILABLE_NODES"
-                for target in item.targets
-            )
-        )
-        factory = next(
-            item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == "_node"
-        )
-        version = next(
-            ast.literal_eval(keyword.value)
-            for item in ast.walk(factory)
-            if isinstance(item, ast.Call)
-            for keyword in item.keywords
-            if keyword.arg == "contract_version"
-        )
-        contracts = {}
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "_node"
-            ):
-                arguments = {item.arg: item.value for item in node.keywords}
-                name = ast.literal_eval(arguments["node_type"])
-                category = arguments["category"]
-                constraints = arguments.get("constraints")
-                excluded = isinstance(category, ast.Attribute) and category.attr == "CAPTURE"
-                if isinstance(constraints, ast.Dict):
-                    excluded |= any(
-                        isinstance(key, ast.Constant)
-                        and key.value == "edge_supported"
-                        and isinstance(value, ast.Constant)
-                        and value.value is False
-                        for key, value in zip(constraints.keys, constraints.values, strict=True)
-                    )
-                if name not in unavailable and not excluded:
-                    contracts[name] = version
+        try:
+            from .edge_registry_metadata import wheel_node_contracts
+        except ImportError:  # Direct script execution.
+            from edge_registry_metadata import wheel_node_contracts
+        contracts = wheel_node_contracts(wheel)
     manifest = {
         "schema_version": "edge.software.release.v1",
         "release_id": release_id,
@@ -321,6 +366,9 @@ def export_runtime_update(
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
+        system_files = edge_system_packages.stage(profile, root, download=True)
+        if system_files:
+            manifest["system_packages"] = system_files
         raw = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
         (root / "release.json").write_bytes(raw)
         subprocess.run(
@@ -339,12 +387,16 @@ def export_runtime_update(
             check=True,
             input=_passphrase_input(signing_passphrase),
         )
-        _publish_update_archive(destination, raw, root / "release.sig", wheels)
+        _publish_update_archive(
+            destination, raw, root / "release.sig", wheels,
+            {"system-packages/" + name: root / "system-packages" / name for name in system_files},
+        )
     print(f"Runtime update created: {destination}", flush=True)
 
 
 def _publish_update_archive(
-    destination: Path, raw: bytes, signature: Path, wheels: list[Path]
+    destination: Path, raw: bytes, signature: Path, wheels: list[Path],
+    extra_files: dict[str, Path] | None = None,
 ) -> None:
     # Keep any previous output intact if writing the new package fails.
     # Create the archive directly in its destination directory so it inherits
@@ -355,14 +407,15 @@ def _publish_update_archive(
     ) as output_file:
         candidate = Path(output_file.name)
     try:
-        _write_update_archive(candidate, raw, signature, wheels)
+        _write_update_archive(candidate, raw, signature, wheels, extra_files)
         os.replace(candidate, destination)
     finally:
         candidate.unlink(missing_ok=True)
 
 
 def _write_update_archive(
-    destination: Path, raw: bytes, signature: Path, wheels: list[Path]
+    destination: Path, raw: bytes, signature: Path, wheels: list[Path],
+    extra_files: dict[str, Path] | None = None,
 ) -> None:
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_STORED) as archive:
         archive.writestr(zipfile.ZipInfo("release.json"), raw)
@@ -376,12 +429,19 @@ def _write_update_archive(
             ):
                 shutil.copyfileobj(source, target)
 
+        for name, path in sorted((extra_files or {}).items()):
+            with path.open("rb") as source, archive.open(
+                zipfile.ZipInfo(name), "w", force_zip64=True
+            ) as target:
+                shutil.copyfileobj(source, target)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bundle", required=True, type=Path)
+    parser.add_argument("--bundle", type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--release-id", required=True)
+    parser.add_argument("--release-id")
+    parser.add_argument("--key-action", choices=("create", "export"))
     parser.add_argument("--signing-key", required=True, type=Path)
     parser.add_argument("--openssl", default="openssl")
     parser.add_argument("--package-index-url", default="https://pypi.org/simple")
@@ -403,6 +463,8 @@ if __name__ == "__main__":
         help="Build current Python packages and add Basler SDK; reuse the completed bundle's base.",
     )
     args = parser.parse_args()
+    if not args.key_action and (args.bundle is None or not args.release_id):
+        parser.error("Runtime-Updates benötigen --bundle und --release-id.")
     passphrase = ""
     if args.signing_passphrase_stdin:
         passphrase = (
@@ -411,16 +473,27 @@ if __name__ == "__main__":
     elif args.ask_signing_passphrase:
         passphrase = getpass.getpass("Schlüssel-Passphrase: ")
     try:
-        export_runtime_update(
-            args.bundle,
-            args.output,
-            release_id=args.release_id,
-            signing_key=args.signing_key,
-            refresh_runtime=args.refresh_runtime,
-            openssl_executable=args.openssl,
-            package_index_url=args.package_index_url,
-            additional_wheel_directory=args.additional_wheel_directory,
-            signing_passphrase=passphrase,
-        )
-    except ValueError as error:
+        if args.key_action:
+            fingerprint = manage_release_key(
+                args.signing_key,
+                args.output,
+                generate=args.key_action == "create",
+                passphrase=passphrase,
+                openssl_executable=args.openssl,
+            )
+            print(f"Öffentlicher RSA-Schlüssel: {args.output}")
+            print(f"SHA-256 (SPKI): {fingerprint}")
+        else:
+            export_runtime_update(
+                args.bundle,
+                args.output,
+                release_id=args.release_id,
+                signing_key=args.signing_key,
+                refresh_runtime=args.refresh_runtime,
+                openssl_executable=args.openssl,
+                package_index_url=args.package_index_url,
+                additional_wheel_directory=args.additional_wheel_directory,
+                signing_passphrase=passphrase,
+            )
+    except (ValueError, OSError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"Runtime-Update fehlgeschlagen: {error}\n")

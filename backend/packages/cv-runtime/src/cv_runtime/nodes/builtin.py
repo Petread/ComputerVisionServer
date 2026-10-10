@@ -697,9 +697,12 @@ class SegmentationInferenceHandler(BuiltinHandler):
         max_segments = int((node.config or {}).get("max_segments") or 50)
         score_threshold = float((node.config or {}).get("score_threshold") or 0.35)
         image_prepare_started = time.perf_counter()
-        prepared = _prepare_inference_image(frame, binding, task_type=binding.task_type)
+        prepared = _prepare_inference_image(
+            frame, binding, task_type=binding.task_type,
+            lossless=bool((node.config or {}).get("return_masks", False)),
+        )
         segment_bytes = getattr(context.inference_client, "segment_bytes", None)
-        if callable(segment_bytes):
+        if callable(segment_bytes) and not (node.config or {}).get("return_masks", False):
             request_image_prepare_ms = _elapsed_ms(image_prepare_started)
             client_started = time.perf_counter()
             response = segment_bytes(
@@ -723,6 +726,7 @@ class SegmentationInferenceHandler(BuiltinHandler):
                     timeout_ms=timeout_ms,
                     max_segments=max_segments,
                     score_threshold=score_threshold,
+                    return_masks=bool((node.config or {}).get("return_masks", False)),
                 )
             )
             binary_transport = False
@@ -2523,15 +2527,20 @@ class FullFrameCaptureHandler(BuiltinHandler):
             dict(eligibility.result) if isinstance(eligibility, ResultPayload) else None
         )
         if require_eligibility and eligibility_result is None:
-            return NodeExecutionResult(
-                outputs={"capture": CaptureIntentsPayload(intents=[])}
-            )
+            return NodeExecutionResult(outputs={"capture": CaptureIntentsPayload(intents=[])})
         if eligibility_result is not None and not bool(
             eligibility_result.get("eligible", eligibility_result.get("result", False))
         ):
-            return NodeExecutionResult(
-                outputs={"capture": CaptureIntentsPayload(intents=[])}
-            )
+            return NodeExecutionResult(outputs={"capture": CaptureIntentsPayload(intents=[])})
+        if (
+            eligibility_result is not None
+            and eligibility_result.get("image_context_id") is not None
+        ):
+            if (
+                frame.image_context is None
+                or eligibility_result["image_context_id"] != frame.image_context.context_id
+            ):
+                return NodeExecutionResult(outputs={"capture": CaptureIntentsPayload(intents=[])})
         view_metadata = {
             key: frame.metadata.get(key)
             for key in (
@@ -5649,6 +5658,7 @@ def _prepare_inference_image(
     binding: Any,
     *,
     task_type: TaskType,
+    lossless: bool = False,
 ) -> PreparedInferenceImage:
     try:
         import cv2
@@ -5740,7 +5750,7 @@ def _prepare_inference_image(
                 (target_width, target_height),
                 interpolation=interpolation,
             )
-    elif original_bytes is not None and frame.mime_type == "image/jpeg":
+    elif original_bytes is not None and frame.mime_type == "image/jpeg" and not lossless:
         return PreparedInferenceImage(
             image_bytes=original_bytes,
             mime_type=frame.mime_type,
@@ -5751,7 +5761,7 @@ def _prepare_inference_image(
         )
 
     success, encoded = cv2.imencode(
-        ".jpg",
+        ".png" if lossless else ".jpg",
         np.ascontiguousarray(prepared_frame),
         [int(cv2.IMWRITE_JPEG_QUALITY), frame.jpeg_quality()],
     )
@@ -5759,7 +5769,7 @@ def _prepare_inference_image(
         raise RuntimeError("OpenCV could not encode the prepared runtime inference image.")
     return PreparedInferenceImage(
         image_bytes=encoded.tobytes(),
-        mime_type="image/jpeg",
+        mime_type="image/png" if lossless else "image/jpeg",
         source_width=source_width,
         source_height=source_height,
         input_width=target_width,
@@ -5925,11 +5935,21 @@ def _restore_segmentation_geometry(
     segments: list[SegmentationPrediction],
     prepared: PreparedInferenceImage,
 ) -> list[SegmentationPrediction]:
-    if not prepared.letterboxed:
-        return segments
+    from cv_runtime.segmentation_masks import restore_mask
+
     return [
         segment.model_copy(
             update={
+                "mask": restore_mask(
+                    segment.mask,
+                    source_size=(prepared.source_width, prepared.source_height),
+                    input_size=(prepared.input_width, prepared.input_height),
+                    padding=(prepared.pad_left, prepared.pad_top),
+                    scale=prepared.scale,
+                    letterboxed=prepared.letterboxed,
+                )
+                if segment.mask is not None
+                else None,
                 "polygon": [
                     SegmentationPoint(x=x, y=y)
                     for x, y in (
@@ -5937,6 +5957,8 @@ def _restore_segmentation_geometry(
                         for point in segment.polygon
                     )
                 ]
+                if prepared.letterboxed
+                else segment.polygon,
             }
         )
         for segment in segments

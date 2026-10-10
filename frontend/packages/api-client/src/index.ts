@@ -1,4 +1,5 @@
 import type { RuntimePlaces } from '@cv-platform/schemas';
+import type { EdgeSettingsCommand, EdgeSettingsStatus } from '@cv-platform/schemas';
 import type {
   EdgeSoftwareOverview,
   EdgeFleetCommandSummary,
@@ -310,6 +311,36 @@ async function requestForm<T>(baseUrl: string, path: string, body: FormData): Pr
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
     },
     body
+  });
+
+  if (!response.ok) {
+    let payload: ApiError;
+    try {
+      payload = (await response.json()) as ApiError;
+    } catch {
+      payload = {
+        code: 'http_error',
+        message: `Request failed with status ${response.status}`,
+        status_code: response.status,
+        metadata: {}
+      };
+    }
+    throw new PlatformApiError(payload);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function requestImageBytes<T>(baseUrl: string, path: string, image: File): Promise<T> {
+  const csrfToken = readCookie('cv_csrf');
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      'Content-Type': image.type || 'application/octet-stream'
+    },
+    body: image
   });
 
   if (!response.ok) {
@@ -1139,6 +1170,10 @@ export function createPlatformApi(config: ApiClientConfig) {
         )
     },
     edgeDevices: {
+      settings: (deviceId: string) => request<EdgeSettingsStatus>(runtimeAdminApiUrl,
+        `/api/v1/runtime/edge-devices/${deviceId}/settings`),
+      updateSettings: (deviceId: string, payload: EdgeSettingsCommand) => request<EdgeSettingsStatus>(runtimeAdminApiUrl,
+        `/api/v1/runtime/edge-devices/${deviceId}/settings`, { method: 'PUT', body: JSON.stringify(payload) }),
       software: () => request<EdgeSoftwareOverview>(runtimeAdminApiUrl, '/api/v1/runtime/edge-software'),
       uploadSoftware: (file: File) => {
         const body = new FormData();
@@ -1330,6 +1365,8 @@ export function createPlatformApi(config: ApiClientConfig) {
         )
     },
     runtimeResults: {
+      artifact: (resultId: string, name: string) =>
+        requestBinary(resultServiceUrl, `/api/v1/runtime/results/${encodeURIComponent(resultId)}/artifacts/${encodeURIComponent(name)}`),
       list: (params?: {
         channelId?: string;
         pipelineVersionId?: string;
@@ -1757,6 +1794,65 @@ export function createPlatformApi(config: ApiClientConfig) {
         )
     },
     inference: {
+      realtimeClassifyBytes: (
+        image: File,
+        params: { deploymentTarget: string; deploymentReleaseId: string; timeoutMs?: number; topK?: number }
+      ) =>
+        requestImageBytes<ClassificationInferenceResponse>(
+          config.inferenceGatewayRealtimeUrl,
+          `/api/v1/realtime/classify-bytes?${queryString([
+            ['deployment_target', params.deploymentTarget],
+            ['deployment_release_id', params.deploymentReleaseId],
+            ...(params.timeoutMs !== undefined ? [['timeout_ms', String(params.timeoutMs)] as [string, string]] : []),
+            ...(params.topK !== undefined ? [['top_k', String(params.topK)] as [string, string]] : [])
+          ])}`,
+          image
+        ),
+      realtimeDetectBytes: (
+        image: File,
+        params: { deploymentTarget: string; deploymentReleaseId: string; timeoutMs?: number; maxDetections?: number; scoreThreshold?: number }
+      ) =>
+        requestImageBytes<DetectionInferenceResponse>(
+          config.inferenceGatewayRealtimeUrl,
+          `/api/v1/realtime/detect-bytes?${queryString([
+            ['deployment_target', params.deploymentTarget],
+            ['deployment_release_id', params.deploymentReleaseId],
+            ...(params.timeoutMs !== undefined ? [['timeout_ms', String(params.timeoutMs)] as [string, string]] : []),
+            ...(params.maxDetections !== undefined ? [['max_detections', String(params.maxDetections)] as [string, string]] : []),
+            ...(params.scoreThreshold !== undefined ? [['score_threshold', String(params.scoreThreshold)] as [string, string]] : [])
+          ])}`,
+          image
+        ),
+      realtimeSegmentBytes: (
+        image: File,
+        params: { deploymentTarget: string; deploymentReleaseId: string; timeoutMs?: number; maxSegments?: number; scoreThreshold?: number }
+      ) =>
+        requestImageBytes<SegmentationInferenceResponse>(
+          config.inferenceGatewayRealtimeUrl,
+          `/api/v1/realtime/segment-bytes?${queryString([
+            ['deployment_target', params.deploymentTarget],
+            ['deployment_release_id', params.deploymentReleaseId],
+            ...(params.timeoutMs !== undefined ? [['timeout_ms', String(params.timeoutMs)] as [string, string]] : []),
+            ...(params.maxSegments !== undefined ? [['max_segments', String(params.maxSegments)] as [string, string]] : []),
+            ...(params.scoreThreshold !== undefined ? [['score_threshold', String(params.scoreThreshold)] as [string, string]] : [])
+          ])}`,
+          image
+        ),
+      realtimeAnomalyBytes: (
+        image: File,
+        params: { deploymentTarget: string; deploymentReleaseId: string; timeoutMs?: number; threshold?: number; returnMask?: boolean }
+      ) =>
+        requestImageBytes<AnomalyInferenceResponse>(
+          config.inferenceGatewayRealtimeUrl,
+          `/api/v1/realtime/anomaly-bytes?${queryString([
+            ['deployment_target', params.deploymentTarget],
+            ['deployment_release_id', params.deploymentReleaseId],
+            ...(params.timeoutMs !== undefined ? [['timeout_ms', String(params.timeoutMs)] as [string, string]] : []),
+            ...(params.threshold !== undefined ? [['threshold', String(params.threshold)] as [string, string]] : []),
+            ...(params.returnMask !== undefined ? [['return_mask', String(params.returnMask)] as [string, string]] : [])
+          ])}`,
+          image
+        ),
       classify: (payload: RealtimeClassifyRequest) =>
         request<ClassificationInferenceResponse>(
           config.inferenceGatewayRealtimeUrl,
@@ -1836,13 +1932,13 @@ export function createPlatformApi(config: ApiClientConfig) {
           '/api/v1/batch/models/status'
         ),
       publicRealtimeModels: () =>
-        request<PublicModelListResponse>(config.inferenceGatewayRealtimeUrl, '/models'),
+        request<PublicModelListResponse>(config.inferenceGatewayRealtimeUrl, '/api/v1/models'),
       publicRealtimeModelDetail: (modelId: string) =>
-        request<PublicModelDetailResponse>(config.inferenceGatewayRealtimeUrl, `/models/${modelId}`),
+        request<PublicModelDetailResponse>(config.inferenceGatewayRealtimeUrl, `/api/v1/models/${modelId}`),
       publicBatchModels: () =>
-        request<PublicModelListResponse>(config.inferenceGatewayBatchUrl, '/models'),
+        request<PublicModelListResponse>(config.inferenceGatewayBatchUrl, '/api/v1/models'),
       publicBatchModelDetail: (modelId: string) =>
-        request<PublicModelDetailResponse>(config.inferenceGatewayBatchUrl, `/models/${modelId}`),
+        request<PublicModelDetailResponse>(config.inferenceGatewayBatchUrl, `/api/v1/models/${modelId}`),
       publicClassify: (modelId: string, image: File, params?: { topK?: number; timeoutMs?: number }) => {
         const form = new FormData();
         form.append('model_id', modelId);
@@ -1855,7 +1951,7 @@ export function createPlatformApi(config: ApiClientConfig) {
         }
         return requestForm<PublicClassificationResponse>(
           config.inferenceGatewayRealtimeUrl,
-          '/infer/classify',
+          '/api/v1/infer/classify',
           form
         );
       },
@@ -1886,7 +1982,7 @@ export function createPlatformApi(config: ApiClientConfig) {
         }
         return requestForm<PublicDetectionResponse>(
           config.inferenceGatewayRealtimeUrl,
-          '/infer/detect',
+          '/api/v1/infer/detect',
           form
         );
       },
@@ -1913,7 +2009,7 @@ export function createPlatformApi(config: ApiClientConfig) {
         }
         return requestForm<PublicSegmentationResponse>(
           config.inferenceGatewayRealtimeUrl,
-          '/infer/segment',
+          '/api/v1/infer/segment',
           form
         );
       },
@@ -1940,7 +2036,7 @@ export function createPlatformApi(config: ApiClientConfig) {
         }
         return requestForm<PublicAnomalyResponse>(
           config.inferenceGatewayRealtimeUrl,
-          '/infer/anomaly',
+          '/api/v1/infer/anomaly',
           form
         );
       }

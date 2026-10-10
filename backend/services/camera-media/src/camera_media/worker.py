@@ -438,8 +438,9 @@ class CameraMediaCoordinator:
         media_paths, media_api_error = load_mediamtx_paths(self.settings)
         for channel_id in list(self._handles):
             if channel_id not in bindings:
-                handle = self._handles.pop(channel_id)
+                handle = self._handles[channel_id]
                 handle.stop()
+                del self._handles[channel_id]
                 with session_scope(self.settings) as session:
                     mark_channel_stream_stopped(
                         session,
@@ -450,6 +451,10 @@ class CameraMediaCoordinator:
             handle = self._handles.get(channel_id)
             if handle is None or not _same_source_binding(handle.binding, binding):
                 if handle is not None:
+                    LOGGER.info(
+                        "Replacing camera capture for channel %s: source binding changed",
+                        channel_id,
+                    )
                     handle.stop()
                 handle = ChannelMediaHandle(self.settings, binding)
                 self._handles[channel_id] = handle
@@ -461,6 +466,9 @@ class CameraMediaCoordinator:
                     binding.stream_required
                     and binding.stream_restart_token != handle.binding.stream_restart_token
                 )
+                if binding.image_view_stream != handle.binding.image_view_stream:
+                    # Preprocessing is a consumer of the raw ring, not a camera setting.
+                    handle._stop_image_view_stream()
                 handle.binding = binding
                 if restart_requested:
                     handle.stop_publisher()
@@ -1172,8 +1180,16 @@ def _stop_process(process: mp.Process | None, stop_event: StopSignal | None) -> 
         return
     process.join(timeout=3.0)
     if process.is_alive():
+        LOGGER.warning("Camera-media process %s did not stop; terminating", process.pid)
         process.terminate()
         process.join(timeout=1.0)
+    if process.is_alive():
+        LOGGER.error("Camera-media process %s ignored termination; killing", process.pid)
+        process.kill()
+        process.join(timeout=1.0)
+    if process.is_alive():
+        # Keep the handle and prevent a replacement from opening the same camera.
+        raise RuntimeError(f"Camera-media process {process.pid} could not be stopped")
     _close_process(process)
 
 
@@ -1200,7 +1216,6 @@ def _same_source_binding(left: CameraMediaBinding, right: CameraMediaBinding) ->
         and left.source_type == right.source_type
         and left.source_config == right.source_config
         and left.source_secret_refs == right.source_secret_refs
-        and left.image_view_stream == right.image_view_stream
     )
 
 

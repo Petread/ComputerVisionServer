@@ -11,6 +11,7 @@ import type {
   RuntimeStemOrientationReviewCreateRequest
 } from '@cv-platform/schemas';
 import { api } from '../../app/api';
+import { BarkArtifactViewer, BarkResultView } from '../runtime-pipelines/bark-inspection-workspace';
 import { StemCurvaturePhaseDiagnosticGraph } from '../stem-orientation/curvature-phase-diagnostic-graph';
 
 type ResultFilters = {
@@ -485,6 +486,8 @@ export function ResultDetailPanel(props: { result: RuntimeResultRecordDetail | n
       </dl>
 
       <ResultFieldBlock title="Final Response" payload={result.trigger_response} />
+      <BarkResultView value={result.trigger_response} />
+      <BarkArtifactViewer resultId={result.result_record_id} artifacts={result.runtime_metadata.bark_artifacts} />
       <ResultFieldBlock title="Calculated Values" payload={result.derived_preview} />
 
       {stemResult ? (
@@ -920,7 +923,7 @@ function resultFieldEntries(result: RuntimeResultRecordSummary): Array<[string, 
   return Object.entries(result.derived_preview);
 }
 
-function stemOrientationResult(
+export function stemOrientationResult(
   result: RuntimeResultRecordSummary | RuntimeResultRecordDetail
 ): Record<string, unknown> | null {
   const candidates: unknown[] = [result.trigger_response, result.derived_preview];

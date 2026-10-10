@@ -70,6 +70,7 @@ class RealtimeDetectRequest(BaseInferenceRequest):
 class RealtimeSegmentRequest(BaseInferenceRequest):
     max_segments: int = Field(default=5, ge=1, le=100)
     score_threshold: float | None = Field(default=None, ge=0, le=1)
+    return_masks: bool = False
 
 
 class RealtimeAnomalyRequest(BaseInferenceRequest):
@@ -162,10 +163,21 @@ class SegmentationPoint(StrictModel):
     y: float = Field(ge=0, le=1)
 
 
+class SegmentationMask(StrictModel):
+    format: Literal["png_base64"] = "png_base64"
+    data: str = Field(min_length=1)
+    width: int = Field(ge=1, le=16384)
+    height: int = Field(ge=1, le=16384)
+    # Original mask resolution is retained after image-coordinate restoration.
+    native_width: int | None = Field(default=None, ge=1)
+    native_height: int | None = Field(default=None, ge=1)
+
+
 class SegmentationPrediction(StrictModel):
     label: str
     score: float = Field(ge=0, le=1)
     polygon: list[SegmentationPoint] = Field(default_factory=list)
+    mask: SegmentationMask | None = None
 
 
 class AnomalyHeatmap(StrictModel):

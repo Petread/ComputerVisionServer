@@ -682,7 +682,7 @@
           "type": "integer"
         },
         "inference_body_limit_bytes": {
-          "default": 3145728,
+          "default": 33554432,
           "title": "Inference Body Limit Bytes",
           "type": "integer"
         },
@@ -707,7 +707,7 @@
           "type": "integer"
         },
         "max_image_bytes": {
-          "default": 5242880,
+          "default": 31457280,
           "title": "Max Image Bytes",
           "type": "integer"
         }

@@ -11,6 +11,7 @@ from cv_contracts.runtime import (
     RuntimeStemOrientationReviewResponse,
     RuntimeStemShadowEvaluationResponse,
 )
+from cv_core import PlatformSettings
 from cv_db import (
     RuntimeResultQuery,
     RuntimeStemShadowEvaluationQuery,
@@ -27,6 +28,7 @@ from cv_runtime import runtime_service_boundary
 from cv_status import RuntimeMode, UserRole
 from cv_utils import NotFoundError, PlatformError
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 
 from result_service import SERVICE_NAME
 from result_service.dependencies import (
@@ -155,6 +157,29 @@ def get_latest_channel_result(
             detail=f"No runtime result exists for channel {channel_id}.",
         )
     return runtime_result_detail_response(item, meta=build_meta())
+
+
+@router.get(
+    "/runtime/results/{result_record_id}/artifacts/{artifact_name}", response_class=FileResponse
+)
+def get_runtime_result_artifact(
+    result_record_id: str,
+    artifact_name: str,
+    _current_user: ResultReader,
+    settings: Annotated[PlatformSettings, Depends(get_settings)],
+) -> FileResponse:
+    from cv_db.bark_artifacts import bark_artifact_path
+    from cv_db.models import ResultRecord
+
+    with session_scope(settings) as session:
+        row = session.get(ResultRecord, result_record_id)
+        if row is None or not row.history_retained:
+            raise NotFoundError(message="Result not found")
+        try:
+            path = bark_artifact_path(settings, row, artifact_name)
+        except ValueError as exc:
+            raise NotFoundError(message="Artifact not found", detail=str(exc)) from exc
+    return FileResponse(path, filename=artifact_name)
 
 
 @router.get("/runtime/results/{result_record_id}", response_model=RuntimeResultDetailResponse)

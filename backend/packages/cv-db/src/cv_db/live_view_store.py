@@ -190,6 +190,16 @@ def get_runtime_live_view_state(
     actual_state = RuntimeObservedState(
         getattr(execution, "actual_state", None) or channel.observed_state
     )
+    if execution.mode == "trigger":
+        trigger_state = _read_trigger_live_view_state(
+            settings, channel_id=channel_id, actual_state=actual_state,
+        )
+        if trigger_state is not None:
+            return _with_split_frame_payload(settings, trigger_state) if include_frame else trigger_state
+        return _empty_state(
+            channel_id=channel_id, runtime_execution_id=execution.id, actual_state=actual_state,
+            recovery_hint="Channel ready; invoke its trigger pipeline to publish a frame.",
+        )
     if actual_state not in {RuntimeObservedState.RUNNING, RuntimeObservedState.DEGRADED}:
         trigger_state = _read_trigger_live_view_state(
             settings,

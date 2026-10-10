@@ -77,12 +77,16 @@ if [[ -z "${DEVICE_CONFIG}" && -f "${CONFIG_ROOT}/device.env" ]]; then
   CONFIG_SOURCE="${CONFIG_ROOT}/device.env"
 fi
 [[ -f "${CONFIG_SOURCE}" ]] || { echo "UI-generated device configuration missing: ${CONFIG_SOURCE}" >&2; exit 11; }
+systemctl stop ybb-edge-settings.timer ybb-edge-settings.service 2>/dev/null || true
 python3 "${BUNDLE_ROOT}/deployment/edge/validate-device-env.py" \
   --input "${CONFIG_SOURCE}" \
   --output "${CONFIG_ROOT}/device.env" \
   --profile "${BUNDLE_ROOT}/platform-profile.json"
 chown root:"${SERVICE_USER}" "${CONFIG_ROOT}/device.env"
 chmod 0640 "${CONFIG_ROOT}/device.env"
+
+python3 -I "${BUNDLE_ROOT}/deployment/edge/edge-system-packages.py" install \
+  --repository "${BUNDLE_ROOT}/system-packages" --config "${CONFIG_ROOT}/device.env"
 
 systemctl stop ybb-edge-watchdog.timer ybb-edge-agent.service 2>/dev/null || true
 python3 -m venv --system-site-packages "${INSTALL_ROOT}/venv"
@@ -104,7 +108,19 @@ install -m 0755 "${BUNDLE_ROOT}/deployment/edge/edge-runtime-launcher.py" \
   "${INSTALL_ROOT}/edge-runtime-launcher.py"
 install -m 0644 "${BUNDLE_ROOT}/deployment/edge/check-runtime-dependencies.py" \
   "${INSTALL_ROOT}/check-runtime-dependencies.py"
+install -m 0644 "${BUNDLE_ROOT}/deployment/edge/edge-settings-helper.py" "${INSTALL_ROOT}/edge-settings-helper.py"
+install -m 0644 "${BUNDLE_ROOT}/deployment/edge/edge-system-packages.py" "${INSTALL_ROOT}/edge-system-packages.py"
+install -m 0644 "${BUNDLE_ROOT}/deployment/edge/edge_environment.py" "${INSTALL_ROOT}/edge_environment.py"
+install -m 0644 "${BUNDLE_ROOT}/deployment/edge/ybb-edge-settings.service" /etc/systemd/system/ybb-edge-settings.service
+install -m 0644 "${BUNDLE_ROOT}/deployment/edge/ybb-edge-settings.timer" /etc/systemd/system/ybb-edge-settings.timer
 
 systemctl daemon-reload
-systemctl enable --now ybb-edge-agent.service ybb-edge-watchdog.timer
+systemctl enable --now ybb-edge-agent.service ybb-edge-watchdog.timer ybb-edge-settings.timer
 echo "YBB Edge Runtime installed fully offline."
+if [[ ! -x /usr/sbin/ufw ]]; then
+  echo "Betriebseinstellungen noch nicht bereit: Das Ubuntu-Paket 'ufw' fehlt."
+  echo "UFW passend zur Ubuntu-Version nachinstallieren und die Firewall mit freigegebenem Wartungszugang einrichten."
+elif ! LC_ALL=C /usr/sbin/ufw status | grep -q '^Status: active'; then
+  echo "Betriebseinstellungen noch nicht bereit: UFW ist nicht aktiv oder nicht erreichbar."
+  echo "Vor der Aktivierung SSH-/Wartungszugang und den Steuerzugang der Zentrale freigeben."
+fi

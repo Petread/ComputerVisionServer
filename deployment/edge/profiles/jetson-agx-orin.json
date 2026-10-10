@@ -3,6 +3,7 @@
   "platform": "jetson_agx_orin",
   "display_name": "NVIDIA Jetson AGX Orin",
   "architecture": "aarch64",
+  "ubuntu_codename": "noble",
   "archive_format": "tar.gz",
   "base_os": "Jetson Linux 39.2",
   "jetpack_version": "7.2",

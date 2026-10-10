@@ -1115,7 +1115,7 @@ def _resolve_frame(
     session: Session,
     row: RuntimeCaptureRequest,
 ) -> tuple[FramePayload, dict[str, Any], str | None]:
-    if row.source_type == "pipeline":
+    if row.source_type == "pipeline" or (row.metadata_json or {}).get("pipeline_snapshot") is True:
         return _frame_from_pipeline_payload(row)
     capture_source = str(
         (row.metadata_json or {}).get("capture_source") or "LIVE_VIEW_FRAME"

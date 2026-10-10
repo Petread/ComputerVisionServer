@@ -25,7 +25,12 @@ from cv_contracts import (
     EdgeResultStreamList,
     EdgeRuntimeStatus,
 )
-from cv_contracts.edge import EdgeSoftwareCommand, EdgeSoftwareStatus
+from cv_contracts.edge import (
+    EdgeSettingsCommand,
+    EdgeSettingsStatus,
+    EdgeSoftwareCommand,
+    EdgeSoftwareStatus,
+)
 
 from cv_edge.network import EdgeNetworkPolicy
 
@@ -104,6 +109,13 @@ class EdgeAgentClient:
 
     def software_status(self) -> EdgeSoftwareStatus:
         return EdgeSoftwareStatus.model_validate(self._request("GET", "/edge/v1/software").json())
+
+    def settings_status(self) -> EdgeSettingsStatus:
+        return EdgeSettingsStatus.model_validate(self._request("GET", "/edge/v1/settings").json())
+
+    def update_settings(self, command: EdgeSettingsCommand) -> EdgeSettingsStatus:
+        response = self._request("PUT", "/edge/v1/settings", json=command.model_dump(mode="json"))
+        return EdgeSettingsStatus.model_validate(response.json())
 
     def software_command(self, command: EdgeSoftwareCommand) -> EdgeSoftwareStatus:
         response = self._request(

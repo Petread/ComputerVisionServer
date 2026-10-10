@@ -1,4 +1,20 @@
 .edge-orchestration { display: grid; gap: 1.25rem; }
+.edge-performance-list { display: grid; gap: 1.5rem; }
+.edge-performance-channel { min-width: 0; border-top: 1px solid var(--border-color, #d6dfdf); padding-top: 1rem; }
+.edge-performance-details { margin: 1rem 0; }
+.edge-performance-details > summary { cursor: pointer; font-weight: 600; padding: .65rem 0; }
+.edge-performance-details table { width: 100%; font-variant-numeric: tabular-nums; }
+.edge-performance-node-type { display: block; color: var(--text-muted, #60716f); }
+.edge-update-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; list-style: none; padding: 0; margin: 0 0 1.5rem; }
+.edge-update-steps li { display: grid; align-content: start; gap: .6rem; padding: 1.1rem; border: 1px solid var(--border-color, #d6dfdf); border-radius: 10px; background: var(--surface, #fff); }
+.edge-update-steps strong { color: var(--text-primary, #23594f); }
+.edge-update-steps span { color: var(--text-muted, #60716f); font-size: .88rem; line-height: 1.6; }
+.edge-update-help { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #d6dfdf); }
+.edge-update-help p { max-width: 95ch; line-height: 1.6; }
+.edge-proposed-package { margin-bottom: .7rem; overflow-wrap: anywhere; }
+.edge-row-actions details > button { width: 100%; margin-top: .5rem; }
+.edge-row-actions summary { font-size: .8rem; cursor: pointer; padding: .4rem 0; }
+@media (max-width: 900px) { .edge-update-steps { grid-template-columns: 1fr; } }
 .edge-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
 .edge-metrics > div { display: grid; gap: .5rem; border: 1px solid var(--border-color, #d6dfdf); border-top: 3px solid #19847b; border-radius: 12px; padding: 1.2rem; background: var(--surface, #fff); }
 .edge-metrics strong { font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }

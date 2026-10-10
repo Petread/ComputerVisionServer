@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from cv_contracts.runtime import RuntimeStemCurvatureProcessCalibrationProfile
 
+from cv_runtime.frame_analysis_cache import immutable_roi_mask
 from cv_runtime.stem_process_coordinates import (
     validate_stem_curvature_process_calibration,
 )
@@ -259,11 +260,11 @@ def mask_leading_x_mm(
     profile: RuntimeStemCurvatureProcessCalibrationProfile,
 ) -> float | None:
     binary = _binary_mask(mask, profile)
-    ys, xs = np.nonzero(binary)
+    xs = np.flatnonzero(np.any(binary, axis=0))
     if len(xs) == 0:
         return None
     x_px = float(np.max(xs) if profile.conveyor_direction == "POSITIVE_X" else np.min(xs))
-    return rectified_pixel_to_process_point(x_px, float(np.mean(ys)), profile)[0]
+    return rectified_pixel_to_process_point(x_px, 0.0, profile)[0]
 
 
 def freeze_gate_reached(
@@ -286,7 +287,7 @@ def _binary_mask(
         raise ValueError("horizontal curvature requires a 2D active-stem mask")
     if array.shape != (profile.image_height, profile.image_width):
         raise ValueError("active-stem mask resolution does not match process calibration")
-    return np.where(array > 0, 255, 0).astype(np.uint8)
+    return np.multiply(array > 0, np.uint8(255))
 
 
 def _curvature_roi_mask(
@@ -299,10 +300,8 @@ def _curvature_roi_mask(
         ],
         dtype=np.float32,
     )
-    polygon = np.rint(points).astype(np.int32)
-    result = np.zeros((profile.image_height, profile.image_width), dtype=np.uint8)
-    cv2.fillPoly(result, [polygon], 255)
-    return result
+    return immutable_roi_mask(profile.calibration_hash, profile.image_width, profile.image_height,
+                            tuple(map(tuple, np.rint(points).astype(np.int32).tolist())))
 
 
 def _clean_mask(mask: Any, config: StemHorizontalCurvatureConfig) -> Any:
@@ -358,14 +357,24 @@ def _sample_stations(
     half_bin = max((roi_x_max - roi_x_min) / max(config.station_count - 1, 1) * 0.45, 0.5)
     bounds = profile.process_bounds
     x_span = bounds.x_max_mm - bounds.x_min_mm
+    occupied = np.ascontiguousarray(np.asarray(mask).T != 0)
+    visible_columns = occupied.any(axis=1)
+    low_by_column = np.argmax(occupied, axis=1)
+    high_by_column = mask.shape[0] - 1 - np.argmax(occupied[:, ::-1], axis=1)
+    low_by_column[~visible_columns] = mask.shape[0]
+    high_by_column[~visible_columns] = -1
+    starts = np.maximum(np.floor(centers - half_bin).astype(np.intp), 0)
+    ends = np.minimum(np.ceil(centers + half_bin).astype(np.intp) + 1, profile.image_width)
+    columns = starts[:, None] + np.arange(max(int(np.max(ends - starts)), 1))
+    included = columns < ends[:, None]
+    columns = np.minimum(columns, profile.image_width - 1)
+    station_lows = np.min(np.where(included, low_by_column[columns], mask.shape[0]), axis=1)
+    station_highs = np.max(np.where(included, high_by_column[columns], -1), axis=1)
     stations: list[HorizontalCurvatureStation] = []
-    for center in centers:
-        start = max(int(math.floor(center - half_bin)), 0)
-        end = min(int(math.ceil(center + half_bin)) + 1, profile.image_width)
-        ys, _xs = np.nonzero(mask[:, start:end])
+    for center, low, high in zip(centers, station_lows, station_highs, strict=True):
         x_mm, _unused = rectified_pixel_to_process_point(center, 0.0, profile)
         x_normalized = (x_mm - bounds.x_min_mm) / x_span
-        if len(ys) == 0:
+        if high < low:
             stations.append(
                 HorizontalCurvatureStation(
                     x_mm=x_mm,
@@ -377,8 +386,8 @@ def _sample_stations(
                 )
             )
             continue
-        y_low_px = float(np.min(ys))
-        y_high_px = float(np.max(ys))
+        y_low_px = float(low)
+        y_high_px = float(high)
         _x, y_low_mm = rectified_pixel_to_process_point(center, y_low_px, profile)
         _x, y_high_mm = rectified_pixel_to_process_point(center, y_high_px, profile)
         width_mm = abs(y_high_mm - y_low_mm)

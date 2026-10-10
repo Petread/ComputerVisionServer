@@ -45,12 +45,14 @@ def create_edge_device(
     created_by: str | None,
 ) -> EdgeDeviceDetail:
     management_ip = str(payload.address.management_ip)
-    existing = session.scalar(select(EdgeDevice).where(EdgeDevice.management_ip == management_ip))
-    if existing is not None:
-        lifecycle = "archived" if existing.deleted_at is not None else "active"
-        raise ValueError(
-            f"Edge device IP {management_ip} is already registered ({lifecycle} record)."
+    existing = session.scalar(
+        select(EdgeDevice).where(
+            EdgeDevice.management_ip == management_ip,
+            EdgeDevice.deleted_at.is_(None),
         )
+    )
+    if existing is not None:
+        raise ValueError(f"Edge device IP {management_ip} is already registered (active record).")
     row = EdgeDevice(
         id=generate_prefixed_id("edge"),
         name=payload.name,
@@ -186,8 +188,6 @@ def update_edge_device(
     server_ip = payload.server_ip or IPv4Address(row.server_ip)
     if IPv4Address(row.management_ip) not in allowed_cidr:
         raise ValueError("Existing management_ip must belong to allowed_cidr.")
-    if server_ip not in allowed_cidr:
-        raise ValueError("server_ip must belong to allowed_cidr.")
     if server_ip == IPv4Address(row.management_ip):
         raise ValueError("server_ip and management_ip must differ.")
     if str(allowed_cidr) != row.allowed_cidr or str(server_ip) != row.server_ip:

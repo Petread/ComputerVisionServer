@@ -71,6 +71,12 @@ paths:
   /edge-plant/v1/channels/{channel_id}/trigger:
     put:
       summary: Trigger
+      description: 'The Result output node selects the response: the full legacy report,
+        only configured result fields, or {data: result fields, meta: selected metadata}.
+        The HTTP Trigger node may require X-Idempotency-Key; otherwise it is optional.
+        Keys replay the original result for five minutes, including across restarts.
+        Use a fresh key for every new operation. Without history, result_sequence
+        is null. An omitted body is equivalent to {}. Errors always use EdgeControlError.'
       operationId: trigger_edge_plant_v1_channels__channel_id__trigger_put
       parameters:
       - name: channel_id
@@ -81,25 +87,34 @@ paths:
           title: Channel Id
       - name: x-idempotency-key
         in: header
-        required: true
+        required: false
         schema:
-          type: string
-          minLength: 3
-          maxLength: 160
+          anyOf:
+          - type: string
+            minLength: 3
+            maxLength: 160
+          - type: 'null'
           title: X-Idempotency-Key
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EdgePlantTriggerRequest'
+              anyOf:
+              - $ref: '#/components/schemas/EdgePlantTriggerRequest'
+              - type: 'null'
+              title: Request
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EdgePlantTriggerResponse'
+                anyOf:
+                - $ref: '#/components/schemas/EdgePlantTriggerResponse'
+                - type: object
+                  additionalProperties: true
+                title: Response Trigger Edge Plant V1 Channels  Channel Id  Trigger
+                  Put
         '400':
           description: Edge plant boundary error
           content:
@@ -390,9 +405,12 @@ components:
           minLength: 1
           title: Boot Id
         result_sequence:
-          type: integer
-          minimum: 1.0
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
           title: Result Sequence
+          description: Outbox sequence; null when no history result is queued.
         duplicate:
           type: boolean
           title: Duplicate
@@ -411,7 +429,6 @@ components:
       - workload_release_id
       - correlation_id
       - boot_id
-      - result_sequence
       - execution_result
       - completed_at
       title: EdgePlantTriggerResponse

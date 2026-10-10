@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,17 @@ from cv_status import (
     TargetPath,
 )
 from cv_utils import utc_now, utc_now_iso
+
+
+def _serialized_serving_update(function):
+    @wraps(function)
+    def run(*args, **kwargs):
+        from cv_db.runtime_model_store import lock_model_lifecycle
+        settings = load_platform_settings("control-worker")
+        with session_scope(settings) as session:
+            lock_model_lifecycle(session)
+            return function(*args, **kwargs)
+    return run
 
 
 def build_deployment_package(model_version_id: str) -> dict[str, str]:
@@ -105,6 +117,7 @@ def build_deployment_package(model_version_id: str) -> dict[str, str]:
         raise
 
 
+@_serialized_serving_update
 def stage_model_release(promotion_id: str) -> dict[str, str]:
     settings = load_platform_settings("control-worker")
     with session_scope(settings) as session:
@@ -162,6 +175,7 @@ def stage_model_release(promotion_id: str) -> dict[str, str]:
             f"{_summarize_compatibility_errors(compatibility_report)}"
         )
 
+    _assert_runtime_repository_compatible(settings, manager, release, package_detail.serving_manifest)
     manager.stage_release(
         target_path=target_path,
         stable_model_name=release.triton_model_name,
@@ -169,95 +183,15 @@ def stage_model_release(promotion_id: str) -> dict[str, str]:
         package_manifest=package_detail.serving_manifest,
         allow_repository_config_replacement=allow_repository_config_replacement,
     )
-    client = _triton_client(settings, target_path)
+    smoke_report = _deferred_runtime_smoke_report(manager, release, package_detail.serving_manifest)
+    smoke_report_uri = _write_smoke_report(
+        settings=settings, deployment_release_id=release.id, smoke_report=smoke_report,
+    )
     with session_scope(settings) as session:
         update_deployment_release_status(
-            session,
-            deployment_release_id=release.id,
-            status=DeploymentReleaseStatus.LOADING,
-        )
-    try:
-        manager.load_release(
-            target_path=target_path,
-            stable_model_name=release.triton_model_name,
-            triton_model_version=release.triton_model_version,
-            triton_client=client,
-        )
-        smoke_report = manager.smoke_test_report(
-            deployment_release_id=release.id,
-            target_path=target_path,
-            stable_model_name=release.triton_model_name,
-            triton_model_version=release.triton_model_version,
-            package_manifest=package_detail.serving_manifest,
-            triton_client=client,
-        )
-        smoke_report_uri = _write_smoke_report(
-            settings=settings,
-            deployment_release_id=release.id,
-            smoke_report=smoke_report,
-        )
-    except Exception as exc:
-        simulated_runtime = _uses_simulated_runtime(package_detail.serving_manifest)
-        onnx_fallback_runtime = _uses_local_onnx_fallback_runtime(
-            settings=settings,
-            package_manifest=package_detail.serving_manifest,
-            target_path=target_path,
-        )
-        if onnx_fallback_runtime:
-            smoke_report = _build_local_onnx_fallback_smoke_report(
-                settings=settings,
-                deployment_release_id=release.id,
-                target_path=target_path,
-                stable_model_name=release.triton_model_name,
-                triton_model_version=release.triton_model_version,
-                package_manifest=package_detail.serving_manifest,
-                triton_error=str(exc),
-            )
-        else:
-            smoke_report = _build_load_failure_smoke_report(
-                deployment_release_id=release.id,
-                target_path=target_path,
-                error=str(exc),
-                simulated=simulated_runtime,
-            )
-        smoke_report_uri = _write_smoke_report(
-            settings=settings,
-            deployment_release_id=release.id,
-            smoke_report=smoke_report,
-        )
-        with session_scope(settings) as session:
-            update_deployment_release_status(
-                session,
-                deployment_release_id=release.id,
-                status=(
-                    DeploymentReleaseStatus.SMOKE_TESTING
-                    if simulated_runtime or onnx_fallback_runtime
-                    else DeploymentReleaseStatus.ACTIVATION_FAILED
-                ),
-                smoke_report_uri=smoke_report_uri,
-                smoke_report=smoke_report,
-            )
-        if not simulated_runtime and not onnx_fallback_runtime:
-            raise
-    with session_scope(settings) as session:
-        update_deployment_release_status(
-            session,
-            deployment_release_id=release.id,
+            session, deployment_release_id=release.id,
             status=DeploymentReleaseStatus.SMOKE_TESTING,
-            smoke_report_uri=smoke_report_uri,
-            smoke_report=smoke_report,
-        )
-    if not bool(smoke_report.get("passed")):
-        with session_scope(settings) as session:
-            update_deployment_release_status(
-                session,
-                deployment_release_id=release.id,
-                status=DeploymentReleaseStatus.ACTIVATION_FAILED,
-                smoke_report_uri=smoke_report_uri,
-                smoke_report=smoke_report,
-            )
-        raise ValueError(
-            f"Smoke verification failed for deployment release {release.id}; production traffic remains unchanged."
+            smoke_report_uri=smoke_report_uri, smoke_report=smoke_report,
         )
     with session_scope(settings) as session:
         mark_promotion_staged(session, promotion_id=promotion_id)
@@ -269,6 +203,7 @@ def stage_model_release(promotion_id: str) -> dict[str, str]:
     }
 
 
+@_serialized_serving_update
 def run_release_smoke_test(deployment_release_id: str) -> dict[str, str]:
     settings = load_platform_settings("control-worker")
     manager = TritonRepositoryManager(settings)
@@ -283,15 +218,19 @@ def run_release_smoke_test(deployment_release_id: str) -> dict[str, str]:
                 "serving package manifest."
             )
     target_path = TargetPath(release.target_path)
-    client = _triton_client(settings, target_path)
-    smoke_report = manager.smoke_test_report(
-        deployment_release_id=release.id,
-        target_path=target_path,
-        stable_model_name=release.triton_model_name,
-        triton_model_version=release.triton_model_version,
-        package_manifest=package_detail.serving_manifest,
-        triton_client=client,
-    )
+    from cv_db.runtime_model_store import demanded_release_ids
+    with session_scope(settings) as session:
+        demanded = release.id in demanded_release_ids(session)
+    if demanded:
+        smoke_report = manager.smoke_test_report(
+            deployment_release_id=release.id, target_path=target_path,
+            stable_model_name=release.triton_model_name,
+            triton_model_version=release.triton_model_version,
+            package_manifest=package_detail.serving_manifest,
+            triton_client=_triton_client(settings, target_path),
+        )
+    else:
+        smoke_report = _deferred_runtime_smoke_report(manager, release, package_detail.serving_manifest)
     smoke_report_uri = _write_smoke_report(
         settings=settings,
         deployment_release_id=release.id,
@@ -307,11 +246,12 @@ def run_release_smoke_test(deployment_release_id: str) -> dict[str, str]:
         )
     return {
         "deployment_release_id": deployment_release_id,
-        "status": "passed" if smoke_report.get("passed") else "failed",
+        "status": "deferred" if smoke_report.get("runtime_validation_pending") else "passed" if smoke_report.get("passed") else "failed",
         "finished_at": utc_now_iso(),
     }
 
 
+@_serialized_serving_update
 def deactivate_deployment_model(deployment_release_id: str) -> dict[str, object]:
     settings = load_platform_settings("control-worker")
     with session_scope(settings) as session:
@@ -335,6 +275,7 @@ def deactivate_deployment_model(deployment_release_id: str) -> dict[str, object]
     }
 
 
+@_serialized_serving_update
 def activate_deployment_model(deployment_release_id: str) -> dict[str, object]:
     settings = load_platform_settings("control-worker")
     manager = TritonRepositoryManager(settings)
@@ -368,6 +309,7 @@ def activate_deployment_model(deployment_release_id: str) -> dict[str, object]:
             status=DeploymentReleaseStatus.LOADING,
         )
     try:
+        _assert_runtime_repository_compatible(settings, manager, release, package_manifest)
         manager.stage_release(
             target_path=target_path,
             stable_model_name=model_name,
@@ -375,17 +317,6 @@ def activate_deployment_model(deployment_release_id: str) -> dict[str, object]:
             package_manifest=package_manifest,
             allow_repository_config_replacement=allow_repository_config_replacement,
         )
-        client = _triton_client(settings, target_path)
-        manager.load_release(
-            target_path=target_path,
-            stable_model_name=model_name,
-            triton_model_version=model_version,
-            triton_client=client,
-        )
-        if not client.is_model_ready(model_name, model_version):
-            raise RuntimeError(
-                f"Triton did not mark {model_name}:{model_version} ready after activation."
-            )
     except Exception:
         with session_scope(settings) as session:
             update_deployment_release_status(
@@ -409,6 +340,7 @@ def activate_deployment_model(deployment_release_id: str) -> dict[str, object]:
     }
 
 
+@_serialized_serving_update
 def promote_model_release(promotion_id: str) -> dict[str, str]:
     settings = load_platform_settings("control-worker")
     with session_scope(settings) as session:
@@ -422,6 +354,7 @@ def promote_model_release(promotion_id: str) -> dict[str, str]:
     }
 
 
+@_serialized_serving_update
 def rollback_model_release(target_path: str) -> dict[str, str]:
     settings = load_platform_settings("control-worker")
     manager = TritonRepositoryManager(settings)
@@ -442,19 +375,6 @@ def rollback_model_release(target_path: str) -> dict[str, str]:
         ):
             raise ValueError(
                 f"Rollback candidate {previous_release.id} is missing from the Triton repository and cannot be activated."
-            )
-        package_detail = get_deployment_package_detail(session, model_version_id=previous_release.model_version_id)
-        if not _uses_local_onnx_fallback_runtime(
-            settings=settings,
-            package_manifest=package_detail.serving_manifest if package_detail else None,
-            target_path=resolved_target_path,
-        ):
-            client = _triton_client(settings, resolved_target_path)
-            manager.load_release(
-                target_path=resolved_target_path,
-                stable_model_name=previous_release.triton_model_name,
-                triton_model_version=previous_release.triton_model_version,
-                triton_client=client,
             )
         target = rollback_target_to_previous_release(session, target_path=target_path)
     return {
@@ -662,3 +582,40 @@ def _build_load_failure_smoke_report(
             }
         ],
     }
+
+
+def _deferred_runtime_smoke_report(manager, release, manifest) -> dict[str, Any]:
+    report = manager.repository_integrity_report(
+        target_path=TargetPath(release.target_path), stable_model_name=release.triton_model_name,
+        triton_model_version=release.triton_model_version, package_manifest=manifest,
+    )
+    checks = report.get("checks", [])
+    if not checks or not all(check.get("passed") for check in checks):
+        raise ValueError(f"Repository integrity verification failed for {release.id}: {report}")
+    return {
+        "deployment_release_id": release.id, "target_path": release.target_path,
+        "checked_at": utc_now_iso(), "passed": False,
+        "package_verified": True, "runtime_validation_pending": True,
+        "checks": checks,
+    }
+
+
+def _assert_runtime_repository_compatible(settings, manager, release, manifest) -> None:
+    from cv_db.runtime_model_store import demanded_release_ids
+    target = TargetPath(release.target_path)
+    expected = manager._render_target_config(
+        target_path=target, stable_model_name=release.triton_model_name, package_manifest=manifest,
+    )
+    with session_scope(settings) as session:
+        for release_id in demanded_release_ids(session):
+            required = session.get(DeploymentRelease, release_id)
+            if required is None or (required.target_path, required.triton_model_name) != (
+                release.target_path, release.triton_model_name,
+            ):
+                continue
+            detail = get_deployment_package_detail(session, model_version_id=required.model_version_id)
+            if detail is None or not detail.serving_manifest or manager._render_target_config(
+                target_path=target, stable_model_name=release.triton_model_name,
+                package_manifest=detail.serving_manifest,
+            ) != expected:
+                raise ValueError("Stop channels using this model before replacing its incompatible repository configuration.")

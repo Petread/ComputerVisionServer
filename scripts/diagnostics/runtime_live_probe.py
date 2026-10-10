@@ -165,6 +165,7 @@ def _sample(document: dict[str, Any]) -> dict[str, Any]:
         "drop_rate_percent": metrics.get("drop_rate_percent"),
         "dropped_frame_count": metrics.get("dropped_frame_count"),
         "latency_ms": metrics.get("latency_ms"),
+        "stage_timings_ms": metrics.get("stage_timings_ms") or {},
         "frame_drop_error": frame_metadata.get("frame_drop_error"),
         "diagnostic_warnings": diagnostics.get("warnings") or [],
         "layers": sorted(str(item) for item in layers) if isinstance(layers, list) else [],

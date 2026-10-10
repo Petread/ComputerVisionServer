@@ -2,6 +2,7 @@ import { useUnsavedWorkspace } from '../../components/use-unsaved-workspace';
 import { Icon, Modal, ToolButton, Tabs } from '../../components/workspace-ui';
 import { OverlayControls, LiveViewport } from '../../components/live-workspace-controls';
 import { FacilitySelect } from './places';
+import { BaslerCameraIpField, baslerCameraAddressConfig, validBaslerCameraIp } from './basler-camera-address';
 import { ChannelResultsWorkspace } from './channel-results-workspace';
 import { LabelStudioProjectLink } from '../pipelines/label-studio-link';
 import {
@@ -44,6 +45,7 @@ import { describeError } from '../../app/errors';
 import { useNotifications } from '../../components/notification-provider';
 import { loadMediaMtxReader, type MediaMtxReader } from '../../lib/mediamtx-reader';
 import { useEdgeViewerLease } from './use-edge-viewer-lease';
+import { ChannelEdgePerformance } from '../edge-devices/performance';
 import { RuntimePipelineDesignerPage } from '../runtime-pipelines/runtime-pipeline-designer-page';
 import {
   diagnosticGraphFromOverlay,
@@ -59,6 +61,7 @@ import {
   canCaptureManualSnapshot,
   canStartManualIntervalCapture,
   canStopManualIntervalCapture,
+  channelRuntimeActualState,
   effectiveRuntimeActualState,
   formatActivity,
   manualCaptureResultLabel,
@@ -129,6 +132,7 @@ const emptyForm = {
   baslerWidth: '',
   baslerHeight: '',
   baslerTransportMode: 'auto',
+  baslerCameraIp: '',
   maxFps: '',
   sampleEveryN: '1',
   pipelineMaxInflight: '2',
@@ -194,8 +198,9 @@ export function ChannelDetailPage() {
     setChannelFormDirty(true);
     setForm(next);
   };
-  const persistedLiveActualState =
-    channelQuery.data?.runtime_state?.actual_state ?? channelQuery.data?.status;
+  const persistedLiveActualState = channelQuery.data
+    ? channelRuntimeActualState(channelQuery.data)
+    : undefined;
   const hasTriggerLiveState = (channelQuery.data?.triggerable_pipelines?.length ?? 0) > 0;
   const streamQuery = useQuery({
     queryKey: ['runtime-channel-streams', channelId],
@@ -521,6 +526,7 @@ export function ChannelDetailPage() {
       baslerWidth: numericConfigValue(channel.source_config, 'width', ''),
       baslerHeight: numericConfigValue(channel.source_config, 'height', ''),
       baslerTransportMode: String(channel.source_config.transport_mode ?? 'auto'),
+      baslerCameraIp: String(channel.source_config.ip_address ?? ''),
       maxFps: numericConfigValue(channel.source_config, 'max_fps', ''),
       sampleEveryN: numericConfigValue(channel.source_config, 'sample_every_n', '1'),
       pipelineMaxInflight: numericConfigValue(
@@ -663,10 +669,9 @@ export function ChannelDetailPage() {
   const commandMutation = useMutation({
     mutationFn: (command: 'start' | 'stop' | 'restart') => {
       const currentChannel = channelQuery.data;
-      const currentActualState =
-        currentChannel?.runtime_state?.actual_state ??
-        currentChannel?.observed_state ??
-        currentChannel?.status;
+      const currentActualState = currentChannel
+        ? channelRuntimeActualState(currentChannel)
+        : undefined;
       const currentDesiredState =
         currentChannel?.runtime_state?.desired_state ?? currentChannel?.desired_state;
       const force =
@@ -876,7 +881,7 @@ export function ChannelDetailPage() {
   }
 
   const tone = channelStatusTone(channel);
-  const persistedActualState = channel.runtime_state?.actual_state ?? channel.status;
+  const persistedActualState = channelRuntimeActualState(channel);
   const actualState = effectiveRuntimeActualState(persistedActualState, currentLiveState);
   const liveReady = actualState === 'running' || actualState === 'degraded';
   const triggerablePipelineCount = Math.max(triggerablePipelineEndpoints.length, channel.triggerable_pipelines.length);
@@ -901,12 +906,12 @@ export function ChannelDetailPage() {
         ))
   );
   const showingTriggerFrame = isTriggerLiveViewState(liveState);
-  const statusPillValue = assignedPipelineIsTriggerOnly
+  const statusPillValue = assignedPipelineIsTriggerOnly && liveReady
     ? showingTriggerFrame
       ? 'Latest trigger frame'
       : 'Trigger endpoint ready'
     : channelStatusLabel(channel);
-  const statusPillTone = assignedPipelineIsTriggerOnly ? 'success' : tone;
+  const statusPillTone = assignedPipelineIsTriggerOnly && liveReady ? 'success' : tone;
   const runtimeActions = runtimeActionAvailability(channel, {
     busy: commandMutation.isPending,
     triggerOnly: assignedPipelineIsTriggerOnly
@@ -941,6 +946,7 @@ export function ChannelDetailPage() {
     form.sourceType === 'file_test';
   const canSaveChannel =
     sourceAddressValid(form.sourceType, form.sourceAddress) &&
+    (form.sourceType !== 'basler_pylon' || validBaslerCameraIp(form.baslerCameraIp)) &&
     placementSelectionValid &&
     (!placementChanged || placementEditable) &&
     !testFileUploadMutation.isPending;
@@ -999,6 +1005,7 @@ export function ChannelDetailPage() {
       <div className="workspace-channel-tabs">      <Tabs tabs={['Betrieb', 'Pipeline', 'Ergebnisverlauf', 'Konfiguration']} value={workspaceTab} onChange={tab => {setWorkspaceTab(tab); if(tab === 'Pipeline') setPipelineOpened(true);}}/><span hidden={workspaceTab !== 'Betrieb'}><ToolButton icon="panel" label="Inspektor ein-/ausblenden" active={inspectorOpen} onClick={() => setInspectorOpen(v => !v)}/></span></div>
       <div className="workspace-tab-body workspace-results-tab" hidden={workspaceTab !== 'Ergebnisverlauf'}>{workspaceTab === 'Ergebnisverlauf' && <ChannelResultsWorkspace key={channelId} channelId={channelId} historyEnabled={channel.result_history_policy.enabled} onConfigure={() => {setConfigSection('Datenerfassung & Historie'); setWorkspaceTab('Konfiguration');}}/>}</div>
       <div className="channel-operation-tab" hidden={workspaceTab !== 'Betrieb'}>
+      {workspaceTab === 'Betrieb' && channel.placement.target === 'edge_device' && channel.placement.edge_device_id && <details className="edge-performance-details"><summary>Edge-Leistung und TensorRT-Cache</summary><ChannelEdgePerformance edgeDeviceId={channel.placement.edge_device_id} channelId={channelId} /></details>}
 
       <div className={inspectorOpen ? "channel-live-workspace" : "channel-live-workspace channel-live-workspace--expanded"}>
         <div className="channel-live-workspace__main">
@@ -1267,6 +1274,10 @@ export function ChannelDetailPage() {
             ) : null}
             {form.sourceType === 'basler_pylon' ? (
               <>
+                <BaslerCameraIpField
+                  value={form.baslerCameraIp}
+                  onChange={(baslerCameraIp) => updateChannelForm({ ...form, baslerCameraIp })}
+                />
                 <label>
                   <span>Transport mode</span>
                   <select
@@ -1658,8 +1669,10 @@ export function ChannelDetailPage() {
                 }
               />
               <small>
-                Opt-in only. Select individual model fields through the History destination
-                in the pipeline Result Output.
+                Nur bei Bedarf aktivieren. Im Result-Output-Node bestimmen die Felder mit Ziel
+                „History“, was übertragen und gespeichert wird. Ohne Historie bleiben
+                Edge-Vorschau und HTTP-Antwort aktiv, ohne jedes Ergebnis lokal zu speichern.
+                Änderungen für Edge-Kanäle mit einem Kanalneustart ausrollen.
               </small>
             </label>
             {form.historyEnabled ? (
@@ -3591,12 +3604,11 @@ export function buildChannelPlacementUpdate(
 export function channelPlacementEditable(
   channel: Pick<
     RuntimeChannelSummary,
-    'desired_state' | 'observed_state' | 'runtime_state' | 'status'
+    'desired_state' | 'observed_state' | 'placement' | 'runtime_state' | 'status'
   >
 ) {
   const desiredState = channel.runtime_state?.desired_state ?? channel.desired_state;
-  const observedState =
-    channel.runtime_state?.actual_state ?? channel.observed_state ?? channel.status;
+  const observedState = channelRuntimeActualState(channel);
   return (
     !['start_requested', 'running', 'stop_requested'].includes(desiredState) &&
     !['starting', 'running', 'stopping'].includes(observedState)
@@ -3929,7 +3941,7 @@ function aravisGigeConfig(value: string) {
 
 function baslerPylonConfig(value: string, form: typeof emptyForm) {
   const config: Record<string, unknown> = {
-    ...baslerIdentifierConfig(value),
+    ...baslerCameraAddressConfig(baslerIdentifierConfig(value), form.baslerCameraIp),
     transport_mode: form.baslerTransportMode || 'auto',
     acquisition_mode: form.baslerAcquisitionMode || 'Continuous',
     grab_strategy: form.baslerGrabStrategy || 'LatestImageOnly',
@@ -4121,7 +4133,10 @@ function liveImageSource(imageBase64: string, mimeType = 'image/jpeg') {
 }
 
 function isTriggerLiveViewState(liveState: RuntimeLiveViewState | null) {
-  return Boolean(liveState?.runtime_instance_id?.startsWith('trigger-latest-'));
+  return Boolean(
+    liveState?.runtime_instance_id?.startsWith('trigger-latest-') ||
+    liveState?.frame?.metadata?.trigger_preview === true
+  );
 }
 
 function readLiveOverlayLayerVisibility(channelId: string): Record<string, boolean> {

@@ -45,3 +45,13 @@ def test_network_policy_rejects_network_and_broadcast_addresses() -> None:
         policy.validate("192.168.50.0")
     with pytest.raises(EdgeNetworkPolicyError, match="network or broadcast"):
         policy.validate("192.168.50.255")
+
+
+def test_network_policy_accepts_registered_host_in_single_address_cidr() -> None:
+    policy = EdgeNetworkPolicy.from_strings(
+        allowed_cidrs=["192.168.50.21/32"],
+        registered_addresses=["192.168.50.21"],
+    )
+    assert str(policy.validate("192.168.50.21")) == "192.168.50.21"
+    with pytest.raises(EdgeNetworkPolicyError, match="outside"):
+        policy.validate("192.168.50.22")

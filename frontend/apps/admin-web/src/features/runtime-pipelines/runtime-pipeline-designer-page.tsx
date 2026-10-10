@@ -61,6 +61,8 @@ import type {
   TaskType
 } from '@cv-platform/schemas';
 import { api } from '../../app/api';
+import { BarkInspectionWorkspace } from './bark-inspection-workspace';
+import { PipelineTrainingCapture } from './pipeline-training-capture';
 import { describeError } from '../../app/errors';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { useNotifications } from '../../components/notification-provider';
@@ -247,11 +249,18 @@ export function RuntimePipelineDesignerPage(props: RuntimePipelineDesignerPagePr
   const { notify } = useNotifications();
   const [workspaceDialog, setWorkspaceDialog] = useState<'settings' | 'guided' | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  const [barkInspectionOpen, setBarkInspectionOpen] = useState(false);
   const [selectedDefinitionId, setSelectedDefinitionId] = useState<string>('');
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [mode, setMode] = useState<RuntimeMode>('realtime');
   const [graph, setGraph] = useState<RuntimePipelineGraph>(emptyGraph);
+  const [trainingCapture, setTrainingCapture] = useState<{ graph: RuntimePipelineGraph; execution: Record<string, unknown> } | null>(null);
+  const captureGraphRef = useRef(graph);
+  captureGraphRef.current = graph;
+  const captureChannelRef = useRef(props.embeddedChannel?.channelId);
+  captureChannelRef.current = props.embeddedChannel?.channelId;
+  useEffect(() => { setTrainingCapture(null); }, [graph, props.embeddedChannel?.channelId]);
   const [outputCatalog, setOutputCatalog] = useState<RuntimePipelineOutputCatalog | null>(null);
   const [validationReport, setValidationReport] = useState<RuntimePipelineValidationReport | null>(null);
   const [lastSavedVersionId, setLastSavedVersionId] = useState<string | null>(null);
@@ -672,7 +681,7 @@ export function RuntimePipelineDesignerPage(props: RuntimePipelineDesignerPagePr
   });
 
   const previewMutation = useMutation({
-    mutationFn: (options: {
+    mutationFn: async (options: {
       silent?: boolean;
       signature?: string;
       previewFrame?: RuntimeLiveFrame | null;
@@ -682,13 +691,17 @@ export function RuntimePipelineDesignerPage(props: RuntimePipelineDesignerPagePr
       if (!props.embeddedChannel?.channelId) {
         throw new Error('Open a channel to run the selected pipeline step');
       }
-      return api.channels.pipelinePreview(props.embeddedChannel.channelId, {
+      const captureGraph = graph;
+      const captureChannel = props.embeddedChannel.channelId;
+      const response = await api.channels.pipelinePreview(props.embeddedChannel.channelId, {
         mode: effectiveMode,
         authoring_graph: authoringGraph,
         preview_frame: options.previewFrame ?? null,
         selected_node_key: options.selectedNodeKey ?? selectedNodeKey,
-        include_capture_outputs: false
+        include_capture_outputs: false,
+        include_execution_result: !options.silent && options.purpose !== 'commissioning'
       });
+      return { ...response, captureGraph, captureChannel };
     },
     onSuccess: (response, options) => {
       const desiredSignature =
@@ -702,6 +715,10 @@ export function RuntimePipelineDesignerPage(props: RuntimePipelineDesignerPagePr
         setCommissioningPreviewLiveState(response.state);
       } else {
         setPreviewLiveState(response.state);
+        if (response.execution_result && response.captureGraph === captureGraphRef.current
+          && response.captureChannel === captureChannelRef.current) {
+          setTrainingCapture({ graph: response.captureGraph, execution: response.execution_result });
+        }
       }
       if (!options.silent) {
         notify({
@@ -1279,6 +1296,20 @@ export function RuntimePipelineDesignerPage(props: RuntimePipelineDesignerPagePr
       />
 
       </Modal>}
+      {graph.nodes.some(node => node.node_type === 'preprocessing.endface_pair_split') &&
+        <button type="button" onClick={() => setBarkInspectionOpen(true)}>Rindenmessung · Foto und CSV hochladen</button>}
+      {barkInspectionOpen && <Modal title="Rindenmessung – zwei Stirnflächen" onClose={() => setBarkInspectionOpen(false)}>
+        <BarkInspectionWorkspace graph={graph} channelId={props.embeddedChannel?.channelId}
+          definitionId={selectedDefinitionId} versionId={lastSavedVersionId} dirty={dirty} onGraphChange={mutateGraph}
+          onPreviewFrame={frame => setCapturedCalibrationLiveState({
+            ...(resolvedAuthoringLiveState ?? {}),
+            channel_id: props.embeddedChannel?.channelId ?? '', frame,
+          } as RuntimeLiveViewState)} />
+      </Modal>}
+      {trainingCapture && <details><summary>Trainingsbilder aus getesteten Pipeline-Stufen</summary>
+        <PipelineTrainingCapture channelId={props.embeddedChannel?.channelId}
+          graph={trainingCapture.graph} execution={trainingCapture.execution} />
+      </details>}
       <section className="workspace-graph"><span className="sr-only">Advanced graph</span>
       <div className={`runtime-pipeline-layout ${paletteOpen ? '' : 'runtime-pipeline-layout--no-palette'}`}>
         {paletteOpen && <NodePalette
@@ -1992,7 +2023,9 @@ function nodeTypeBlockedByExistingGraph(
   nodeTypes: Map<string, RuntimeNodeTypeSummary>
 ) {
   const authoring = authoringConstraints(nodeType);
-  if (nodeType.node_category === 'source' && graph.nodes.some((node) => node.node_category === 'source')) {
+  if (nodeType.node_category === 'source' && !nodeType.compatibility_constraints.auxiliary_source
+      && graph.nodes.some((node) => node.node_category === 'source'
+        && !nodeTypes.get(node.node_type)?.compatibility_constraints.auxiliary_source)) {
     return 'A pipeline can use only one source node.';
   }
   if (authoring.singleton && graph.nodes.some((node) => node.node_type === nodeType.node_type)) {
@@ -2045,7 +2078,8 @@ function sourceNodeEligible(
   if (missingInput) {
     return blocked(missingInput);
   }
-  if (hasTrigger && !nodeType.input_ports.some((port) => port.data_type === 'trigger')) {
+  if (hasTrigger && !nodeType.compatibility_constraints.auxiliary_source
+      && !nodeType.input_ports.some((port) => port.data_type === 'trigger')) {
     return blocked('Triggered graphs require the channel frame source.');
   }
   return allowed(authoringConstraints(nodeType).palette_reason || 'Compatible source for the current graph.');
@@ -2087,6 +2121,13 @@ function nodeSupportsAuthoringMode(
   effectiveMode: RuntimeMode
 ) {
   if (nodeType.supported_modes.includes(effectiveMode)) {
+    return true;
+  }
+  if (
+    nodeType.node_category === 'trigger' &&
+    graph.nodes.some((node) => node.node_type === 'source.channel_frame')
+  ) {
+    // Adding an ingress changes the graph mode; evaluate its source compatibility below.
     return true;
   }
   if (graph.nodes.length === 0 && ['trigger', 'source'].includes(nodeType.node_category)) {
@@ -2509,7 +2550,7 @@ function NodePropertiesModal(props: {
                 <strong>This node has two separate jobs</strong>
                 <p className="subtle-text">
                   Step 1 defines the exact perspective-preserving model and Label Studio image.
-                  Step 2 calibrates metric plant X/Y and documents the Z reference plane. Image
+                  Step 2 calibrates plant X/Y and optionally a spatial camera pose using measured Z. Image
                   appearance and metric measurement are deliberately kept separate.
                 </p>
               </div>
@@ -3135,7 +3176,7 @@ function fieldHelpText(field: RuntimeNodePropertySpec) {
   return field.help_text || `Controls the runtime value stored as config.${field.key}.`;
 }
 
-function visiblePropertyFields(fields: RuntimeNodePropertySpec[], node: RuntimeNodeSpec) {
+export function visiblePropertyFields(fields: RuntimeNodePropertySpec[], node: RuntimeNodeSpec) {
   if (node.node_type === 'preprocessing.process_coordinate_rectify') {
     // The structured image-view editor owns the profile ID. Keeping a second editable
     // text field allowed config.view_profile_id and view_profile.view_profile_id to drift.
@@ -3177,6 +3218,9 @@ function visiblePropertyFields(fields: RuntimeNodePropertySpec[], node: RuntimeN
     return fields;
   }
   const hiddenLegacyKeys = new Set(['result_fields', 'include_decision', 'wrap_key']);
+  if (node.config.edge_response_mode !== 'result_with_metadata') {
+    hiddenLegacyKeys.add('edge_response_metadata_fields');
+  }
   return fields.filter((field) => !hiddenLegacyKeys.has(field.key));
 }
 
@@ -3288,11 +3332,18 @@ function NodeField(props: {
               const nextOptions = compatibleOptions.filter((item) =>
                 modelCapabilityMatchesSelectionPolicy(item, nextPolicy)
               );
+              const projectId = modelRef.label_project_id ?? compatibleOptions.find(
+                (item) => item.deployment_release_id === selectedReleaseId
+              )?.capability.label_project_id;
               const selected =
                 nextOptions.find((item) => item.deployment_release_id === selectedReleaseId) ??
                 nextOptions.find(
                   (item) =>
                     item.model_family_slug === modelRef.model_family_slug &&
+                    item.contract_major === modelRef.contract_major
+                ) ??
+                nextOptions.find(
+                  (item) => projectId && item.capability.label_project_id === projectId &&
                     item.contract_major === modelRef.contract_major
                 ) ??
                 nextOptions[0];
@@ -3318,7 +3369,7 @@ function NodeField(props: {
             label="Deployed model"
             helpText={
               modelRef.selection_policy === 'active_production'
-                ? 'Shows the active production release for the required model task type.'
+                ? 'Shows the active production model of each project. Follows compatible production updates within the selected project.'
                 : 'Limits the selectable releases to the model task type required by this node.'
             }
           />
@@ -4651,6 +4702,32 @@ function NodeField(props: {
           <input type="number" min={0} max={1} step={0.01} value={reference.end.y} onChange={(event) => props.onChange({ ...reference, end: { ...reference.end, y: Number(event.target.value) } })} />
         </div>
       </div>
+    );
+  }
+
+  if (props.field.field_type === 'multi_select') {
+    const selected = new Set(Array.isArray(value) ? value.map(String) : []);
+    return (
+      <fieldset>
+        <legend>
+          <FieldLabel label={props.field.label} helpText={fieldHelpText(props.field)} />
+        </legend>
+        {props.field.options.map((option) => (
+          <label key={option.value} className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={selected.has(option.value)}
+              onChange={(event) => {
+                const next = new Set(selected);
+                if (event.target.checked) next.add(option.value);
+                else next.delete(option.value);
+                props.onChange(props.field.options.filter((item) => next.has(item.value)).map((item) => item.value));
+              }}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </fieldset>
     );
   }
 
@@ -6334,6 +6411,22 @@ export function stemProcessGeometryFromCanonicalView(
   };
 }
 
+export function stemSpatialCalibrationUnavailableReason(
+  intrinsic: RuntimeCameraIntrinsicCalibrationProfile | null,
+  coordinateFrame: RuntimeStemCurvatureCoordinateFrameDefinition | null
+): string | null {
+  if (!intrinsic || intrinsic.status !== 'valid' ||
+      intrinsic.calibration_method === 'IDENTITY_PASSTHROUGH' ||
+      intrinsic.accepted_observation_count < 1) {
+    return 'Calibrate the upstream camera with a checkerboard or ChArUco board first. Identity passthrough cannot determine spatial XYZ.';
+  }
+  if (!coordinateFrame || !coordinateFrame.z_reference_length_mm ||
+      !Number.isFinite(coordinateFrame.z_reference_length_mm) || coordinateFrame.z_reference_length_mm <= 0) {
+    return 'Use the coordinate-system assistant and enter the measured vertical distance from O to the Z endpoint.';
+  }
+  return null;
+}
+
 function StemCurvatureProcessCalibrationEditor(props: {
   field: RuntimeNodePropertySpec;
   value: unknown;
@@ -6384,6 +6477,9 @@ function StemCurvatureProcessCalibrationEditor(props: {
   );
   const [zReferenceLengthMm, setZReferenceLengthMm] = useState<number | null>(
     currentProfile?.coordinate_frame_definition?.z_reference_length_mm ?? null
+  );
+  const [spatialCalibrationEnabled, setSpatialCalibrationEnabled] = useState(
+    Boolean(currentProfile?.spatial_calibration)
   );
   const [polygons, setPolygons] = useState<StemProcessPolygonDrafts>(() =>
     stemProcessPolygonsFromProfile(currentProfile)
@@ -6472,6 +6568,7 @@ function StemCurvatureProcessCalibrationEditor(props: {
     setZReferenceLengthMm(
       currentProfile.coordinate_frame_definition?.z_reference_length_mm ?? null
     );
+    setSpatialCalibrationEnabled(Boolean(currentProfile.spatial_calibration));
     setPolygons(stemProcessPolygonsFromProfile(currentProfile));
     setGates(stemProcessGatesFromProfile(currentProfile));
     setReferencePlane(currentProfile.reference_plane);
@@ -6558,8 +6655,14 @@ function StemCurvatureProcessCalibrationEditor(props: {
       ? canonicalViewGeometry.decisionMarginMm
       : decisionMarginMm;
 
+  const spatialUnavailableReason = spatialCalibrationEnabled
+    ? stemSpatialCalibrationUnavailableReason(intrinsicProfile, effectiveCoordinateFrame)
+    : null;
+  const spatialResult = calculation?.profile?.spatial_calibration ??
+    (currentProfileMatchesBindings ? currentProfile?.spatial_calibration : null);
   const calculationMutation = useMutation({
     mutationFn: () => {
+      if (spatialUnavailableReason) throw new Error(spatialUnavailableReason);
       if (!props.channelId) throw new Error('Select the process camera channel first');
       if (!intrinsicProfile) throw new Error('Connect a valid intrinsic undistort node first');
       if (!calibrationFrame?.width || !calibrationFrame.height) {
@@ -6572,6 +6675,8 @@ function StemCurvatureProcessCalibrationEditor(props: {
         intrinsic_calibration_hash: intrinsicProfile.calibration_hash,
         reference_points: effectiveReferencePoints,
         coordinate_frame_definition: effectiveCoordinateFrame,
+        spatial_calibration_enabled: spatialCalibrationEnabled,
+        intrinsic_calibration: spatialCalibrationEnabled ? intrinsicProfile : null,
         measurement_geometry_mode:
           measurementGeometryMode === 'canonical_view_corridor'
             ? 'CANONICAL_VIEW_CORRIDOR_V1'
@@ -6629,6 +6734,7 @@ function StemCurvatureProcessCalibrationEditor(props: {
   const gatesReady = Object.values(effectiveGates).every((points) => points.length === 2);
   const canCalculate =
     Boolean(props.channelId && intrinsicProfile && calibrationFrame) &&
+    !spatialUnavailableReason &&
     calibrationId.trim().length >= 3 &&
     effectiveReferencePoints.length >= 4 &&
     (coordinateInputMode === 'free_points' || effectiveCoordinateFrame !== null) &&
@@ -6642,7 +6748,9 @@ function StemCurvatureProcessCalibrationEditor(props: {
     axis_x_endpoint: 'Click the endpoint of the known X distance. This defines positive X along the longitudinal conveyor.',
     axis_y_endpoint: 'Click the endpoint of the known Y distance. This defines positive Y horizontally across the conveyor.',
     axis_xy_corner: 'Click the physical corner that is X-length and Y-length away from O. This fourth plane point is required for perspective calibration.',
-    axis_z_endpoint: 'Click a visible direction point for Z. Z is vertical/normal to the conveyor plane and never points along the conveyor.',
+    axis_z_endpoint: spatialCalibrationEnabled
+      ? 'Click the endpoint of the measured vertical distance directly above/below O, in the selected positive Z direction. An arbitrary direction arrow is not a spatial reference. X, Y and Z must form a right-handed frame.'
+      : 'Click a visible direction point for Z. Z is vertical/normal to the conveyor plane and never points along the conveyor.',
     candidate_roi: 'Click three or more points around the area in which a new stem may enter.',
     curvature_observation_roi: 'Click three or more points around the area used for curvature observations.',
     surface_tracking_roi: 'Click three or more points around the bark area used for phase tracking.',
@@ -6732,7 +6840,7 @@ function StemCurvatureProcessCalibrationEditor(props: {
     <div className="runtime-structured-table runtime-stem-process-calibration">
       <FieldLabel label={props.field.label} helpText={fieldHelpText(props.field)} />
       <div className="inline-alert inline-alert--info">
-        <strong>Step 2 — Calibrate plant X/Y and document Z</strong>
+        <strong>Step 2 — Calibrate plant coordinates and spatial Z</strong>
         <p className="subtle-text">
           Define one understandable coordinate frame instead of typing coordinates for arbitrary
           points: origin O, positive X, positive Y, the XY rectangle corner, and positive Z. X is
@@ -6741,6 +6849,38 @@ function StemCurvatureProcessCalibrationEditor(props: {
           only for metric measurement and does not alter the model pixels from Step 1.
         </p>
       </div>
+
+      <label className="runtime-checkbox">
+        <input
+          type="checkbox"
+          checked={spatialCalibrationEnabled}
+          onChange={(event) => {
+            setCalculation(null);
+            setSpatialCalibrationEnabled(event.target.checked);
+          }}
+        />
+        Use measured Z reference for spatial camera calibration
+      </label>
+      {spatialCalibrationEnabled ? (
+        <p className="subtle-text">
+          Mark a real point vertically above or below O and enter its measured distance.
+          Calculation fits the camera pose using X/Y and Z together. A rotating reference stem is
+          not required. Unknown stem heights still need to be estimated by the measurement pipeline.
+        </p>
+      ) : null}
+      {spatialUnavailableReason ? <div className="runtime-warning">{spatialUnavailableReason}</div> : null}
+      {spatialResult ? (
+        <div className="inline-alert inline-alert--info">
+          <strong>Applied spatial camera calibration</strong>
+          <p>
+            Camera position X/Y/Z: {spatialResult.camera_center_mm.map((v) => v.toFixed(1)).join(' / ')} mm.
+            {' '}Spatial RMS: {spatialResult.rms_reprojection_error_px.toFixed(3)} px;
+            {' '}maximum: {spatialResult.maximum_reprojection_error_px.toFixed(3)} px;
+            {' '}Z error: {spatialResult.z_reprojection_error_px.toFixed(3)} px.
+          </p>
+          <small className="subtle-text">These errors describe the fitted references, not an independent measurement accuracy.</small>
+        </div>
+      ) : null}
 
       {coordinateInputMode === 'axis_assistant' ? (
         <div className="runtime-structured-table">
@@ -6808,7 +6948,7 @@ function StemCurvatureProcessCalibrationEditor(props: {
               </select>
             </label>
             <label>
-              <span>Optional known Z reference length [mm]</span>
+              <span>{spatialCalibrationEnabled ? 'Measured Z distance O → Z [mm]' : 'Optional known Z reference length [mm]'}</span>
               <input
                 type="number"
                 min={0.001}
@@ -6825,7 +6965,9 @@ function StemCurvatureProcessCalibrationEditor(props: {
                 }}
               />
               <small className="subtle-text">
-                Documentation only in V1; Z is not reconstructed from the image.
+                {spatialCalibrationEnabled
+                  ? 'Required: distance along the physical vertical through O to the marked Z endpoint.'
+                  : 'Enable spatial calibration to use this length in the camera pose calculation.'}
               </small>
             </label>
           </div>
@@ -7016,6 +7158,11 @@ function StemCurvatureProcessCalibrationEditor(props: {
               setMaximumRmsError(clampNumber(finiteNumber(event.target.value, 2), 0.01, 50))
             }
           />
+          {spatialCalibrationEnabled ? (
+            <small className="subtle-text">
+              Spatial calibration also requires every XY/Z point to remain within this limit.
+            </small>
+          ) : null}
         </label>
         <label>
           <span>Optional diameter class</span>
@@ -12752,7 +12899,7 @@ function upstreamModelCapability(
   }
   const compatible = capabilities.filter(
     (item) =>
-      item.model_family_slug === modelRef.model_family_slug &&
+      modelCapabilityMatchesReference(item, modelRef) &&
       item.contract_major === modelRef.contract_major &&
       item.target_path === modelRef.target_path &&
       modelCapabilityMatchesSelectionPolicy(item, modelRef.selection_policy)
@@ -13272,6 +13419,24 @@ export function normalizeStemCurvatureProcessCalibrationProfile(
   ) {
     return null;
   }
+  const spatial = candidate.spatial_calibration;
+  if (spatial != null) {
+    const matrices = [
+      [spatial.camera_matrix, 9],
+      [spatial.rotation_world_to_camera, 9],
+      [spatial.translation_world_to_camera_mm, 3],
+      [spatial.camera_center_mm, 3],
+      [spatial.projection_matrix, 12]
+    ] as const;
+    if (spatial.method !== 'CALIBRATED_XY_Z_PNP_V1' ||
+        matrices.some(([values, length]) => !Array.isArray(values) ||
+          values.length !== length || !values.every(Number.isFinite)) ||
+        ![spatial.rms_reprojection_error_px, spatial.maximum_reprojection_error_px,
+          spatial.z_reprojection_error_px, spatial.z_reference_displacement_px,
+          spatial.pose_condition_number, spatial.reference_point_count].every(Number.isFinite)) {
+      return null;
+    }
+  }
   return candidate as RuntimeStemCurvatureProcessCalibrationProfile;
 }
 
@@ -13744,7 +13909,9 @@ function withBoardSurfaceDimensions(
 }
 
 export function formatModelCapabilityOption(option: RuntimeModelCapabilityOption) {
-  return `${option.display_name} | ${option.version_label} | ${modelArchitectureLabel(option)} | ${option.deployment_status}`;
+  const project = option.capability.label_project_title;
+  const prefix = typeof project === 'string' && project.trim() ? `${project} / ` : '';
+  return `${prefix}${option.display_name} | ${option.version_label} | ${modelArchitectureLabel(option)} | ${option.deployment_status}`;
 }
 
 function modelArchitectureLabel(option: RuntimeModelCapabilityOption) {
@@ -13768,7 +13935,9 @@ export function modelCapabilityMatchesSelectionPolicy(
   }
   const status = option.deployment_status.trim().toLowerCase();
   if (selectionPolicy === 'active_production') {
-    return status === 'production';
+    return status === 'production' && (
+      !option.capability.label_project_id || option.capability.project_active_production === true
+    );
   }
   if (selectionPolicy === 'staged_test') {
     return ['staged', 'testing', 'test', 'production', 'activated', 'active'].includes(status);
@@ -13786,6 +13955,16 @@ function describeModelBinding(option: RuntimeModelCapabilityOption | null) {
   return `${family} / ${version}${size} / ${option.target_path} / ${option.deployment_status}`;
 }
 
+function modelCapabilityMatchesReference(
+  option: RuntimeModelCapabilityOption,
+  modelRef: RuntimeLogicalModelRef
+) {
+  return modelRef.selection_policy === 'active_production' && modelRef.label_project_id
+    ? option.capability.label_project_id === modelRef.label_project_id &&
+        option.capability.project_active_production === true
+    : option.model_family_slug === modelRef.model_family_slug;
+}
+
 export function resolveSelectedModelReleaseId(
   modelRef: RuntimeLogicalModelRef,
   options: RuntimeModelCapabilityOption[]
@@ -13796,7 +13975,7 @@ export function resolveSelectedModelReleaseId(
   return (
     options.find(
       (item) =>
-        item.model_family_slug === modelRef.model_family_slug &&
+        modelCapabilityMatchesReference(item, modelRef) &&
         item.contract_major === modelRef.contract_major &&
         item.target_path === modelRef.target_path &&
         item.task_type === modelRef.required_task_type
@@ -13811,6 +13990,9 @@ export function buildLogicalModelRefFromCapability(
 ): RuntimeLogicalModelRef {
   return {
     model_family_slug: capability.model_family_slug,
+    ...(selectionPolicy === 'active_production' && typeof capability.capability.label_project_id === 'string'
+      ? { label_project_id: capability.capability.label_project_id }
+      : {}),
     target_path: capability.target_path,
     contract_major: capability.contract_major,
     selection_policy: selectionPolicy,

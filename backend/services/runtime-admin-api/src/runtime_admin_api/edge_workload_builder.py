@@ -14,6 +14,7 @@ from cv_contracts import (
     EdgeCapabilitySnapshot,
     EdgeDeploymentManifest,
     EdgeWorkloadReleaseDetail,
+    RuntimeResultHistoryPolicy,
 )
 from cv_core import PlatformSettings
 from cv_db import (
@@ -234,7 +235,10 @@ def build_edge_workload_release(
         "execution_mode": loaded.version.mode,
         "source": edge_source,
         "frame_sample_every_n": _sample_every_n(loaded.source),
-        "emit_source_results": True,
+        "emit_source_results": False,
+        "result_history_policy": RuntimeResultHistoryPolicy.model_validate(
+            channel.result_history_policy or {}
+        ).model_dump(mode="json"),
         "models": models,
         "engine_builds": engine_builds,
         "golden_tests": golden_tests,
@@ -672,7 +676,8 @@ def _edge_source(*, channel_source: RuntimeSource | None) -> dict[str, Any]:
                         "device_id", "id_", "model", "width", "height", "offset_x", "offset_y",
                         "fps", "acquisition_mode", "acquisition_frame_rate_enable",
                         "pixel_format", "exposure_time_us", "exposure_us", "exposure_auto",
-                        "gain_db", "gain", "gain_auto", "packet_size", "inter_packet_delay",
+                        "gain_db", "gain_raw", "gain", "gain_auto", "packet_size",
+                        "inter_packet_delay",
                         "trigger_mode", "trigger_selector", "trigger_source", "trigger_activation",
                         "grab_strategy", "buffer_count", "max_num_buffer", "output_queue_size",
                         "frame_retention_ms", "fetch_timeout_seconds", "timeout_ms", "features",

@@ -27,7 +27,7 @@ import cv_db.auth_runtime as auth_runtime_module
 from cv_db.session import _session_factories, _session_factory_pids
 
 SAMPLE_PNG_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8/5+hHgAHggJ/l8LojQAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
 )
 
 
@@ -152,3 +152,32 @@ def build_test_settings(
             warm_ttl_seconds=60,
         ),
     )
+@pytest.fixture
+def edge_system_package_cache(tmp_path, monkeypatch):
+    """Exercise real offline staging with pinned fixture bytes; never use the network."""
+    import hashlib
+    import json
+    from scripts.release import edge_system_packages
+
+    cache = tmp_path / "ubuntu-cache"
+    cache.mkdir()
+    content = b"unit-test-deb-payload"
+    name = "ufw_0.36.2-6_all.deb"
+    (cache / name).write_bytes(content)
+    lock = tmp_path / "ubuntu-packages.lock.json"
+    lock.write_text(json.dumps({
+        "ubuntu_codename": "noble", "architecture": "arm64", "install": ["ufw"],
+        "packages": [{
+            "name": "ufw", "version": "0.36.2-6", "architecture": "all", "control": {},
+            "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/u/ufw/" + name,
+            "size_bytes": len(content), "sha256": hashlib.sha256(content).hexdigest(),
+        }],
+    }))
+    monkeypatch.setattr(edge_system_packages, "LOCK_FILE", lock)
+    monkeypatch.setattr(edge_system_packages, "CACHE_ROOT", cache)
+
+    def unexpected_network(*args, **kwargs):
+        raise AssertionError("A cached prerequisite must not access the network.")
+
+    monkeypatch.setattr(edge_system_packages, "urlopen", unexpected_network)
+    return edge_system_packages

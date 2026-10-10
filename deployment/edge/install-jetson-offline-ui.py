@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import ipaddress
 import json
 import os
@@ -11,11 +12,13 @@ import subprocess
 import sys
 import tempfile
 import threading
+import uuid
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 SUPPORTED_PLATFORMS = {"jetson_orin_nano", "jetson_agx_orin"}
+TRUSTED_KEY = Path("/etc/ybb-edge/release-signing-public.pem")
 ENVIRONMENT_OVERRIDES = {
     "hostname": "YBB_EDGE_HOSTNAME",
     "device_ipv4": "YBB_EDGE_MANAGEMENT_IP",
@@ -202,11 +205,70 @@ def _run(command: list[str]) -> None:
         )
 
 
+def public_key_identity(path: Path) -> tuple[bytes, str]:
+    with path.open("rb") as stream:
+        raw = stream.read(32769)
+    if len(raw) > 32768 or b"PRIVATE KEY" in raw:
+        raise InstallerUiError("Nur den öffentlichen RSA-Schlüssel auswählen.")
+    public = subprocess.run(
+        ["openssl", "rsa", "-pubin", "-pubout"],
+        input=raw,
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+    if public.returncode:
+        raise InstallerUiError("Die Datei enthält keinen öffentlichen RSA-Schlüssel.")
+    der = subprocess.run(
+        ["openssl", "pkey", "-pubin", "-outform", "DER"],
+        input=public.stdout,
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+    if der.returncode:
+        raise InstallerUiError("RSA-Fingerabdruck konnte nicht geprüft werden.")
+    return public.stdout, hashlib.sha256(der.stdout).hexdigest()
+
+
+def install_release_trust(settings: dict[str, Any]) -> None:
+    public, fingerprint = public_key_identity(Path(settings["release_public_key"]))
+    if TRUSTED_KEY.is_symlink():
+        raise InstallerUiError("Der Vertrauensanker darf kein symbolischer Link sein.")
+    previous = public_key_identity(TRUSTED_KEY)[1] if TRUSTED_KEY.exists() else None
+    if fingerprint != settings.get("selected_key_fingerprint"):
+        raise InstallerUiError("Ausgewählter Schlüssel wurde verändert. Erneut prüfen.")
+    if previous != settings.get("installed_key_fingerprint"):
+        raise InstallerUiError("Installierter Schlüssel wurde verändert. Erneut prüfen.")
+    if fingerprint == previous:
+        print(f"RSA-Schlüssel bereits hinterlegt. SHA-256 (SPKI): {fingerprint}", flush=True)
+        return
+    TRUSTED_KEY.parent.mkdir(parents=True, exist_ok=True)
+    if TRUSTED_KEY.exists():
+        backup = TRUSTED_KEY.with_name(f"{TRUSTED_KEY.name}.{uuid.uuid4().hex}.bak")
+        with backup.open("xb") as stream:
+            stream.write(TRUSTED_KEY.read_bytes())
+    descriptor, temporary = tempfile.mkstemp(prefix=".release-key-", dir=TRUSTED_KEY.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(public)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, TRUSTED_KEY)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    print(f"RSA-Vertrauen hinterlegt. SHA-256 (SPKI): {fingerprint}", flush=True)
+
+
 def privileged_install(root: Path, settings_path: Path) -> int:
     if os.geteuid() != 0:
         raise InstallerUiError("The privileged installer phase must run as root.")
     settings_value = read_json(settings_path)
     settings = validate_settings(settings_value)
+    if settings.get("trust_only"):
+        install_release_trust(settings)
+        return 0
     profile = read_json(root / "platform-profile.json")
     if profile.get("platform") not in SUPPORTED_PLATFORMS:
         raise InstallerUiError("This UI only supports Jetson Orin Nano and AGX Orin bundles.")
@@ -266,7 +328,8 @@ def privileged_install(root: Path, settings_path: Path) -> int:
         trust_root = Path("/etc/ybb-edge")
         trust_root.mkdir(mode=0o755, parents=True, exist_ok=True)
         trusted_key = trust_root / "release-signing-public.pem"
-        shutil.copyfile(release_key_source, trusted_key)
+        if release_key_source.resolve() != trusted_key.resolve():
+            shutil.copyfile(release_key_source, trusted_key)
         trusted_key.chmod(0o644)
     _run(
         [
@@ -339,9 +402,21 @@ def run_graphical_ui(root: Path) -> int:
     window.title("YBB Edge Jetson Installer")
     window.geometry("940x820")
     window.minsize(780, 640)
+    ttk.Style(window).configure("Title.TLabel", font=("Sans", 17, "bold"))
 
     container = ttk.Frame(window, padding=12)
     container.pack(fill=tk.BOTH, expand=True)
+    ttk.Label(
+        container, text="Edge installieren und Release-Vertrauen verwalten", style="Title.TLabel"
+    ).pack(anchor="w", pady=(0, 8))
+    ttk.Label(
+        container,
+        text=(
+            "Bestehendes Gerät: Runtime-Updates zentral ausrollen. Hier lässt sich auch nur "
+            "der öffentliche RSA-Schlüssel hinterlegen."
+        ),
+        wraplength=870,
+    ).pack(anchor="w", pady=(0, 12))
     form = ttk.Frame(container)
     form.pack(fill=tk.X)
     entries: dict[str, Any] = {}
@@ -359,7 +434,7 @@ def run_graphical_ui(root: Path) -> int:
         ("rtsp_port", "RTSP-Port"),
         ("state_root", "Gemountetes NVMe-Datenverzeichnis"),
         ("camera_adapters", "Kameraadapter (Komma)"),
-        ("release_public_key", "Öffentlicher Release-Schlüssel (optional)"),
+        ("release_public_key", "Öffentlicher RSA-Schlüssel (PEM)"),
     ]
     connections = network_connections()
     for row, (key, label) in enumerate(rows):
@@ -374,7 +449,7 @@ def run_graphical_ui(root: Path) -> int:
     form.columnconfigure(1, weight=1)
 
     apply_base = tk.BooleanVar(value=bool(defaults["apply_base_provisioning"]))
-    plc_writes = tk.BooleanVar(value=bool(defaults["allow_plc_writes"]))
+    plc_writes = tk.BooleanVar(value=False)
     ttk.Checkbutton(
         form,
         text="Hostname, statische IP, NVMe-State-Root und Leistungsprofil provisionieren",
@@ -384,6 +459,7 @@ def run_graphical_ui(root: Path) -> int:
         form,
         text="SPS-Schreiben aus Pipeline erlauben",
         variable=plc_writes,
+        state=tk.DISABLED,
     ).grid(row=len(rows) + 1, column=1, sticky="w", padx=5, pady=4)
 
     def select_key() -> None:
@@ -436,11 +512,15 @@ def run_graphical_ui(root: Path) -> int:
             window.after(
                 0,
                 lambda: messagebox.showinfo(
-                    "Installation abgeschlossen", "YBB Edge wurde erfolgreich installiert."
+                    "Vorgang abgeschlossen",
+                    "Öffentlicher RSA-Schlüssel hinterlegt."
+                    if settings.get("trust_only")
+                    else "YBB Edge wurde erfolgreich installiert.",
                 ),
             )
         finally:
             window.after(0, lambda: install_button.configure(state=tk.NORMAL))
+            window.after(0, lambda: trust_button.configure(state=tk.NORMAL))
 
     def start_install() -> None:
         try:
@@ -455,10 +535,39 @@ def run_graphical_ui(root: Path) -> int:
         ):
             return
         install_button.configure(state=tk.DISABLED)
+        trust_button.configure(state=tk.DISABLED)
         append("Installation gestartet …")
         threading.Thread(target=worker, args=(settings,), daemon=True).start()
 
-    install_button = ttk.Button(actions, text="Installieren", command=start_install)
+    def store_trust() -> None:
+        try:
+            settings = validate_settings(values())
+            if not settings["release_public_key"]:
+                raise InstallerUiError("Bitte den öffentlichen RSA-Schlüssel auswählen.")
+            fingerprint = public_key_identity(Path(settings["release_public_key"]))[1]
+            previous = public_key_identity(TRUSTED_KEY)[1] if TRUSTED_KEY.exists() else None
+            if not messagebox.askyesno(
+                "RSA-Vertrauen hinterlegen",
+                f"SHA-256 (SPKI) des ausgewählten Schlüssels:\n{fingerprint}\n\n"
+                f"Bisher: {previous or 'Noch nicht eingerichtet'}\n\n"
+                "Mit dem Fingerabdruck der Zentrale vergleichen. Nur der öffentliche Schlüssel "
+                "wird hinterlegt; Runtime und Gerätekonfiguration bleiben erhalten. Fortfahren?",
+            ):
+                return
+            settings.update(
+                trust_only=True,
+                selected_key_fingerprint=fingerprint,
+                installed_key_fingerprint=previous,
+            )
+            install_button.configure(state=tk.DISABLED)
+            trust_button.configure(state=tk.DISABLED)
+            threading.Thread(target=worker, args=(settings,), daemon=True).start()
+        except (InstallerUiError, OSError, subprocess.TimeoutExpired) as exc:
+            messagebox.showerror("RSA-Schlüssel", str(exc))
+
+    trust_button = ttk.Button(actions, text="Nur RSA-Vertrauen hinterlegen", command=store_trust)
+    trust_button.pack(side=tk.LEFT, padx=5)
+    install_button = ttk.Button(actions, text="Gerät installieren", command=start_install)
     install_button.pack(side=tk.RIGHT, padx=5)
     ttk.Button(actions, text="Schließen", command=window.destroy).pack(side=tk.RIGHT, padx=5)
     window.mainloop()

@@ -805,7 +805,10 @@ def promote_staged_release_to_production(
         PromotionStatus.PRODUCTION_REQUESTED.value,
     }:
         raise ValueError("Only staged releases can be promoted to production.")
-    if not release.smoke_report or not bool(release.smoke_report.get("passed")):
+    smoke = release.smoke_report or {}
+    if not (smoke.get("passed") or (
+        smoke.get("runtime_validation_pending") is True and smoke.get("package_verified") is True
+    )):
         raise ValueError("Only releases with a passing smoke test can be promoted to production.")
     if release.compatibility_report and not bool(release.compatibility_report.get("compatible", True)):
         raise ValueError("Only compatibility-verified releases can be promoted to production.")
@@ -826,20 +829,32 @@ def promote_staged_release_to_production(
         target_path=promotion.target_path,
         exclude_model_version_id=promotion.model_version_id,
     )
-    if previous_active_release_id and previous_active_release_id != release.id:
-        previous_promotion = _promotion_by_release_id(session, previous_active_release_id)
-        if previous_promotion is not None:
-            previous_promotion.status = PromotionStatus.STAGED.value
-            previous_promotion.rollback_candidate = True
-            previous_promotion.rollback_marked_at = previous_promotion.rollback_marked_at or utc_now()
+    # Runtime bindings follow production within a family. Promoting another
+    # family changes the target default without demoting unrelated models.
+    previous_family_promotions = session.scalars(
+        select(ModelPromotion)
+        .join(ModelVersion, ModelVersion.id == ModelPromotion.model_version_id)
+        .where(
+            ModelVersion.model_family_id == release.model_family_id,
+            ModelPromotion.target_path == promotion.target_path,
+            ModelPromotion.status == PromotionStatus.PRODUCTION.value,
+            ModelPromotion.id != promotion.id,
+        )
+    ).all()
+    for previous_promotion in previous_family_promotions:
+        previous_promotion.status = PromotionStatus.STAGED.value
+        previous_promotion.rollback_candidate = True
+        previous_promotion.rollback_marked_at = previous_promotion.rollback_marked_at or utc_now()
     target.previous_release_id = explicit_rollback or previous_active_release_id
     target.active_release_id = release.id
     target.updated_at = utc_now()
     promotion.status = PromotionStatus.PRODUCTION.value
     release.status = DeploymentReleaseStatus.ACTIVATED.value
-    release.activated_at = release.activated_at or utc_now()
+    release.activated_at = utc_now()
     session.flush()
     _recalculate_model_status(session, promotion.model_version_id)
+    for previous_promotion in previous_family_promotions:
+        _recalculate_model_status(session, previous_promotion.model_version_id)
     if previous_active_release_id:
         previous_release = session.get(DeploymentRelease, previous_active_release_id)
         if previous_release is not None:
@@ -991,6 +1006,9 @@ def validate_deployment_model_serving_command(
         return release
 
     sibling_ids = {item.id for item in siblings}
+    from cv_db.runtime_model_store import demanded_release_ids
+    if sibling_ids.intersection(demanded_release_ids(session)):
+        raise ValueError("The model is still required by a started or draining channel.")
     target_refs = session.scalars(select(DeploymentTarget)).all()
     active_targets = sorted(
         item.target_path for item in target_refs if item.active_release_id in sibling_ids

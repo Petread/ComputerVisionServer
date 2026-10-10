@@ -128,6 +128,7 @@ class DeploymentPackageManifest(BaseModel):
     model_family_slug: str
     version_no: int
     task_type: str
+    trainer_backend: str | None = None
     contract_major: int
     built_at: str
     training_artifact_manifest_uri: str | None = None

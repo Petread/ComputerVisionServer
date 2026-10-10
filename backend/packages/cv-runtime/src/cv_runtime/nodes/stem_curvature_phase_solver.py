@@ -10,6 +10,7 @@ from cv_contracts.runtime import RuntimeNodeSpec
 
 from cv_runtime.context import NodeInputs, RuntimeExecutionContext
 from cv_runtime.handlers import NodeExecutionResult
+from cv_runtime.high_rate_phase import HighRateStemPhaseBridge
 from cv_runtime.payloads import (
     EventsPayload,
     OverlayPayload,
@@ -96,6 +97,20 @@ class StemCurvaturePhaseSolverHandler:
         curvature = inputs.get("curvature")
         phase = inputs.get("surface_phase")
         active_stem = inputs.get("active_stem")
+
+        bridge = context.metadata.get("high_rate_stem_phase_bridge")
+        if isinstance(bridge, HighRateStemPhaseBridge):
+            previous_generation = state.get("phase_trace_generation")
+            if previous_generation is not None and previous_generation != bridge.generation:
+                _reset_state(state)
+                _remember_reasons(state, ["SOLVER_PHASE_TRACE_CHANGED_RESET"])
+            if (isinstance(phase, StemSurfacePhasePayload)
+                    and phase.execution_mode == "HIGH_RATE_SEEDED"
+                    and phase.trace_generation != bridge.generation):
+                return NodeExecutionResult(outputs={"solution": _payload_from_state(
+                    {}, fit=solve_stem_curvature_phase([]), state_override="INVALID",
+                    reasons=["PHASE_GENERATION_MISMATCH"],
+                )})
 
         if event_types & _RESET_EVENTS:
             _reset_state(state)

@@ -5,9 +5,12 @@ import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmptyState, MetricPill, Panel } from '@cv-platform/ui-kit';
 import type {
+  AnomalyInferenceResponse,
+  ClassificationInferenceResponse,
   CleanupExecutionRequest,
   DatasetSummary,
   DeploymentReleaseSummary,
+  DetectionInferenceResponse,
   LabelProjectSummary,
   LabelProjectMappingRequest,
   ModelLifecycleStageState,
@@ -19,6 +22,7 @@ import type {
   ProjectModelWorkspaceDetail,
   ProjectPipelineDetail,
   PromotionCriteriaPolicy,
+  SegmentationInferenceResponse,
   SupportedModelArchitecture,
   TrainingDefaults,
   TrainingJobDetail,
@@ -43,8 +47,14 @@ import { formatDate, trainingTone } from './presentation';
 type ModelView = 'status' | 'metrics' | 'parameters' | 'deployment';
 type UploadMode = 'raw' | 'classified';
 type UploadPhase = 'idle' | 'creating' | 'uploading' | 'finalizing';
+type ProjectInferenceResult =
+  | ClassificationInferenceResponse
+  | DetectionInferenceResponse
+  | SegmentationInferenceResponse
+  | AnomalyInferenceResponse;
 
 const terminalTrainingStates = ['completed', 'failed', 'cancelled', 'rolled_back_if_needed'];
+const TEST_INFERENCE_MAX_IMAGE_BYTES = 30 * 1024 ** 2;
 
 export function ProjectWorkspacePage() {
   const [workspaceTab, setWorkspaceTab] = useState(() => new URLSearchParams(window.location.search).has('modelFamilyId') ? 'Modelle' : 'Dataset');
@@ -486,17 +496,27 @@ export function ProjectWorkspacePage() {
   const inferenceMutation = useMutation({
     mutationFn: async () => {
       if (!inferenceFile || !selectedModel) throw new Error('Bitte ein Testbild auswählen.');
-      const params = { timeoutMs: INTERACTIVE_INFERENCE_TIMEOUT_MS };
+      const endpoint = pipeline?.current_endpoints.find(
+        (item) => item.model_family_id === selectedModel.model_family_id
+      );
+      if (!endpoint?.realtime_available || !endpoint.realtime_release_id) {
+        throw new Error('Für dieses Modell ist kein aktives Realtime-Deployment verfügbar.');
+      }
+      const params = {
+        deploymentTarget: 'realtime',
+        deploymentReleaseId: endpoint.realtime_release_id,
+        timeoutMs: INTERACTIVE_INFERENCE_TIMEOUT_MS
+      };
       if (selectedModel.task_type === 'classification') {
-        return api.inference.publicClassify(selectedModel.endpoint_name, inferenceFile, params);
+        return api.inference.realtimeClassifyBytes(inferenceFile, params);
       }
       if (selectedModel.task_type === 'detection' || selectedModel.task_type === 'oriented_detection') {
-        return api.inference.publicDetect(selectedModel.endpoint_name, inferenceFile, params);
+        return api.inference.realtimeDetectBytes(inferenceFile, params);
       }
       if (selectedModel.task_type === 'anomaly') {
-        return api.inference.publicAnomaly(selectedModel.endpoint_name, inferenceFile, params);
+        return api.inference.realtimeAnomalyBytes(inferenceFile, params);
       }
-      return api.inference.publicSegment(selectedModel.endpoint_name, inferenceFile, params);
+      return api.inference.realtimeSegmentBytes(inferenceFile, params);
     },
     onError: (error) => mutationError(error, 'Test-Inferenz fehlgeschlagen')
   });
@@ -596,6 +616,7 @@ export function ProjectWorkspacePage() {
         inferenceFile={inferenceFile}
         inferencePending={inferenceMutation.isPending}
         inferenceResult={inferenceMutation.data}
+        inferenceError={inferenceMutation.isError ? describeError(inferenceMutation.error, 'Test-Inferenz fehlgeschlagen') : null}
         onSelectModel={(modelFamilyId) =>
           void navigate({
             to: '/pipelines/$labelProjectId',
@@ -630,7 +651,10 @@ export function ProjectWorkspacePage() {
         }}
         onActivateModel={(release) => activateModelMutation.mutate(release.deployment_release_id)}
         onLinkPredictions={() => linkPredictionsMutation.mutate()}
-        onInferenceFile={setInferenceFile}
+        onInferenceFile={(file) => {
+          setInferenceFile(file);
+          inferenceMutation.reset();
+        }}
         onInference={() => inferenceMutation.mutate()}
       />
 
@@ -946,7 +970,8 @@ type ModelsSectionProps = {
   linkPending: boolean;
   inferenceFile: File | null;
   inferencePending: boolean;
-  inferenceResult: unknown;
+  inferenceResult: ProjectInferenceResult | undefined;
+  inferenceError: { title: string; description?: string } | null;
   onSelectModel: (modelFamilyId: string) => void;
   onRetryWorkspace: () => void;
   onView: (view: ModelView) => void;
@@ -1106,6 +1131,7 @@ function ModelsSection(props: ModelsSectionProps) {
                   inferenceFile={props.inferenceFile}
                   inferencePending={props.inferencePending}
                   inferenceResult={props.inferenceResult}
+                  inferenceError={props.inferenceError}
                   onDeploy={props.onDeploy}
                   onForceDeploy={props.onForceDeploy}
                   onRetryDeploymentReleases={props.onRetryDeploymentReleases}
@@ -1471,7 +1497,8 @@ function DeploymentView(props: {
   linkPending: boolean;
   inferenceFile: File | null;
   inferencePending: boolean;
-  inferenceResult: unknown;
+  inferenceResult: ProjectInferenceResult | undefined;
+  inferenceError: { title: string; description?: string } | null;
   onDeploy: () => void;
   onForceDeploy: () => void;
   onRetryDeploymentReleases: () => void;
@@ -1571,13 +1598,157 @@ function DeploymentView(props: {
         <section><h4>API-Routen</h4>
           {endpoint?.api_examples.length ? <div className="endpoint-route-list">{endpoint.api_examples.map((example) => <div className="endpoint-snippet" key={`${example.method}-${example.path}`}><strong>{example.description}</strong><code className="endpoint-route">{example.method} {example.path}</code></div>)}</div> : <p className="subtle-text">API-Routen werden nach dem ersten Deployment veröffentlicht.</p>}
         </section>
-        <section><h4>Test-Inferenz</h4>
-          {realtime ? <div className="panel-stack"><input type="file" accept="image/*" onChange={(event) => props.onInferenceFile(event.target.files?.[0] ?? null)} /><button disabled={!props.inferenceFile || props.inferencePending} onClick={props.onInference}>{props.inferencePending ? 'Analysiert…' : 'Testbild analysieren'}</button>{props.inferenceResult ? <pre className="code-block inference-raw-result">{JSON.stringify(props.inferenceResult, null, 2)}</pre> : null}</div> : <p className="subtle-text">Für einen direkten Test muss Realtime aktiviert sein.</p>}
+        <section className="deployment-api-test"><h4>Test-Inferenz</h4>
+          {realtime ? <ProjectInferenceTestPanel {...props} /> : <p className="subtle-text">Für einen direkten Test muss Realtime aktiviert sein.</p>}
         </section>
       </div>
       {props.canWrite ? <details className="advanced-section"><summary>Gefährlicher Test-Override</summary><p className="subtle-text">Nur für isolierte Tests: veröffentlicht auch eine Version mit nicht bestandenen Gates.</p><button className="button--danger" disabled={props.deployPending} onClick={props.onForceDeploy}>Quality Gates einmalig übergehen</button></details> : null}
     </div>
   );
+}
+
+function ProjectInferenceTestPanel(props: {
+  inferenceFile: File | null;
+  inferencePending: boolean;
+  inferenceResult: ProjectInferenceResult | undefined;
+  inferenceError: { title: string; description?: string } | null;
+  onInferenceFile: (file: File | null) => void;
+  onInference: () => void;
+}) {
+  const previewUrl = useMemo(
+    () => props.inferenceFile ? URL.createObjectURL(props.inferenceFile) : null,
+    [props.inferenceFile]
+  );
+  const imageTooLarge = Boolean(
+    props.inferenceFile && props.inferenceFile.size > TEST_INFERENCE_MAX_IMAGE_BYTES
+  );
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  return (
+    <div className="panel-stack">
+      <div className="project-inference-layout">
+        <label className="inference-upload project-inference-upload">
+          <span className="inference-upload__preview">
+            {previewUrl ? <img src={previewUrl} alt="Ausgewähltes Testbild" /> : <span className="result-card__placeholder">Noch kein Testbild ausgewählt</span>}
+          </span>
+          <span className="inference-upload__body">
+            <span>Testbild</span>
+            <strong>{props.inferenceFile?.name ?? 'Bilddatei auswählen'}</strong>
+            <small>{props.inferenceFile ? formatBytes(props.inferenceFile.size) : `JPEG, PNG, BMP oder WebP · bis ${formatBytes(TEST_INFERENCE_MAX_IMAGE_BYTES)}`}</small>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/bmp,image/webp"
+              onChange={(event) => props.onInferenceFile(event.target.files?.[0] ?? null)}
+            />
+          </span>
+        </label>
+        <div className="project-inference-controls">
+          <div>
+            <strong>Direkt am Realtime-Endpunkt testen</strong>
+            <p className="subtle-text">Das Bild wird nicht im Projekt gespeichert und benötigt keinen gestarteten Kanal. Das aktive Realtime-Deployment wird bei Bedarf geladen und direkt getestet; externe API-Routen bleiben für Maschinen-API-Keys vorgesehen.</p>
+          </div>
+          {imageTooLarge ? <div className="inline-alert inline-alert--warn"><strong>Datei zu groß</strong><p>Für die Test-Inferenz sind Bilder bis {formatBytes(TEST_INFERENCE_MAX_IMAGE_BYTES)} zugelassen.</p></div> : null}
+          {props.inferenceError ? <div className="inline-alert inline-alert--danger"><strong>{props.inferenceError.title}</strong>{props.inferenceError.description ? <p>{props.inferenceError.description}</p> : null}</div> : null}
+          <div className="actions-row">
+            <button type="button" className="button--primary" disabled={!props.inferenceFile || imageTooLarge || props.inferencePending} onClick={props.onInference}>
+              {props.inferencePending ? 'Analysiert…' : 'Testbild analysieren'}
+            </button>
+            <span className="subtle-text">Serverlimit: {formatBytes(TEST_INFERENCE_MAX_IMAGE_BYTES)} pro Bild</span>
+          </div>
+        </div>
+      </div>
+      {props.inferenceResult && previewUrl ? <ProjectInferenceResultPanel result={props.inferenceResult} imageUrl={previewUrl} /> : null}
+    </div>
+  );
+}
+
+function ProjectInferenceResultPanel(props: { result: ProjectInferenceResult; imageUrl: string }) {
+  const detections = isProjectDetectionResult(props.result) ? props.result.detections : null;
+  const segments = isProjectSegmentationResult(props.result) ? props.result.segments : null;
+  const anomaly = isProjectAnomalyResult(props.result) ? props.result : null;
+  const classifications = isProjectClassificationResult(props.result) ? props.result.labels : null;
+  const imageWidth = 'image_width' in props.result ? props.result.image_width : undefined;
+  const imageHeight = 'image_height' in props.result ? props.result.image_height : undefined;
+  const aspectRatio = imageWidth && imageHeight ? `${imageWidth} / ${imageHeight}` : undefined;
+
+  return (
+    <div className="project-inference-result">
+      <div className="detail-grid">
+        <MetricPill label="Deployment" value={props.result.route.deployment_release_id} tone="success" />
+        <MetricPill label="Gesamtlatenz" value={`${props.result.timing.total_ms.toFixed(1)} ms`} />
+        <MetricPill label="Modell" value={props.result.route.triton_model_name} />
+        <MetricPill label="Ergebnis" value={projectInferenceCountLabel(props.result)} />
+      </div>
+      <div className="visual-inspection-card project-inference-result__visual">
+        <div className="visual-inspection-card__image" style={{ aspectRatio }}>
+          <img src={props.imageUrl} alt="Testbild mit Inferenz-Overlay" />
+          {detections ? <ProjectDetectionOverlay detections={detections} /> : null}
+          {segments ? <svg className="visual-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">{segments.map((segment, index) => <polygon key={`${segment.label}-${index}`} className="visual-overlay__polygon" points={segment.polygon.map((point) => `${point.x * 100},${point.y * 100}`).join(' ')} />)}</svg> : null}
+          {anomaly ? <img className="visual-overlay visual-overlay__heatmap" src={`data:image/png;base64,${anomaly.heatmap.data}`} alt="Anomalie-Heatmap" /> : null}
+        </div>
+        <div className="visual-inspection-card__details">
+          {classifications ? <ProjectClassificationResult predictions={classifications} /> : null}
+          {detections ? <ProjectDetectionResult detections={detections} /> : null}
+          {segments ? <ProjectSegmentationResult segments={segments} /> : null}
+          {anomaly ? <ProjectAnomalyResult result={anomaly} /> : null}
+        </div>
+      </div>
+      <details className="advanced-section">
+        <summary>Rohantwort und technische Details</summary>
+        <pre className="code-block inference-raw-result">{JSON.stringify(props.result, null, 2)}</pre>
+      </details>
+    </div>
+  );
+}
+
+function ProjectDetectionOverlay(props: { detections: DetectionInferenceResponse['detections'] }) {
+  const orientedDetections = props.detections.filter((detection) => detection.oriented_box);
+  return <>
+    <div className="visual-overlay">{props.detections.map((detection, index) => <div key={`${detection.label}-${index}`} className="visual-overlay__box" style={{ left: `${detection.box.x_min * 100}%`, top: `${detection.box.y_min * 100}%`, width: `${(detection.box.x_max - detection.box.x_min) * 100}%`, height: `${(detection.box.y_max - detection.box.y_min) * 100}%` }}><span>{detection.label}: {(detection.score * 100).toFixed(1)}%</span></div>)}</div>
+    {orientedDetections.length ? <svg className="visual-overlay project-inference-oriented-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">{orientedDetections.map((detection, index) => <polygon key={`${detection.label}-${index}`} className="visual-overlay__polygon" points={detection.oriented_box!.points.map((point) => `${point.x * 100},${point.y * 100}`).join(' ')} />)}</svg> : null}
+  </>;
+}
+
+function ProjectClassificationResult(props: { predictions: ClassificationInferenceResponse['labels'] }) {
+  return <table className="data-table compact-table"><thead><tr><th>Klasse</th><th>Konfidenz</th></tr></thead><tbody>{props.predictions.length ? props.predictions.map((prediction) => <tr key={prediction.label}><td>{prediction.label}</td><td>{(prediction.score * 100).toFixed(2)}%</td></tr>) : <tr><td colSpan={2}>Keine Klassifikation zurückgegeben.</td></tr>}</tbody></table>;
+}
+
+function ProjectDetectionResult(props: { detections: DetectionInferenceResponse['detections'] }) {
+  return <table className="data-table compact-table"><thead><tr><th>Objekt</th><th>Konfidenz</th><th>Geometrie</th></tr></thead><tbody>{props.detections.length ? props.detections.map((detection, index) => <tr key={`${detection.label}-${index}`}><td>{detection.label}</td><td>{(detection.score * 100).toFixed(2)}%</td><td>{detection.oriented_box ? `Orientiert · ${detection.oriented_box.rotation_degrees?.toFixed(1) ?? '—'}°` : 'Rechteck'}</td></tr>) : <tr><td colSpan={3}>Keine Objekte erkannt.</td></tr>}</tbody></table>;
+}
+
+function ProjectSegmentationResult(props: { segments: SegmentationInferenceResponse['segments'] }) {
+  return <table className="data-table compact-table"><thead><tr><th>Segment</th><th>Konfidenz</th><th>Punkte</th></tr></thead><tbody>{props.segments.length ? props.segments.map((segment, index) => <tr key={`${segment.label}-${index}`}><td>{segment.label}</td><td>{(segment.score * 100).toFixed(2)}%</td><td>{segment.polygon.length}</td></tr>) : <tr><td colSpan={3}>Keine Segmente erkannt.</td></tr>}</tbody></table>;
+}
+
+function ProjectAnomalyResult(props: { result: AnomalyInferenceResponse }) {
+  return <table className="data-table compact-table"><tbody><tr><th>Entscheidung</th><td>{props.result.predicted_label === 'anomalous' ? 'Auffällig' : 'Unauffällig'}</td></tr><tr><th>Score</th><td>{props.result.anomaly_score.toFixed(4)}</td></tr><tr><th>Schwelle</th><td>{props.result.threshold === null || props.result.threshold === undefined ? '—' : props.result.threshold.toFixed(4)}</td></tr></tbody></table>;
+}
+
+function isProjectClassificationResult(result: ProjectInferenceResult): result is ClassificationInferenceResponse {
+  return 'labels' in result;
+}
+
+function isProjectDetectionResult(result: ProjectInferenceResult): result is DetectionInferenceResponse {
+  return 'detections' in result;
+}
+
+function isProjectSegmentationResult(result: ProjectInferenceResult): result is SegmentationInferenceResponse {
+  return 'segments' in result;
+}
+
+function isProjectAnomalyResult(result: ProjectInferenceResult): result is AnomalyInferenceResponse {
+  return 'anomaly_score' in result;
+}
+
+function projectInferenceCountLabel(result: ProjectInferenceResult) {
+  if (isProjectClassificationResult(result)) return `${result.labels.length} Klassen`;
+  if (isProjectDetectionResult(result)) return `${result.detections.length} Objekte`;
+  if (isProjectSegmentationResult(result)) return `${result.segments.length} Segmente`;
+  return result.predicted_label === 'anomalous' ? 'Auffällig' : 'Unauffällig';
 }
 
 function deploymentReleaseStatusLabel(status: DeploymentReleaseSummary['status']) {

@@ -57,8 +57,9 @@ class EdgeNetworkPolicy:
             raise EdgeNetworkPolicyError(
                 f"Edge address {address} is outside the allowed VLAN CIDRs."
             )
-        if any(
-            address in {network.network_address, network.broadcast_address}
+        if all(
+            network.prefixlen < 31
+            and address in {network.network_address, network.broadcast_address}
             for network in matching_networks
         ):
             raise EdgeNetworkPolicyError(

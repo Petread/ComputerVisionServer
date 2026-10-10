@@ -72,7 +72,7 @@ def test_result_batch_rejects_mixed_device_or_boot_identity() -> None:
         )
 
 
-def test_edge_registration_requires_device_and_server_in_allowed_cidr() -> None:
+def test_edge_registration_requires_device_in_allowed_cidr_and_distinct_server() -> None:
     with pytest.raises(ValidationError):
         EdgeDeviceRegistrationRequest(
             name="Orin Nano Press Line",
@@ -88,6 +88,14 @@ def test_edge_registration_requires_device_and_server_in_allowed_cidr() -> None:
             allowed_cidr="192.168.50.0/24",
             server_ip="192.168.50.21",
         )
+
+    routed = EdgeDeviceRegistrationRequest(
+        name="Routed Edge Device",
+        address={"management_ip": "192.168.50.21"},
+        allowed_cidr="192.168.50.21/32",
+        server_ip="10.20.30.40",
+    )
+    assert str(routed.server_ip) == "10.20.30.40"
 
 
 def test_edge_channel_placement_requires_exactly_one_device_target() -> None:

@@ -784,6 +784,32 @@ export interface EdgeCapabilitySnapshot {
   observed_at: string;
 }
 
+export interface EdgeTimingSummary {
+  key: string;
+  node_type?: string | null;
+  status?: string | null;
+  sample_count: number;
+  mean_ms: number;
+  p95_ms: number;
+  max_ms: number;
+  last_ms: number;
+}
+
+export interface EdgeRuntimeMetrics {
+  observed_at: string;
+  window_seconds: number;
+  acquired_frames: number;
+  processed_frames: number;
+  sampled_out_frames: number;
+  execution_errors: number;
+  source_fps: number;
+  processed_fps: number;
+  last_frame_at?: string | null;
+  last_execution_at?: string | null;
+  stages: EdgeTimingSummary[];
+  nodes: EdgeTimingSummary[];
+}
+
 export interface EdgeRuntimeStatus {
   schema_version: 'edge.runtime.status.v1';
   boot_id: string;
@@ -805,6 +831,17 @@ export interface EdgeRuntimeStatus {
     last_heartbeat_at?: string | null;
     next_restart_at?: string | null;
     last_error?: string | null;
+    channel_id?: string | null;
+    workload_release_id?: string | null;
+    metrics?: EdgeRuntimeMetrics | null;
+    engines?: Array<{
+      node_key: string;
+      cache_hit: boolean;
+      cache_key?: string | null;
+      reason?: string | null;
+      duration_ms: number;
+      engine_size_bytes: number;
+    }>;
   }>;
   storage: {
     artifact_bytes: number;
@@ -883,6 +920,7 @@ export interface EdgeSoftwarePackage {
     tensorrt_version?: string | null;
     runtime_code_digest: string;
     node_contract_versions: Record<string, number>;
+    system_packages?: Record<string, string>;
   };
 }
 
@@ -894,6 +932,10 @@ export interface EdgeSoftwareDevice {
   runtime_version?: string | null;
   node_count: number;
   requires_update: boolean;
+  active_package_sha256?: string | null;
+  recommended_package_sha256?: string | null;
+  recommendation_reasons?: string[];
+  software_observed_at?: string | null;
   releases: Array<{ package_sha256: string; reasons: string[] }>;
   commands: Array<{
     command_id: string;
@@ -908,6 +950,9 @@ export interface EdgeSoftwareDevice {
 
 export interface EdgeSoftwareOverview {
   server_runtime_digest: string;
+  central_release_id?: string | null;
+  targets_managed?: boolean;
+  target_error?: string | null;
   releases: EdgeSoftwarePackage[];
   devices: EdgeSoftwareDevice[];
 }
@@ -1755,12 +1800,27 @@ export interface RuntimeStemCurvatureReferencePlane {
 }
 
 export interface RuntimeStemCurvatureProcessCalibrationProvenance {
-  method: 'MANUAL_REFERENCE_POINT_HOMOGRAPHY';
+  method: 'MANUAL_REFERENCE_POINT_HOMOGRAPHY' | 'CALIBRATED_XY_Z_PNP_V1';
   created_at: string;
   operator_user_id?: string | null;
   reference_frame_timestamp?: string | null;
   reference_frame_sha256?: string | null;
   notes: string;
+}
+
+export interface RuntimeStemSpatialCalibration {
+  method: 'CALIBRATED_XY_Z_PNP_V1';
+  camera_matrix: number[];
+  rotation_world_to_camera: number[];
+  translation_world_to_camera_mm: number[];
+  camera_center_mm: number[];
+  projection_matrix: number[];
+  reference_point_count: number;
+  rms_reprojection_error_px: number;
+  maximum_reprojection_error_px: number;
+  z_reprojection_error_px: number;
+  z_reference_displacement_px: number;
+  pose_condition_number: number;
 }
 
 export interface RuntimeStemCurvatureProcessCalibrationProfile {
@@ -1774,6 +1834,7 @@ export interface RuntimeStemCurvatureProcessCalibrationProfile {
   coordinate_unit: 'mm';
   reference_points: RuntimeStemCurvatureProcessReferencePoint[];
   coordinate_frame_definition?: RuntimeStemCurvatureCoordinateFrameDefinition | null;
+  spatial_calibration?: RuntimeStemSpatialCalibration | null;
   measurement_geometry_mode?: 'EXPLICIT_GEOMETRY_V1' | 'CANONICAL_VIEW_CORRIDOR_V1';
   canonical_view_profile_id?: string | null;
   canonical_view_profile_checksum?: string | null;
@@ -1810,6 +1871,8 @@ export interface RuntimeStemCurvatureProcessCalibrationCalculateRequest {
   intrinsic_calibration_hash: string;
   reference_points: RuntimeStemCurvatureProcessReferencePoint[];
   coordinate_frame_definition?: RuntimeStemCurvatureCoordinateFrameDefinition | null;
+  spatial_calibration_enabled?: boolean;
+  intrinsic_calibration?: RuntimeCameraIntrinsicCalibrationProfile | null;
   measurement_geometry_mode?: 'EXPLICIT_GEOMETRY_V1' | 'CANONICAL_VIEW_CORRIDOR_V1';
   canonical_view_profile_id?: string | null;
   canonical_view_profile_checksum?: string | null;
@@ -2400,6 +2463,7 @@ export interface RuntimeLiveViewState {
 export interface RuntimeLiveViewResponse {
   schema_version: 'runtime.live-view.state.v1';
   state: RuntimeLiveViewState;
+  execution_result?: Record<string, unknown> | null;
   meta: ResponseMeta;
 }
 
@@ -2559,6 +2623,14 @@ export interface RuntimeManualCaptureTargetListResponse {
   meta: ResponseMeta;
 }
 
+export interface RuntimePipelineCaptureImage {
+  node_key: string;
+  output_port: string;
+  pipeline_version_id?: string | null;
+  frame: RuntimeLiveFrame;
+  eligibility?: Record<string, unknown> | null;
+}
+
 export interface RuntimeManualCaptureRequest {
   capture_target_id: string;
   capture_source?: 'LIVE_VIEW_FRAME' | 'PIPELINE_IMAGE_OUTPUT';
@@ -2567,6 +2639,7 @@ export interface RuntimeManualCaptureRequest {
   request_predictions?: boolean;
   live_session_id?: string | null;
   idempotency_key?: string | null;
+  pipeline_image?: RuntimePipelineCaptureImage | null;
 }
 
 export interface RuntimeManualIntervalCaptureStartRequest extends RuntimeManualCaptureRequest {
@@ -2778,6 +2851,7 @@ export interface RuntimeConnectorDeliveryHistoryResponse {
 
 export interface RuntimeLogicalModelRef {
   model_family_slug: string;
+  label_project_id?: string | null;
   target_path: TargetPath;
   contract_major: number;
   selection_policy: 'active_production' | 'staged_test' | 'explicit_release';
@@ -2806,6 +2880,7 @@ export interface RuntimeNodePropertySpec {
     | 'slider'
     | 'boolean'
     | 'select'
+    | 'multi_select'
     | 'channel_ref'
     | 'image_upload'
     | 'image_upload_list'
@@ -3396,8 +3471,10 @@ export interface RuntimePipelinePreviewRequest {
   graph?: RuntimePipelineGraph | null;
   authoring_graph?: RuntimePipelineAuthoringGraph | null;
   preview_frame?: RuntimeLiveFrame | null;
+  bark_job?: StemBarkJob | null;
   selected_node_key?: string | null;
   include_capture_outputs?: boolean;
+  include_execution_result?: boolean;
 }
 
 export interface RuntimePipelineValidationResponse {
@@ -4744,6 +4821,7 @@ export interface RealtimeDetectRequest extends RealtimeInferenceRequest {
 export interface RealtimeSegmentRequest extends RealtimeInferenceRequest {
   max_segments?: number;
   score_threshold?: number | null;
+  return_masks?: boolean;
 }
 
 export interface RealtimeAnomalyRequest extends RealtimeInferenceRequest {
@@ -4790,6 +4868,45 @@ export interface SegmentationPrediction {
   label: string;
   score: number;
   polygon: SegmentationPoint[];
+  mask?: SegmentationMask | null;
+}
+
+export interface SegmentationMask {
+  format: 'png_base64';
+  data: string;
+  width: number;
+  height: number;
+  native_width?: number | null;
+  native_height?: number | null;
+}
+
+export type BarkSideMapping = 'left_first' | 'left_last';
+
+export interface StemBarkJob {
+  schema_version: 'stem.bark-job.v1';
+  csv_text: string;
+  csv_filename: string;
+  side_mapping?: BarkSideMapping | null;
+}
+
+export interface BarkSideMeasurement {
+  reference: {
+    side: 'left' | 'right'; slice_role: 'first' | 'last'; side_mapping: BarkSideMapping;
+    mapping_source: 'pipeline' | 'job'; workpiece_id: string; csv_sha256: string;
+    leading_end: 'S' | 'Z';
+    slice: { csv_line: number; position_mm: number; points_mm: [number, number][] };
+  };
+  valid: boolean; mean_mm: number | null; min_mm: number | null; max_mm: number | null;
+  valid_fraction: number; maximum_invalid_gap_deg: number; reason_codes: string[];
+  samples: { angle_deg: number; valid: boolean; thickness_mm: number | null; reason?: string | null }[];
+  registration_error_mm?: number | null; registration_stability_mm?: number | null;
+  effective_source_mm_per_pixel?: number | null;
+}
+
+export interface BarkMeasurementResult {
+  schema_version: 'stem.bark-measurement.v1'; workpiece_id: string; valid: boolean;
+  mean_mm: number | null; metrology_status: 'not_validated'; metrology_label: string;
+  left: BarkSideMeasurement; right: BarkSideMeasurement;
 }
 
 export interface AnomalyHeatmap {
@@ -5053,3 +5170,20 @@ export interface ApiError {
 export type RuntimeArea = { id: string; name: string };
 export type RuntimeFacility = RuntimeArea & { area_id: string };
 export type RuntimePlaces = { areas: RuntimeArea[]; facilities: RuntimeFacility[] };
+export interface EdgeSettingsCommand {
+  request_id: string;
+  expected_revision: string;
+  values: Record<string, string>;
+}
+
+export interface EdgeSettingsStatus {
+  supported: boolean;
+  writable: boolean;
+  message?: string | null;
+  boot_id?: string | null;
+  revision?: string | null;
+  values: Record<string, string>;
+  request_id?: string | null;
+  phase: 'idle' | 'queued' | 'applying' | 'succeeded' | 'failed';
+  last_error?: string | null;
+}

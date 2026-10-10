@@ -105,12 +105,12 @@ Sicherheits- und Belastungsgrenzen:
 - IP-Allowlist aus `YBB_EDGE_PLANT_ALLOWED_IPS`, zusätzlich lokale Loopback-Diagnose;
 - keine Auswertung von Forwarded-Headern und keine freie Ziel-URL;
 - standardmäßig maximal 64 KiB Requestbody;
-- verpflichtender `X-Idempotency-Key` und persistenter Request-Digest;
+- optionaler `X-Idempotency-Key` mit persistentem Request-Digest; ohne Header ist jeder PUT eine neue Ausführung;
 - standardmäßig vier tatsächlich parallel laufende Trigger;
 - maximal 20 Requests pro Sekunde und Client-IP;
 - serverseitige Antwortfrist maximal 2500 ms, pro Request nur weiter reduzierbar;
 - ein nach Timeout weiterlaufender GPU-Auftrag persistiert sein Ergebnis weiterhin genau einmal
-  und kann mit demselben Idempotency-Key oder über `last-result` abgeholt werden;
+  und kann bei gesetztem Key mit demselben Idempotency-Key oder über `last-result` abgeholt werden;
 - kein Artefakt-, Deployment-, Shell-, Datei- oder allgemeiner SPS-Schreibendpunkt auf 9444.
 
 VLAN, Switch-ACL und Host-Firewall bleiben Teil des Trust-Modells. UFW und Windows Firewall

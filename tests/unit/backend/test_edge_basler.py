@@ -23,8 +23,10 @@ def pylon_sdk(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     class Node:
         def __init__(self, name: str) -> None:
             self.name = name
+            self.Value = None
 
         def SetValue(self, value: object) -> None:  # noqa: N802
+            self.Value = value
             writes.append((self.name, value))
             if self.name == "PixelFormat" and value == "invalid":
                 raise RuntimeError("unsupported pixel format")
@@ -58,7 +60,9 @@ def pylon_sdk(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         "ExposureTimeAbs",
         "ExposureAuto",
         "Gain",
+        "GainRaw",
         "GainAuto",
+        "GainSelector",
         "TriggerSelector",
         "TriggerMode",
         "TriggerSource",
@@ -141,6 +145,61 @@ def test_basler_channel_settings_reach_sdk_and_frame_owns_pixels(
     assert pylon_sdk.state.released == 1 and pylon_sdk.state.triggered == 1
     source.close()
     assert not pylon_sdk.state.open and not pylon_sdk.state.grabbing
+
+
+def test_basler_auto_settings_apply_without_manual_values(pylon_sdk: SimpleNamespace) -> None:
+    source = cameras.create_camera_source(
+        {
+            "type": "basler_pylon",
+            "serial_number": "111",
+            "exposure_auto": "Off",
+            "gain_auto": "Continuous",
+        }
+    )
+    try:
+        assert ("ExposureAuto", "Off") in pylon_sdk.writes
+        assert ("GainAuto", "Continuous") in pylon_sdk.writes
+        assert not any(name == "ExposureTimeAbs" for name, _ in pylon_sdk.writes)
+    finally:
+        source.close()
+
+
+def test_basler_ace_classic_profile_uses_model_specific_raw_gain(
+    pylon_sdk: SimpleNamespace,
+) -> None:
+    source = cameras.create_camera_source(
+        {
+            "type": "basler_pylon",
+            "serial_number": "111",
+            "model": "acA1300-60gm",
+            "gain_db": 6,
+            "pixel_format": "BayerRG8",
+        }
+    )
+    try:
+        assert ("GainSelector", "AnalogAll") in pylon_sdk.writes
+        assert ("GainRaw", 2) in pylon_sdk.writes
+        assert ("PixelFormat", "Mono8") in pylon_sdk.writes
+        assert not any(name == "Gain" for name, _ in pylon_sdk.writes)
+    finally:
+        source.close()
+
+
+def test_basler_trims_odd_effective_roi_for_nvenc(pylon_sdk: SimpleNamespace) -> None:
+    source = cameras.create_camera_source(
+        {
+            "type": "basler_pylon",
+            "serial_number": "111",
+            "width": 1281,
+            "height": 1080,
+        }
+    )
+    try:
+        assert ("Width", 1281) in pylon_sdk.writes
+        assert ("Width", 1280) in pylon_sdk.writes
+        assert not any(name == "Height" and value == 1079 for name, value in pylon_sdk.writes)
+    finally:
+        source.close()
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,8 @@ from pathlib import Path
 
 from cv_edge.software import runtime_platform_version_matches, verify_software_package
 
+SYSTEM_CONFIG_ROOT = Path("/etc/ybb-edge")
+
 
 class RuntimeLauncher:
     def __init__(self, data_root: Path) -> None:
@@ -28,7 +30,7 @@ class RuntimeLauncher:
         self.child = None
         self.stopping = False
         self.state = self.read_state()
-        self.state["protocol_version"] = 1
+        self.state["protocol_version"] = 1 if os.name == "nt" else 2
 
     def read_state(self) -> dict:
         path = self.root / "status.json"
@@ -66,6 +68,7 @@ class RuntimeLauncher:
     def start(self) -> None:
         (self.root / "stop").unlink(missing_ok=True)
         environment = dict(os.environ, YBB_EDGE_SOFTWARE_LAUNCHER="1")
+        environment["YBB_EDGE_SOFTWARE_UPDATE_PROTOCOL"] = str(self.state["protocol_version"])
         self.child = subprocess.Popen(
             [self.python(self.state["active_release"]), "-m", "edge_agent.server"],
             env=environment,
@@ -159,6 +162,8 @@ class RuntimeLauncher:
             required_bytes = sum(info.file_size for info in archive.infolist()) * 3
         if shutil.disk_usage(self.root).free < required_bytes + 1024**3:
             raise ValueError("Insufficient space for runtime preparation and rollback reserve.")
+        if manifest.system_packages:
+            self.prepare_system_packages(digest)
         complete = release_root / "ready.json"
         if not complete.exists():
             self.save(phase="installing")
@@ -238,6 +243,39 @@ class RuntimeLauncher:
                 f"Runtime dependency check failed (exit {result.returncode}): "
                 + (details or "No diagnostic output from the runtime dependency checker.")[:1800]
             )
+
+    def prepare_system_packages(self, digest: str) -> None:
+        config_root = SYSTEM_CONFIG_ROOT
+        try:
+            helper = json.loads((config_root / "settings-status.json").read_bytes())
+        except (OSError, ValueError):
+            helper = {}
+        if helper.get("system_update_protocol") != 1 or time.time() - helper.get("observed_at", 0) > 180:
+            raise ValueError(
+                "Systempaket-Installer fehlt oder ist nicht erreichbar. Einmal den aktuellen "
+                "Edge-Offline-Installer ausführen; danach sind Systempakete über Updates möglich."
+            )
+        self.save(phase="installing")
+        request = {"request_id": self.state["request_id"], "package_sha256": digest}
+        temporary = self.data_root / "system-package-request.tmp"
+        with temporary.open("w", encoding="utf-8") as output:
+            json.dump(request, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, self.data_root / "system-package-request.json")
+        deadline = time.monotonic() + 900
+        while time.monotonic() < deadline and not self.stopping:
+            try:
+                status = json.loads((config_root / "system-package-status.json").read_bytes())
+            except (OSError, ValueError):
+                status = {}
+            if status.get("request_id") == request["request_id"] and status.get("package_sha256") == digest:
+                if status.get("phase") == "succeeded":
+                    return
+                if status.get("phase") == "failed":
+                    raise ValueError(status.get("last_error") or "Systempaket-Installation fehlgeschlagen.")
+            time.sleep(1)
+        raise ValueError("Systempaket-Installation wurde nicht rechtzeitig bestätigt.")
 
     def apply(self, command: dict) -> None:
         previous = self.state["active_release"]

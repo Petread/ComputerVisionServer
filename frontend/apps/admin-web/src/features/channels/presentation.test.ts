@@ -6,6 +6,7 @@ import {
   canCaptureManualSnapshot,
   canStartManualIntervalCapture,
   canStopManualIntervalCapture,
+  channelRuntimeActualState,
   filterChannels,
   formatPerformance,
   manualCaptureResultLabel,
@@ -236,6 +237,34 @@ describe('channel presentation helpers', () => {
     expect(failedButRequested.restart.enabled).toBe(true);
   });
 
+  it('uses the Edge-observed state instead of a stale central runtime execution', () => {
+    const edgeChannel: RuntimeChannelSummary = {
+      ...baseChannel,
+      placement: {
+        target: 'edge_device',
+        edge_device_id: 'edge_orin'
+      },
+      runtime_state: {
+        channel_id: baseChannel.channel_id,
+        runtime_instance_id: 'rex_old_server_worker',
+        execution_mode: 'realtime',
+        desired_state: 'running',
+        actual_state: 'stopped',
+        loading_state: 'stopped',
+        recovery_attempts: 0,
+        health_summary: { status_text: 'Runtime stopped' },
+        metrics_summary: {}
+      },
+      desired_state: 'running',
+      observed_state: 'running',
+      status: 'running'
+    };
+
+    expect(channelRuntimeActualState(edgeChannel)).toBe('running');
+    expect(runtimeActionAvailability(edgeChannel).start.enabled).toBe(false);
+    expect(runtimeActionAvailability(edgeChannel).stop.enabled).toBe(true);
+  });
+
   it('offers force recovery actions while a stop transition is stuck', () => {
     const stopping = runtimeActionAvailability({
       ...baseChannel,
@@ -267,4 +296,19 @@ describe('channel presentation helpers', () => {
     expect(starting.stop.reason).toContain('normal start');
     expect(starting.restart.reason).toContain('fresh executor');
   });
+});
+
+it('requires explicit start and permits restart for trigger-only channels', () => {
+  const stopped = runtimeActionAvailability({
+    ...baseChannel, pipeline_version_id: 'plv_trigger',
+    desired_state: 'stopped', observed_state: 'stopped', status: 'stopped'
+  }, { triggerOnly: true });
+  expect(stopped.start.enabled).toBe(true);
+  expect(stopped.stop.enabled).toBe(false);
+  const running = runtimeActionAvailability({
+    ...baseChannel, pipeline_version_id: 'plv_trigger'
+  }, { triggerOnly: true });
+  expect(running.start.enabled).toBe(false);
+  expect(running.stop.enabled).toBe(true);
+  expect(running.restart.enabled).toBe(true);
 });

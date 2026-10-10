@@ -26,7 +26,7 @@
   "allow_plc_writes": false,
   "state_root": "/var/lib/ybb-edge",
   "artifact_quota_bytes": 34359738368,
-  "outbox_quota_bytes": 2147483648,
+  "outbox_quota_bytes": 67108864,
   "minimum_disk_free_bytes": 2147483648,
   "engine_builder_mode": "trtexec",
   "trtexec_path": "trtexec",

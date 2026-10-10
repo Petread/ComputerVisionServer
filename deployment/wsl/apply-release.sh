@@ -400,12 +400,42 @@ install_gstreamer_deb_bundle_from_bundle() {
     return 1
   fi
 
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get \
-    -o Dir::Etc::sourcelist=/dev/null \
-    -o Dir::Etc::sourceparts="$empty_sources_dir" \
-    -o APT::Get::List-Cleanup=0 \
-    install -y --no-install-recommends "$tmp_dir"/debs/*.deb
+  # Application rollback must not request older OS libraries just because the
+  # archived dependency closure predates the installed runtime. Keep configured
+  # equal/newer packages; still install missing, broken or newer bundle packages.
+  local deb package architecture bundle_version installed status installed_version
+  local retained=0
+  local -a install_debs=()
+  for deb in "$tmp_dir"/debs/*.deb; do
+    package="$(dpkg-deb -f "$deb" Package)"
+    architecture="$(dpkg-deb -f "$deb" Architecture)"
+    bundle_version="$(dpkg-deb -f "$deb" Version)"
+    if [[ "$architecture" != "all" ]]; then
+      package="$package:$architecture"
+    fi
+    installed="$(dpkg-query -W -f='${Status}\t${Version}' "$package" 2>/dev/null || true)"
+    status="${installed%%$'\t'*}"
+    installed_version="${installed#*$'\t'}"
+    if [[ ( "$status" == "install ok installed" || "$status" == "hold ok installed" ) && -n "$installed_version" ]] &&
+      dpkg --compare-versions "$installed_version" ge "$bundle_version"; then
+      retained=$((retained + 1))
+    else
+      install_debs+=("$deb")
+    fi
+  done
+  log "Offline-Abhaengigkeiten: $retained installierte gleiche/neuere Pakete beibehalten; ${#install_debs[@]} Pakete zu installieren."
+  if (( ${#install_debs[@]} > 0 )); then
+    export DEBIAN_FRONTEND=noninteractive
+    if ! apt-get \
+      -o Dir::Etc::sourcelist=/dev/null \
+      -o Dir::Etc::sourceparts="$empty_sources_dir" \
+      -o APT::Get::List-Cleanup=0 \
+      install -y --no-remove --no-install-recommends "${install_debs[@]}"; then
+      rm -rf "$tmp_dir"
+      log "FEHLER: Offline-Abhaengigkeiten konnten ohne Paketentfernung oder erzwungenes Downgrade nicht aufgeloest werden."
+      return 1
+    fi
+  fi
   rm -rf "$tmp_dir"
   if ! command -v turnserver >/dev/null 2>&1; then
     log "FEHLER: Das Offline-Paketbundle enthaelt kein ausfuehrbares turnserver-Programm (Paket coturn)."
@@ -923,6 +953,30 @@ validate_temporal_release_compatibility() {
   require_release_token "contracts/openapi/result-service.v1.yaml" 'stem-shadow-evaluation'
   require_release_token "docs/operations/stem-curvature-minimum-production-runbook.md" '# Curvature-Minimum'
   log "Temporal-Sequence-, Minimumprinzip-, Runtime-, Migrations- und Frontend-Vertraege des Release-Kandidaten validiert."
+}
+
+import_edge_runtime_packages() {
+  local manifest
+  manifest="$(read_bundle_manifest_value EdgeRuntimeTargets '')"
+  if [[ -z "$manifest" ]]; then
+    # Older bundles retain their manual package import workflow.
+    return 0
+  fi
+  if [[ "$manifest" != "edge-runtime/targets.json" || ! -f "$BUNDLE_DIR/$manifest" ]]; then
+    log "FEHLER: Mitgelieferte Edge-Zuordnung fehlt oder hat einen ungueltigen Pfad."
+    return 1
+  fi
+  log "Pruefe und importiere Edge-Runtime-Pakete ohne Internetzugriff."
+  (
+    # Use the same production storage and trust configuration as the running services.
+    # The import still loads code/config from the candidate, before current is switched.
+    set -a
+    . "$ENV_FILE"
+    set +a
+    PYTHONPATH="$(build_pythonpath "$RELEASE_DIR")" "$PYTHON_BIN" -m runtime_admin_api.edge_software \
+      --bundle-directory "$BUNDLE_DIR/edge-runtime" \
+      --release-root "$RELEASE_DIR" --central-release-id "$APP_VERSION"
+  )
 }
 
 validate_service_runtime_imports() {
@@ -2830,6 +2884,7 @@ ensure_service_onnxruntime "$PYTHON_BIN" "$TRAINING_PYTHON_BIN"
 write_runtime_env "$HOST_NAME" "$PYTHON_BIN" "$TRAINING_PYTHON_BIN" "$LABEL_STUDIO_BIN" "$MLFLOW_BIN" "$TRITON_BIN" "$TRTEXEC_BIN"
 validate_deployment_packaging_runtime "$TRAINING_PYTHON_BIN"
 validate_service_runtime_imports
+import_edge_runtime_packages
 validate_nvenc_stream_encoder
 run_migrations
 activate_release

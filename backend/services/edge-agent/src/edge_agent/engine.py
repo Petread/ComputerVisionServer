@@ -4,6 +4,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -45,15 +46,14 @@ class EdgeEngineManager:
         self.build_timeout_seconds = build_timeout_seconds
         self.cache_namespace = cache_namespace
         self.session_factory = session_factory
+        self._build_lock = threading.RLock()
         self.engine_root.mkdir(parents=True, exist_ok=True)
 
     def admit(
         self, manifest: EdgeDeploymentManifest
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         started = time.monotonic()
-        builds = [
-            self._build_engine(manifest, item) for item in self._items(manifest, "engine_builds")
-        ]
+        builds = self.ensure_engines(manifest)
         golden_items = self._items(manifest, "golden_tests")
         needs_runtime = any(
             str(item.get("comparison") or "artifact_integrity") != "artifact_integrity"
@@ -80,12 +80,18 @@ class EdgeEngineManager:
             "status": "admitted",
             "builder_mode": self.builder_mode,
             "engine_build_count": len(builds),
+            "engine_cache_hit_count": sum(bool(item["cache_hit"]) for item in builds),
             "golden_test_count": len(golden),
             "golden_tests": golden,
             "engine_runtime_validated": bool(inference_runtime) or not has_models,
             "duration_ms": round((time.monotonic() - started) * 1000, 3),
         }
         return report, builds
+
+    def ensure_engines(self, manifest: EdgeDeploymentManifest) -> list[dict[str, Any]]:
+        return [
+            self._build_engine(manifest, item) for item in self._items(manifest, "engine_builds")
+        ]
 
     def create_inference_runtime(
         self,
@@ -109,6 +115,14 @@ class EdgeEngineManager:
     def _build_engine(
         self, manifest: EdgeDeploymentManifest, item: dict[str, Any]
     ) -> dict[str, Any]:
+        # Admission and a recovering worker can request the same plan concurrently.
+        with self._build_lock:
+            return self._build_engine_locked(manifest, item)
+
+    def _build_engine_locked(
+        self, manifest: EdgeDeploymentManifest, item: dict[str, Any]
+    ) -> dict[str, Any]:
+        started = time.monotonic()
         node_key = str(item.get("node_key") or "").strip()
         onnx_sha256 = str(item.get("onnx_sha256") or "").strip()
         precision = str(item.get("precision") or "fp16").lower()
@@ -133,20 +147,16 @@ class EdgeEngineManager:
             self.engine_root / manifest.workload_release_id / node_key / f"{build_key}.plan"
         )
         destination.parent.mkdir(parents=True, exist_ok=True)
-        cache_hit = destination.is_file()
-        started = time.monotonic()
+        shared_cache = self.engine_root / "cache" / f"{build_key}.plan"
+        cache_hit = _valid_cached_plan(destination)
+        invalid_cache = destination.exists() and not cache_hit
         if not cache_hit:
             # A workload release can change for camera/pipeline settings while
             # the model, shapes, precision and platform namespace remain equal.
             # Keep the per-release path, but reuse an existing identical build.
-            for cached in sorted(self.engine_root.glob(f"*/*/{build_key}.plan")):
-                if cached.is_file() and cached.stat().st_size:
-                    temporary = destination.with_suffix(".tmp")
-                    try:
-                        shutil.copyfile(cached, temporary)
-                        temporary.replace(destination)
-                    finally:
-                        temporary.unlink(missing_ok=True)
+            for cached in [shared_cache, *sorted(self.engine_root.glob(f"*/*/{build_key}.plan"))]:
+                if cached != destination and _valid_cached_plan(cached):
+                    _copy_cached_plan(cached, destination)
                     cache_hit = True
                     break
         if not cache_hit:
@@ -225,7 +235,15 @@ class EdgeEngineManager:
                         f"TensorRT build failed for node {node_key}: "
                         f"{detail or 'No trtexec output'}. Log: {log_path}"
                     )
+            if not temporary.is_file() or not temporary.stat().st_size:
+                temporary.unlink(missing_ok=True)
+                raise EdgeEngineAdmissionError(
+                    f"TensorRT produced an empty engine for node {node_key}."
+                )
             temporary.replace(destination)
+        _write_plan_digest(destination)
+        if not _valid_cached_plan(shared_cache):
+            _copy_cached_plan(destination, shared_cache)
         return {
             "node_key": node_key,
             "onnx_sha256": onnx_sha256,
@@ -234,6 +252,12 @@ class EdgeEngineManager:
             "engine_sha256": _sha256_file(destination),
             "engine_size_bytes": destination.stat().st_size,
             "cache_hit": cache_hit,
+            "cache_key": build_key,
+            "reason": "cache_hit"
+            if cache_hit
+            else "invalid_cache"
+            if invalid_cache
+            else "missing_or_changed",
             "duration_ms": round((time.monotonic() - started) * 1000, 3),
         }
 
@@ -390,6 +414,46 @@ def _build_with_tensorrt_python(
     if not destination.is_file() or destination.stat().st_size == 0:
         raise RuntimeError("TensorRT produced an empty engine")
     del calibrator
+
+
+def _valid_cached_plan(path: Path) -> bool:
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        checksum = path.with_suffix(".sha256")
+        # Existing releases predate the sidecar; validate by deserializing at admission.
+        return not checksum.exists() or checksum.read_text(
+            encoding="ascii"
+        ).strip() == _sha256_file(path)
+    except (OSError, UnicodeError):
+        return False
+
+
+def _write_plan_digest(path: Path) -> None:
+    checksum = path.with_suffix(".sha256")
+    digest = _sha256_file(path)
+    try:
+        if checksum.read_text(encoding="ascii").strip() == digest:
+            return
+    except (OSError, UnicodeError):
+        pass
+    temporary = checksum.with_suffix(".sha256.tmp")
+    try:
+        temporary.write_text(digest, encoding="ascii")
+        temporary.replace(checksum)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _copy_cached_plan(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".tmp")
+    try:
+        shutil.copyfile(source, temporary)
+        temporary.replace(destination)
+        _write_plan_digest(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _calibration_cache_reader(trt: Any, payload: bytes) -> Any:  # noqa: ANN401

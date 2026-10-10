@@ -89,6 +89,12 @@ def persist_edge_result_batch(
                 session,
                 channel=channel,
                 occurred_at=occurred_at,
+                sampled_on_edge=(
+                    _mapping(envelope.payload.get("runtime_metadata")).get(
+                        "edge_history_projection"
+                    )
+                    is True
+                ),
             ),
         )
         session.add(result_record)
@@ -369,6 +375,7 @@ def _edge_result_history_is_due(
     *,
     channel: RuntimeChannel,
     occurred_at: datetime,
+    sampled_on_edge: bool = False,
 ) -> bool:
     try:
         policy = RuntimeResultHistoryPolicy.model_validate(channel.result_history_policy or {})
@@ -376,6 +383,10 @@ def _edge_result_history_is_due(
         policy = RuntimeResultHistoryPolicy()
     if not policy.enabled:
         return False
+    if sampled_on_edge:
+        # The Edge already applied this release's sampling interval. Reapplying
+        # it with wall-clock timestamps could hide samples due to sub-ms jitter.
+        return True
     latest_completed_at = session.scalar(
         select(ResultRecord.completed_at)
         .where(

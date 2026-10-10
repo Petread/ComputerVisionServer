@@ -10,6 +10,8 @@ from cv_contracts.runtime import (
 )
 from cv_status import RuntimeMode, RuntimeNodeCategory, TargetPath, TaskType
 
+from cv_runtime.bark_registry import bark_node_types
+
 
 def port(key: str, data_type: str, *, required: bool = True) -> RuntimeNodePort:
     return RuntimeNodePort(key=key, data_type=data_type, required=required)
@@ -172,7 +174,8 @@ def _default_authoring_constraints(
     ]
     blocks: list[str] = []
     singleton = False
-    if category == RuntimeNodeCategory.SOURCE:
+    auxiliary_source = node_type == "source.stem_csv_measurements"
+    if category == RuntimeNodeCategory.SOURCE and not auxiliary_source:
         singleton = True
         blocks = ["source.*"]
     if node_type == "trigger.http_put":
@@ -182,6 +185,7 @@ def _default_authoring_constraints(
         singleton = True
         blocks = ["trigger.http_put"]
     return {
+        **({"auxiliary_source": True} if auxiliary_source else {}),
         "authoring": {
             "starter": category in {RuntimeNodeCategory.TRIGGER, RuntimeNodeCategory.SOURCE}
             or not required_input_types,
@@ -207,6 +211,7 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
             "method": "PUT",
             "timeout_ms": 2500,
             "auth_required": False,
+            "require_idempotency_key": False,
             "endpoint_enabled": True,
             "response_mode": "configured_fields",
         },
@@ -224,9 +229,23 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
                 "integer",
                 default_value=2500,
                 min_value=50,
-                max_value=30000,
+                max_value=120000,
             ),
             prop("auth_required", "Require API key", "boolean", default_value=False),
+            prop(
+                "require_idempotency_key",
+                "Idempotenzschlüssel am Edge verlangen",
+                "boolean",
+                default_value=False,
+                section="Edge HTTP-Trigger",
+                help_text=(
+                    "Aus: Jeder PUT ohne X-Idempotency-Key startet eine neue Verarbeitung; "
+                    "auch ein leerer Body ist erlaubt. Ein freiwillig mitgesendeter Schlüssel "
+                    "verhindert fünf Minuten lang doppelte Ausführungen, auch nach einem Neustart. "
+                    "Für neue Aufträge immer neue Schlüssel verwenden. Ein: Ohne Schlüssel wird "
+                    "die Anfrage vor der Verarbeitung abgelehnt."
+                ),
+            ),
             prop("endpoint_enabled", "Endpoint enabled", "boolean", default_value=True),
             prop(
                 "response_mode",
@@ -1262,6 +1281,7 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
         default_config={
             "score_threshold": 0.35,
             "max_segments": 50,
+            "return_masks": False,
             "timeout_ms": DEFAULT_REALTIME_INFERENCE_TIMEOUT_MS,
             "require_image_view_compatibility": False,
         },
@@ -1284,6 +1304,10 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
                 max_value=1,
             ),
             prop("max_segments", "Max segments", "integer", default_value=50, min_value=1),
+            prop(
+                "return_masks", "Vollständige Klassenmasken", "boolean", default_value=False,
+                help_text="Verlustfreie Masken mit Innenlöchern für metrische Messungen anfordern.",
+            ),
             prop(
                 "require_image_view_compatibility",
                 "Report training-view differences",
@@ -6498,8 +6522,48 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
             "include_decision": True,
             "include_runtime_metadata": True,
             "wrap_key": "",
+            "edge_response_mode": "full",
+            "edge_response_metadata_fields": [],
         },
         property_schema=[
+            prop(
+                "edge_response_mode",
+                "Umfang der Edge-HTTP-Antwort",
+                "select",
+                default_value="full",
+                section="Edge HTTP-Antwort",
+                options=[
+                    ("result_only", "Nur konfigurierte Ergebnisfelder"),
+                    ("result_with_metadata", "Ergebnisfelder + ausgewählte Metadaten"),
+                    ("full", "Vollständiger Ausführungsbericht (bisheriges Verhalten)"),
+                ],
+                help_text=(
+                    'Nur Ergebnisfelder liefert z. B. {"result":"LKW wartend"} direkt als '
+                    "HTTP-Body. Die Result projections mit Ziel response bestimmen die Felder. "
+                    "Mit Metadaten lautet die Struktur {data: Ergebnisfelder, meta: Auswahl}. "
+                    "Historie und Gerätestatistiken bleiben unabhängig davon verfügbar."
+                ),
+            ),
+            prop(
+                "edge_response_metadata_fields",
+                "Zusätzliche Metadaten",
+                "multi_select",
+                default_value=[],
+                section="Edge HTTP-Antwort",
+                options=[
+                    ("correlation_id", "Korrelations-ID"),
+                    ("channel_id", "Kanal-ID"),
+                    ("pipeline_version_id", "Pipeline-Version"),
+                    ("workload_release_id", "Edge-Release"),
+                    ("completed_at", "Abschlusszeitpunkt"),
+                    ("result_sequence", "Ergebnis-Sequenznummer"),
+                    ("duplicate", "Bereits ausgeführter Auftrag"),
+                    ("status", "Ausführungsstatus"),
+                    ("duration_ms", "Gesamtlaufzeit (ms)"),
+                    ("timing", "Detaillierte Laufzeiten aller Verarbeitungsschritte"),
+                ],
+                help_text="Nur ausgewählte Felder werden im Objekt meta mitgeliefert.",
+            ),
             prop(
                 "projections",
                 "Result projections",
@@ -6522,9 +6586,14 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
             prop("include_decision", "Include decision", "boolean", default_value=True),
             prop(
                 "include_runtime_metadata",
-                "Include runtime metadata",
+                "Metadaten in der Historie",
                 "boolean",
                 default_value=True,
+                help_text=(
+                    "Ergänzt bei Result projections Kanal-ID, Pipeline-Version und "
+                    "Korrelations-ID in der Historie. Der Umfang der Edge-HTTP-Antwort "
+                    "wird separat eingestellt."
+                ),
             ),
             prop(
                 "wrap_key",
@@ -6846,6 +6915,7 @@ BUILTIN_NODE_TYPES: tuple[RuntimeNodeTypeSummary, ...] = (
 )
 
 
+BUILTIN_NODE_TYPES += bark_node_types(_node, port, prop)
 BUILTIN_NODE_TYPE_BY_KEY = {item.node_type: item for item in BUILTIN_NODE_TYPES}
 
 

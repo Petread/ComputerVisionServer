@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 
@@ -12,10 +14,14 @@ from cv_contracts.edge import (
     EdgeArtifactDescriptor,
     EdgeBlobUploadStatus,
     EdgeCapabilitySnapshot,
+    EdgeDeviceIdentity,
     EdgeFleetCommandSummary,
     EdgeSoftwareCommand,
     EdgeSoftwareOverview,
+    EdgeSoftwarePackageSummary,
     EdgeSoftwareRolloutRequest,
+    EdgeSoftwareStatus,
+    EdgeSoftwareTargetManifest,
 )
 from cv_core import PlatformSettings
 from cv_db import (
@@ -33,6 +39,10 @@ from cv_runtime.distribution import runtime_code_digest
 from cv_utils import utc_now
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+_DEFAULT_TARGET_MANIFEST_PATH = (
+    Path(__file__).resolve().parents[5] / "deployment/edge-runtime-targets.json"
+)
 
 
 def catalogue_root(settings: PlatformSettings) -> Path:
@@ -55,10 +65,117 @@ def import_package(settings: PlatformSettings, path: Path) -> dict:
         "release": release.model_dump(mode="json"),
     }
     os.replace(path, root / f"{digest}.zip")
-    temporary = root / f"{digest}.tmp"
-    temporary.write_text(json.dumps(descriptor), encoding="utf-8")
-    os.replace(temporary, root / f"{digest}.json")
+    _write_json(root / f"{digest}.json", descriptor)
     return descriptor
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def target_manifest_path() -> Path:
+    # Bound to the loaded application release, so a central rollback restores its targets.
+    return Path(
+        os.getenv(
+            "YBB_EDGE_RUNTIME_TARGET_MANIFEST",
+            str(_DEFAULT_TARGET_MANIFEST_PATH),
+        )
+    )
+
+
+def read_targets(path: Path) -> EdgeSoftwareTargetManifest:
+    targets = EdgeSoftwareTargetManifest.model_validate_json(path.read_bytes())
+    if targets.runtime_code_digest != runtime_code_digest():
+        raise ValueError("Edge-Zielpakete passen nicht zum Runtime-Code der Zentrale.")
+    identities = set()
+    for package in targets.packages:
+        release = package.release
+        if release.runtime_code_digest != targets.runtime_code_digest:
+            raise ValueError("Edge-Paket und zentrales Release enthalten unterschiedlichen Code.")
+        identity = (
+            release.platform,
+            release.architecture,
+            release.python_version,
+            release.cuda_version,
+            release.tensorrt_version,
+        )
+        if identity in identities:
+            raise ValueError("Mehrere Edge-Zielpakete für dasselbe Plattformprofil.")
+        identities.add(identity)
+    return targets
+
+
+def import_bundle_targets(
+    settings: PlatformSettings,
+    bundle_directory: Path,
+    destination: Path,
+    *,
+    central_release_id: str,
+) -> EdgeSoftwareTargetManifest:
+    """Stage verified packages before activation; never consume the offline source bundle."""
+    targets = read_targets(bundle_directory / "targets.json")
+    if targets.central_release_id != central_release_id:
+        raise ValueError("Edge-Zuordnung gehört zu einem anderen zentralen Release.")
+    for package in targets.packages:
+        # File names are derived only from validated SHA256 values, never arbitrary manifest paths.
+        source = bundle_directory / f"{package.package_sha256}.zip"
+        if source.stat().st_size != package.size_bytes:
+            raise ValueError("Mitgeliefertes Edge-Paket hat eine abweichende Größe.")
+        with tempfile.NamedTemporaryFile(dir=catalogue_root(settings), delete=False) as stream:
+            staging = Path(stream.name)
+        try:
+            shutil.copyfile(source, staging)
+            with staging.open("rb") as stream:
+                if hashlib.file_digest(stream, "sha256").hexdigest() != package.package_sha256:
+                    raise ValueError("Mitgeliefertes Edge-Paket hat eine abweichende Prüfsumme.")
+            descriptor = import_package(settings, staging)
+            if descriptor != package.model_dump(mode="json"):
+                raise ValueError("Signiertes Edge-Paket weicht von der zentralen Zuordnung ab.")
+        finally:
+            staging.unlink(missing_ok=True)
+    # Only publish the complete mapping. The destination belongs to the candidate release.
+    _write_json(destination, targets.model_dump(mode="json"))
+    return targets
+
+
+def recommended_package(
+    caps: EdgeCapabilitySnapshot | None,
+    releases: list[dict],
+    targets: EdgeSoftwareTargetManifest | None,
+    target_error: str | None,
+) -> tuple[str | None, list[str]]:
+    if target_error:
+        return None, [target_error]
+    if caps is None:
+        return None, ["Gerätestatus zuerst abrufen."]
+    expected = (
+        {p.package_sha256: p.model_dump(mode="json") for p in targets.packages} if targets else None
+    )
+    candidates = [
+        r
+        for r in releases
+        if r["release"]["runtime_code_digest"] == runtime_code_digest()
+        and not compatibility(caps, r["release"])
+        and (expected is None or expected.get(r["package_sha256"]) == r)
+    ]
+    if len(candidates) == 1:
+        return candidates[0]["package_sha256"], []
+    if len(candidates) > 1:
+        return None, [
+            "Mehrere passende Pakete: eindeutige zentrale Zuordnung "
+            "oder manuelle Auswahl erforderlich."
+        ]
+    return None, [
+        "Kein freigegebenes Zielpaket für dieses Geräteprofil vorhanden. "
+        "Profil im zentralen Export ergänzen; Python-/CUDA-Basis prüfen."
+    ]
 
 
 def compatibility(capabilities: EdgeCapabilitySnapshot | None, release: dict) -> list[str]:
@@ -67,6 +184,11 @@ def compatibility(capabilities: EdgeCapabilitySnapshot | None, release: dict) ->
     reasons = []
     if capabilities.software_update_protocol < 1:
         reasons.append("Einmalige Installation des Runtime-Launchers erforderlich.")
+    elif release.get("system_packages") and capabilities.software_update_protocol < 2:
+        reasons.append(
+            "Dieses Paket enthält Ubuntu-Systempakete. Einmal den aktuellen Edge-Offline-Installer "
+            "ausführen, um den privilegierten Systempaket-Installer einzurichten."
+        )
     for name in ("platform", "architecture"):
         expected = release.get(name)
         if expected and expected != getattr(capabilities, name):
@@ -84,8 +206,38 @@ def compatibility(capabilities: EdgeCapabilitySnapshot | None, release: dict) ->
     return reasons
 
 
+def package_availability(settings: PlatformSettings, descriptor: dict) -> list[str]:
+    artifact = catalogue_root(settings) / f"{descriptor['package_sha256']}.zip"
+    if not artifact.is_file() or artifact.stat().st_size != descriptor["size_bytes"]:
+        return [
+            "Die Paketdatei fehlt oder ist unvollständig. Dieses Runtime-Paket erneut importieren."
+        ]
+    return []
+
+
 def software_overview(session: Session, settings: PlatformSettings) -> EdgeSoftwareOverview:
-    releases = [json.loads(p.read_text()) for p in sorted(catalogue_root(settings).glob("*.json"))]
+    releases = [
+        EdgeSoftwarePackageSummary.model_validate_json(p.read_bytes()).model_dump(mode="json")
+        for p in sorted(catalogue_root(settings).glob("*.json"))
+    ]
+    unavailable = {r["package_sha256"]: package_availability(settings, r) for r in releases}
+    path = target_manifest_path()
+    targets = None
+    target_error = None
+    managed = path.exists() or bool(os.getenv("YBB_EDGE_RUNTIME_TARGET_MANIFEST"))
+    if managed:
+        try:
+            targets = read_targets(path)
+            for package in targets.packages:
+                descriptor = package.model_dump(mode="json")
+                if package_availability(settings, descriptor) or descriptor not in releases:
+                    raise ValueError(
+                        f"Mitgeliefertes Edge-Paket {package.release.release_id} "
+                        f"({package.package_sha256[:12]}) fehlt im Katalog oder ist unvollständig; "
+                        "dieses Paket erneut importieren oder das zentrale Update erneut anwenden."
+                    )
+        except (ValueError, OSError) as exc:
+            target_error = str(exc)
     devices = []
     for summary in list_edge_devices(session):
         detail = get_edge_device_detail(session, summary.edge_device_id)
@@ -93,6 +245,22 @@ def software_overview(session: Session, settings: PlatformSettings) -> EdgeSoftw
             detail.latest_capability_snapshot.capabilities
             if detail.latest_capability_snapshot
             else None
+        )
+        observation = software_observation(session, summary.edge_device_id, detail.identity)
+        software = (
+            EdgeSoftwareStatus.model_validate(observation["software"])
+            if observation.get("software")
+            else None
+        )
+        caps = launcher_capabilities(caps, software)
+        recommended, recommendation_reasons = recommended_package(
+            caps,
+            [r for r in releases if not unavailable[r["package_sha256"]]],
+            targets,
+            target_error,
+        )
+        active = (
+            software.active_release if software and software.active_release != "bootstrap" else None
         )
         commands = session.scalars(
             select(EdgeFleetCommandRecord)
@@ -111,11 +279,24 @@ def software_overview(session: Session, settings: PlatformSettings) -> EdgeSoftw
                 "platform": caps.platform if caps else None,
                 "runtime_version": caps.runtime_version if caps else None,
                 "node_count": len(caps.supported_node_types) if caps else 0,
-                "requires_update": bool(caps and caps.runtime_code_digest != runtime_code_digest()),
+                "requires_update": bool(
+                    caps
+                    and (
+                        caps.runtime_code_digest != runtime_code_digest()
+                        or (recommended is not None and active != recommended)
+                    )
+                ),
+                "active_package_sha256": active,
+                "recommended_package_sha256": recommended,
+                "recommendation_reasons": recommendation_reasons,
+                "software_observed_at": observation.get("software_observed_at")
+                if software
+                else None,
                 "releases": [
                     {
                         "package_sha256": r["package_sha256"],
-                        "reasons": compatibility(caps, r["release"]),
+                        "reasons": compatibility(caps, r["release"])
+                        + unavailable[r["package_sha256"]],
                     }
                     for r in releases
                 ],
@@ -134,8 +315,44 @@ def software_overview(session: Session, settings: PlatformSettings) -> EdgeSoftw
             }
         )
     return EdgeSoftwareOverview(
-        server_runtime_digest=runtime_code_digest(), releases=releases, devices=devices
+        server_runtime_digest=runtime_code_digest(),
+        releases=releases,
+        devices=devices,
+        central_release_id=targets.central_release_id if targets else None,
+        targets_managed=managed,
+        target_error=target_error,
     )
+
+
+def software_observation(session: Session, device_id: str, identity: EdgeDeviceIdentity | None) -> dict:
+    probe = session.scalar(
+        select(EdgeFleetCommandRecord)
+        .where(
+            EdgeFleetCommandRecord.edge_device_id == device_id,
+            EdgeFleetCommandRecord.command_type == "reconcile",
+            EdgeFleetCommandRecord.status == "succeeded",
+        )
+        .order_by(EdgeFleetCommandRecord.created_at.desc())
+        .limit(1)
+    )
+    observation = probe.response_payload if probe else {}
+    return observation if identity and observation.get("boot_id") == identity.boot_id else {}
+
+
+def launcher_capabilities(
+    caps: EdgeCapabilitySnapshot | None, software: EdgeSoftwareStatus | None
+) -> EdgeCapabilitySnapshot | None:
+    # A full installer updates the launcher even if a previously activated runtime
+    # slot still reports the older capability format. Use the same-boot observation.
+    if caps and software:
+        return caps.model_copy(
+            update={
+                "software_update_protocol": max(
+                    caps.software_update_protocol, software.protocol_version
+                )
+            }
+        )
+    return caps
 
 
 def queue_rollout(
@@ -172,6 +389,13 @@ def queue_rollout(
         if device.latest_capability_snapshot
         else None
     )
+    observation = software_observation(session, device_id, device.identity)
+    caps = launcher_capabilities(
+        caps,
+        EdgeSoftwareStatus.model_validate(observation["software"])
+        if observation.get("software")
+        else None,
+    )
     if caps is None or caps.software_update_protocol < 1:
         raise ValueError("Install the runtime launcher once before using central software updates.")
     if payload.action == "update":
@@ -180,7 +404,10 @@ def queue_rollout(
         path = catalogue_root(settings) / f"{payload.package_sha256}.json"
         if not path.is_file():
             raise ValueError("Runtime package is not in the verified catalogue.")
-        reasons = compatibility(caps, json.loads(path.read_text())["release"])
+        descriptor = json.loads(path.read_text())
+        reasons = compatibility(caps, descriptor["release"]) + package_availability(
+            settings, descriptor
+        )
         if reasons:
             raise ValueError("; ".join(reasons))
     return create_edge_fleet_command(
@@ -281,3 +508,34 @@ def process_software_command(settings: PlatformSettings) -> bool:
             command.last_error = str(exc)[:2000]
         session.flush()
     return False  # Keep servicing channel commands and sleep at the normal controller cadence.
+
+
+def main() -> None:
+    import argparse
+
+    from cv_core import load_platform_settings
+
+    parser = argparse.ArgumentParser(
+        description="Import bundled Edge runtime packages without network access."
+    )
+    parser.add_argument("--bundle-directory", required=True, type=Path)
+    parser.add_argument("--release-root", required=True, type=Path)
+    parser.add_argument("--central-release-id", required=True)
+    arguments = parser.parse_args()
+    settings = load_platform_settings("runtime-admin-api", root_dir=arguments.release_root)
+    if settings.env != "prod":
+        parser.error("Vor dem zentralen Edge-Import die Produktionsumgebung aus runtime.env laden.")
+    imported = import_bundle_targets(
+        settings,
+        arguments.bundle_directory,
+        arguments.release_root / "deployment/edge-runtime-targets.json",
+        central_release_id=arguments.central_release_id,
+    )
+    print(
+        f"Edge-Pakete für {imported.central_release_id}: "
+        f"{len(imported.packages)} geprüft und importiert."
+    )
+
+
+if __name__ == "__main__":
+    main()

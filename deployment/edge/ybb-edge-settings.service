@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply validated YBB Edge operating settings
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /opt/ybb-edge/edge-settings-helper.py
+TimeoutStartSec=900
+Environment=LC_ALL=C
+UMask=0027

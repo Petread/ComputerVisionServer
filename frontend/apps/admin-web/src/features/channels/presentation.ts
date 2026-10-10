@@ -28,17 +28,33 @@ const runtimeStartingStates: RuntimeObservedState[] = [
 const runtimeOperationalStates: RuntimeObservedState[] = ['running', 'degraded', 'recovering'];
 const runtimeStoppingStates: RuntimeObservedState[] = ['stopping'];
 
+export function channelRuntimeActualState(
+  channel: Pick<
+    RuntimeChannelSummary,
+    'placement' | 'runtime_state' | 'observed_state' | 'status'
+  >
+): RuntimeObservedState {
+  if (channel.placement.target === 'edge_device') {
+    return channel.observed_state ?? channel.status;
+  }
+  return channel.runtime_state?.actual_state ?? channel.observed_state ?? channel.status;
+}
+
 export function runtimeActionAvailability(
   channel: Pick<
     RuntimeChannelSummary,
-    'desired_state' | 'observed_state' | 'pipeline_version_id' | 'runtime_state' | 'status'
+    | 'desired_state'
+    | 'observed_state'
+    | 'pipeline_version_id'
+    | 'placement'
+    | 'runtime_state'
+    | 'status'
   >,
   options: { busy?: boolean; triggerOnly?: boolean } = {}
 ): RuntimeActionAvailability {
-  const actualState = channel.runtime_state?.actual_state ?? channel.observed_state ?? channel.status;
+  const actualState = channelRuntimeActualState(channel);
   const desiredState = channel.runtime_state?.desired_state ?? channel.desired_state;
   const busy = Boolean(options.busy);
-  const triggerOnly = Boolean(options.triggerOnly);
   const hasPipeline = Boolean(channel.pipeline_version_id);
   const runtimeStopping =
     desiredState === 'stop_requested' || runtimeStoppingStates.includes(actualState);
@@ -51,9 +67,7 @@ export function runtimeActionAvailability(
 
   const commonStartReason = busy
     ? 'A runtime command is currently being submitted.'
-    : triggerOnly
-      ? 'The assigned pipeline is trigger-only and has no continuous runtime.'
-      : !hasPipeline
+    : !hasPipeline
         ? 'Assign and publish a pipeline before starting the runtime.'
         : desiredState === 'disabled'
           ? 'The channel is disabled and must be enabled first.'
@@ -66,7 +80,6 @@ export function runtimeActionAvailability(
                 : 'Start the stopped runtime.';
   const startEnabled =
     !busy &&
-    !triggerOnly &&
     hasPipeline &&
     desiredState !== 'disabled' &&
     !commandPending &&
@@ -91,9 +104,7 @@ export function runtimeActionAvailability(
 
   const restartReason = busy
     ? 'A runtime command is currently being submitted.'
-    : triggerOnly
-      ? 'The assigned pipeline is trigger-only and has no continuous runtime.'
-      : !hasPipeline
+    : !hasPipeline
         ? 'Assign and publish a pipeline before restarting the runtime.'
         : runtimeStopping || runtimeStarting
           ? 'Force-stop the stuck runtime and start a fresh executor.'
@@ -104,7 +115,6 @@ export function runtimeActionAvailability(
             : 'Start is the correct action while the runtime is stopped.';
   const restartEnabled =
     !busy &&
-    !triggerOnly &&
     hasPipeline &&
     desiredState !== 'disabled' &&
     (!commandPending || runtimeStopping || runtimeStarting) &&

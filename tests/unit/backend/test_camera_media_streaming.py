@@ -163,6 +163,15 @@ def test_camera_frame_conversion_is_contiguous_bgr_without_scaling() -> None:
     np.testing.assert_array_equal(converted[:, :, 1], gray)
 
 
+def test_camera_frame_conversion_trims_odd_dimensions_for_nvenc() -> None:
+    frame = np.arange(5 * 7 * 3, dtype=np.uint8).reshape((5, 7, 3))
+
+    converted = encoder_frame(frame)
+
+    assert converted.shape == (4, 6, 3)
+    np.testing.assert_array_equal(converted, frame[:4, :6])
+
+
 def test_camera_media_forces_direct_basler_and_rejects_cpu_aravis_bridge() -> None:
     strict = _strict_camera_source_config("basler_pylon", {"transport_mode": "auto"})
 

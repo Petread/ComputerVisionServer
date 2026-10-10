@@ -32,6 +32,8 @@ from cv_db import (
     validate_runtime_channel_start_requirements,
 )
 from cv_db.models import RuntimeChannel
+from cv_db.runtime_model_store import lock_model_lifecycle, lock_runtime_use
+from cv_deploy.runtime import reconcile_runtime_models
 from cv_status import (
     HealthState,
     RuntimeChannelDesiredState,
@@ -250,18 +252,21 @@ class RuntimeControlOrchestrator:
             try:
                 runtime_execution_id, launch_request = self._process_claimed(session, command)
             except Exception as exc:
+                if command.runtime_execution_id and command.command != RuntimeControlCommand.STOP.value:
+                    stop_runtime_execution(session, runtime_execution_id=command.runtime_execution_id,
+                                           error=str(exc), failed=True)
                 mark_runtime_control_command_failed(
                     session,
                     command.id,
                     error=str(exc),
                     runtime_execution_id=command.runtime_execution_id,
                 )
-                return command
-            mark_runtime_control_command_succeeded(
-                session,
-                command.id,
-                runtime_execution_id=runtime_execution_id,
-            )
+            else:
+                mark_runtime_control_command_succeeded(
+                    session,
+                    command.id,
+                    runtime_execution_id=runtime_execution_id,
+                )
             processed = command
         if launch_request is not None:
             self.supervisor.launch(
@@ -269,7 +274,15 @@ class RuntimeControlOrchestrator:
                 channel_id=launch_request.channel_id,
                 mode=launch_request.mode,
             )
+        self._reconcile_models()
         return processed
+
+    def _reconcile_models(self) -> None:
+        try:
+            with session_scope(self.settings) as session:
+                reconcile_runtime_models(session, self.settings)
+        except Exception:
+            LOGGER.exception("Runtime model reconciliation will be retried.")
 
     def process_all_available(self, *, limit: int = 100) -> int:
         count = 0
@@ -341,6 +354,8 @@ class RuntimeControlOrchestrator:
                     RuntimeExecutionStatus.RUNNING,
                     RuntimeExecutionStatus.FAILED_RETRYABLE,
                 }:
+                    lock_model_lifecycle(session)
+                    reconcile_runtime_models(session, self.settings, validate_local=True)
                     mark_runtime_execution_running(
                         session,
                         runtime_execution_id=execution.id,
@@ -362,6 +377,7 @@ class RuntimeControlOrchestrator:
                 channel_id=launch_request.channel_id,
                 mode=launch_request.mode,
             )
+        self._reconcile_models()
         return changed
 
     def _reconcile_stopping_runtime_handles(self, session) -> int:
@@ -372,9 +388,9 @@ class RuntimeControlOrchestrator:
             .order_by(RuntimeExecution.heartbeat_at.asc(), RuntimeExecution.created_at.asc())
         ).all()
         for execution in stopping:
-            if not self.supervisor.has_handle(execution.id):
-                continue
             if not self.supervisor.stop(execution.id, timeout_seconds=0.1):
+                continue
+            if not lock_runtime_use(session, execution.id, exclusive=True):
                 continue
             stop_runtime_execution(
                 session,
@@ -456,6 +472,7 @@ class RuntimeControlOrchestrator:
         raise ValueError(f"Unsupported runtime-control command: {command.command}")
 
     def _start(self, session, command: RuntimeControlCommandRecord) -> tuple[str, RuntimeLaunchRequest | None]:
+        lock_model_lifecycle(session)
         loaded = validate_runtime_channel_start_requirements(session, channel_id=command.channel_id)
         active = get_active_runtime_execution(session, channel_id=command.channel_id)
         if (
@@ -464,6 +481,9 @@ class RuntimeControlOrchestrator:
             and active.actual_state == RuntimeObservedState.RUNNING.value
             and runtime_execution_matches_loaded_binding(session, active, loaded)
         ):
+            reconcile_runtime_models(
+                session, self.settings, validate_local=not self.supervisor.has_handle(active.id)
+            )
             mark_runtime_execution_running(
                 session,
                 runtime_execution_id=active.id,
@@ -476,7 +496,7 @@ class RuntimeControlOrchestrator:
             return active.id, RuntimeLaunchRequest(
                 runtime_execution_id=active.id,
                 channel_id=loaded.channel.id,
-                mode=RuntimeMode(loaded.channel.mode),
+                mode=RuntimeMode(loaded.version.mode),
             )
 
         if active is not None:
@@ -485,6 +505,8 @@ class RuntimeControlOrchestrator:
                 raise TimeoutError(
                     f"Runtime executor {active.id} did not stop within the timeout."
                 )
+            if not lock_runtime_use(session, active.id, exclusive=True):
+                raise ValueError("The previous runtime is still completing an invocation; retry restart after it drains.")
             stop_runtime_execution(session, runtime_execution_id=active.id)
 
         execution = create_runtime_execution_instance(
@@ -503,6 +525,7 @@ class RuntimeControlOrchestrator:
             loading_state="loading_pipeline",
             health_text="Loading published pipeline",
         )
+        reconcile_runtime_models(session, self.settings, validate_local=True)
         transition_runtime_execution_loading(
             session,
             runtime_execution_id=execution.id,
@@ -520,7 +543,7 @@ class RuntimeControlOrchestrator:
         return execution.id, RuntimeLaunchRequest(
             runtime_execution_id=execution.id,
             channel_id=loaded.channel.id,
-            mode=RuntimeMode(loaded.channel.mode),
+            mode=RuntimeMode(loaded.version.mode),
         )
 
     def _stop(self, session, command: RuntimeControlCommandRecord) -> str | None:
@@ -548,6 +571,9 @@ class RuntimeControlOrchestrator:
             raise TimeoutError(
                 f"Runtime executor {active.id} did not stop within the timeout."
             )
+        if not lock_runtime_use(session, active.id, exclusive=True):
+            return active.id
+        lock_model_lifecycle(session)
         stopped = stop_runtime_execution(session, runtime_execution_id=active.id)
         if force and not executor_stopped:
             LOGGER.warning(

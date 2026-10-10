@@ -8,6 +8,15 @@ $AppName = "ybb-inferenzserver"
 # Version des Release-Artefakts. "auto" erzeugt pro Export eine Timestamp/Git-Version.
 $AppVersion = "auto"
 
+# Optionale Edge-Runtime-Pakete im zentralen Update (Entwicklungsrechner).
+# Je installiertem Zielprofil ein vorhandenes Basisbundle; keine Neuinstallation des Edge.
+# Die UI speichert diese Auswahl. Die Passphrase wird ausschliesslich ueber stdin uebergeben.
+$EdgeRuntimeBundles = @()
+$EdgeSigningKeyPath = ""
+$EdgeOpenSslExecutable = "openssl"
+$EdgePackageIndexUrl = "https://pypi.org/simple"
+$EdgeAdditionalWheelDirectory = ""
+
 # Name der WSL2-Distribution auf dem Zielgeraet.
 $DistroName = "YBB-Inferenzserver"
 

@@ -585,6 +585,13 @@ components:
           type: string
           pattern: ^[a-z0-9][a-z0-9._-]{2,119}$
           title: Model Family Slug
+        label_project_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Label Project Id
         target_path:
           $ref: '#/components/schemas/TargetPath'
           default: realtime
@@ -778,8 +785,10 @@ components:
           - slider
           - boolean
           - select
+          - multi_select
           - channel_ref
           - image_upload
+          - image_upload_list
           - model_ref
           - zone_list
           - roi
@@ -798,7 +807,12 @@ components:
           - direction_reference
           - board_surface_calibration
           - camera_intrinsic_calibration
+          - image_view_profile
+          - stem_curvature_process_calibration
+          - stem_surface_phase_calibration
+          - stem_minimum_principle_validation
           - board_cut_class_rules
+          - board_surface_class_mapping
           - plc_connection
           - plc_write_mapping_table
           title: Field Type

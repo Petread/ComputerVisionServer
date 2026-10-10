@@ -1,6 +1,6 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
-    [ValidateSet("Auto", "Export", "Install", "Update", "Models")]
+    [ValidateSet("Auto", "Export", "Install", "Update", "Models", "Edge", "Keys")]
     [string]$Mode = "Auto"
 )
 
@@ -62,6 +62,9 @@ $script:CurrentProcess = $null
 $script:ActiveTimer = $null
 $script:ActiveTickHandler = $null
 $script:StatusLabel = $null
+$script:EdgeWorkspace = $null
+$script:WorkspaceTabs = $null
+$script:IsDevelopmentWorkspace = $false
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -211,7 +214,12 @@ function New-TemporaryExportConfig {
         [bool]$SkipGStreamerCheck,
         [bool]$WslMirroredNetworking,
         [bool]$PlcWritesAllowed,
-        [AllowEmptyString()][string]$MediaMtxArchivePath
+        [AllowEmptyString()][string]$MediaMtxArchivePath,
+        [string[]]$EdgeRuntimeBundles = @(),
+        [string]$EdgeSigningKeyPath = "",
+        [string]$EdgeOpenSslExecutable = "openssl",
+        [string]$EdgePackageIndexUrl = "https://pypi.org/simple",
+        [string]$EdgeAdditionalWheelDirectory = ""
     )
 
     $dir = Join-Path ([System.IO.Path]::GetTempPath()) "ybb-deployment-ui"
@@ -252,7 +260,13 @@ function New-TemporaryExportConfig {
         $lines.Add('$WslNetworkingMode = "unchanged"')
         $lines.Add('$WslHyperVFirewallDefaultInboundAction = "Unchanged"')
     }
-    if (-not [string]::IsNullOrWhiteSpace($MediaMtxArchivePath)) {
+    # UI skip choices take precedence over archives inherited from a base config.
+    if ($SkipTritonCheck) { $lines.Add('$TritonServerArchivePath = ""') }
+    if ($SkipGStreamerCheck) { $lines.Add('$GStreamerDebBundlePath = ""') }
+    if ($SkipMediaMtxCheck) {
+        $lines.Add('$MediaMtxArchivePath = ""')
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($MediaMtxArchivePath)) {
         $lines.Add('$MediaMtxArchivePath = ' + (ConvertTo-PowerShellLiteral ([System.IO.Path]::GetFullPath($MediaMtxArchivePath))))
     }
     $lines.Add('$StreamAuthEnabled = $false')
@@ -265,7 +279,12 @@ function New-TemporaryExportConfig {
     $lines.Add('$FrontendInferenceGatewayBatchUrl = "/inference-batch"')
     $lines.Add('$FrontendAdminWsUrl = ""')
     $lines.Add('$FrontendBasePath = "/frontend/"')
-    Set-Content -LiteralPath $path -Value $lines -Encoding ascii
+    $lines.Add('$EdgeRuntimeBundles = ' + (ConvertTo-PowerShellArrayLiteral -Values $EdgeRuntimeBundles))
+    $lines.Add('$EdgeSigningKeyPath = ' + (ConvertTo-PowerShellLiteral $EdgeSigningKeyPath))
+    $lines.Add('$EdgeOpenSslExecutable = ' + (ConvertTo-PowerShellLiteral $EdgeOpenSslExecutable))
+    $lines.Add('$EdgePackageIndexUrl = ' + (ConvertTo-PowerShellLiteral $EdgePackageIndexUrl))
+    $lines.Add('$EdgeAdditionalWheelDirectory = ' + (ConvertTo-PowerShellLiteral $EdgeAdditionalWheelDirectory))
+    Set-Content -LiteralPath $path -Value $lines -Encoding UTF8
     return $path
 }
 
@@ -365,7 +384,7 @@ function ConvertTo-ProcessScriptArgument {
 }
 
 function ConvertTo-PowerShellArrayLiteral {
-    param([Parameter(Mandatory = $true)][string[]]$Values)
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Values)
 
     return "@(" + (($Values | ForEach-Object { ConvertTo-PowerShellLiteral $_ }) -join ", ") + ")"
 }
@@ -405,10 +424,17 @@ function Start-UiProcess {
         [Parameter(Mandatory = $true)][System.Windows.Forms.Button]$Button,
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [Parameter(Mandatory = $true)][string[]]$Arguments,
-        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [AllowEmptyString()][string]$EdgeSigningPassphrase = ""
     )
 
-    if ($null -ne $script:CurrentProcess -and -not $script:CurrentProcess.HasExited) {
+    if ($script:IsDevelopmentWorkspace -and [IO.Path]::GetFileName($ScriptPath) -in @(
+        "install-windows-offline.ps1", "apply-windows-update.ps1", "update-windows-offline.ps1", "configure-windows-portproxy.ps1"
+    )) {
+        throw "Hier werden Offlinepakete erstellt. Die Installation erfolgt ueber den bestehenden Installationsweg auf dem Zielserver."
+    }
+    if (($null -ne $script:CurrentProcess -and -not $script:CurrentProcess.HasExited) -or
+        ($null -ne $script:EdgeWorkspace -and $script:EdgeWorkspace.IsBusy)) {
         [System.Windows.Forms.MessageBox]::Show("Es laeuft bereits ein Vorgang.", "YBB Deployment", "OK", "Information") | Out-Null
         return
     }
@@ -525,13 +551,39 @@ function Start-UiProcess {
         '    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue',
         '    New-Item -ItemType File -Path $logPath -Force | Out-Null',
         '    $argumentLine = Join-ProcessArguments -Values $childArgs',
-        '    $process = Start-Process -FilePath $powerShell -ArgumentList $argumentLine -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru',
+        '    $childInfo = New-Object Diagnostics.ProcessStartInfo',
+        '    $childInfo.FileName = $powerShell',
+        '    $childInfo.Arguments = $argumentLine',
+        '    $childInfo.UseShellExecute = $false',
+        '    $childInfo.CreateNoWindow = $true',
+        '    $childInfo.RedirectStandardInput = $true',
+        '    $childInfo.RedirectStandardOutput = $true',
+        '    $childInfo.RedirectStandardError = $true',
+        '    $process = New-Object Diagnostics.Process',
+        '    $process.StartInfo = $childInfo',
+        '    [void]$process.Start()',
+        '    $stdoutFile = New-Object IO.FileStream -ArgumentList $stdoutPath, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::ReadWrite), 1, $true',
+        '    $stderrFile = New-Object IO.FileStream -ArgumentList $stderrPath, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::ReadWrite), 1, $true',
+        '    $stdoutPump = $process.StandardOutput.BaseStream.CopyToAsync($stdoutFile)',
+        '    $stderrPump = $process.StandardError.BaseStream.CopyToAsync($stderrFile)',
+        '    [Console]::InputEncoding = New-Object Text.UTF8Encoding($false)',
+        '    $secret = [Console]::In.ReadLine()',
+        '    $secretBytes = [Text.Encoding]::UTF8.GetBytes($secret + "`n")',
+        '    $process.StandardInput.BaseStream.Write($secretBytes, 0, $secretBytes.Length)',
+        '    $process.StandardInput.BaseStream.Flush()',
+        '    $process.StandardInput.Close()',
+        '    [Array]::Clear($secretBytes, 0, $secretBytes.Length)',
+        '    $secret = $null',
         '    $positions = @{ stdout = [int64]0; stderr = [int64]0 }',
         '    while (-not $process.HasExited) {',
         '        Append-RedirectedLogs -StdoutPath $stdoutPath -StderrPath $stderrPath -LogPath $logPath -Positions $positions',
         '        Start-Sleep -Milliseconds 500',
         '    }',
         '    $process.WaitForExit()',
+        '    $stdoutPump.GetAwaiter().GetResult()',
+        '    $stderrPump.GetAwaiter().GetResult()',
+        '    $stdoutFile.Dispose()',
+        '    $stderrFile.Dispose()',
         '    $process.Refresh()',
         '    Append-RedirectedLogs -StdoutPath $stdoutPath -StderrPath $stderrPath -LogPath $logPath -Positions $positions',
         '    $exitCode = [int]$process.ExitCode',
@@ -554,6 +606,8 @@ function Start-UiProcess {
         '    $exitCode = 1',
         '}',
         'finally {',
+        '    if ($null -ne $stdoutFile) { $stdoutFile.Dispose() }',
+        '    if ($null -ne $stderrFile) { $stderrFile.Dispose() }',
         '    if ($null -ne $process) { $process.Dispose() }',
         '    if ($null -ne $stdoutPath -and $null -ne $stderrPath) {',
         '        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue',
@@ -561,7 +615,7 @@ function Start-UiProcess {
         '}',
         'exit $exitCode'
     )
-    Set-Content -LiteralPath $runnerPath -Value $runnerLines -Encoding ascii
+    Set-Content -LiteralPath $runnerPath -Value $runnerLines -Encoding UTF8
 
     $processArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runnerPath)
     $argumentLine = ($processArgs | ForEach-Object { Quote-ProcessArgument $_ }) -join " "
@@ -578,6 +632,7 @@ function Start-UiProcess {
     $startInfo.RedirectStandardOutput = $false
     $startInfo.RedirectStandardError = $false
     $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
@@ -585,7 +640,14 @@ function Start-UiProcess {
 
     try {
         [void]$process.Start()
+        $secretBytes = [Text.Encoding]::UTF8.GetBytes($EdgeSigningPassphrase + "`n")
+        $process.StandardInput.BaseStream.Write($secretBytes, 0, $secretBytes.Length)
+        $process.StandardInput.BaseStream.Flush()
+        $process.StandardInput.Close()
+        [Array]::Clear($secretBytes, 0, $secretBytes.Length)
+        $EdgeSigningPassphrase = $null
         $script:CurrentProcess = $process
+        if ($null -ne $script:WorkspaceTabs) { $script:WorkspaceTabs.Enabled = $false }
         $Button.Enabled = $false
         Set-UiStatus -Text ("Laeuft. Prozess-ID: {0}" -f $process.Id)
         Append-Log -LogBox $LogBox -Text ("Vorgang gestartet. Prozess-ID: {0}" -f $process.Id)
@@ -607,6 +669,7 @@ function Start-UiProcess {
                     Set-UiStatus -Text ("Beendet. Exit Code: {0}" -f $exitCode)
                     $Button.Enabled = $true
                     $script:CurrentProcess = $null
+                    if ($null -ne $script:WorkspaceTabs) { $script:WorkspaceTabs.Enabled = $true }
                     $script:ActiveTimer = $null
                     $script:ActiveTickHandler = $null
                 }
@@ -624,6 +687,7 @@ function Start-UiProcess {
     }
     catch {
         $Button.Enabled = $true
+        if ($null -ne $script:WorkspaceTabs) { $script:WorkspaceTabs.Enabled = $true }
         Set-UiStatus -Text "Fehler beim Start."
         throw
     }
@@ -742,6 +806,7 @@ function Get-CheckedPretrainedModelIds {
 }
 
 $repoRoot = Resolve-RepoRoot
+$script:IsDevelopmentWorkspace = Test-Path -LiteralPath (Join-Path $repoRoot "scripts\release\build_edge_offline_bundle.py") -PathType Leaf
 $deploymentDir = Resolve-DeploymentDir -RepoRoot $repoRoot
 $defaultAppDir = Resolve-AppDir
 $defaultDistro = Get-DefaultDistroName
@@ -754,6 +819,11 @@ $form.Size = New-Object System.Drawing.Size(980, 780)
 $form.MinimumSize = New-Object System.Drawing.Size(900, 700)
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $form.Add_FormClosing({
+    if ($null -ne $script:EdgeWorkspace -and $script:EdgeWorkspace.IsBusy) {
+        $_.Cancel = $true
+        [System.Windows.Forms.MessageBox]::Show("Bitte den laufenden Edge-Vorgang zuerst abschliessen lassen.", "YBB Deployment") | Out-Null
+        return
+    }
     if ($null -ne $script:CurrentProcess -and -not $script:CurrentProcess.HasExited) {
         $answer = [System.Windows.Forms.MessageBox]::Show("Es laeuft noch ein Vorgang. Soll er beendet werden?", "YBB Deployment", "YesNo", "Warning")
         if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
@@ -904,10 +974,21 @@ $exportInstallerButton.Add_Click({
 
 $exportUpdateButton.Add_Click({
     try {
+        $edgeBundles = @()
+        if ($exportIncludeEdgeProfiles.Checked) {
+            $edgeBundles = @($exportEdgeBundles.Lines | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            if ($edgeBundles.Count -eq 0) { throw "Ein vorhandenes Edge-Basisbundle hinzufuegen oder Edge-Pakete bewusst deaktivieren." }
+            foreach ($bundle in $edgeBundles) {
+                if (-not (Test-Path -LiteralPath $bundle)) { throw "Edge-Basisbundle nicht gefunden: $bundle" }
+            }
+            if (-not (Test-Path -LiteralPath $exportEdgeKey.Text -PathType Leaf)) { throw "Den vorhandenen privaten RSA-Schluessel auswaehlen." }
+        }
+        if ($exportEdgePassphrase.Text -match "[\r\n\x00]") { throw "Die Passphrase muss einzeilig sein." }
         $publicAddress = Join-PublicAddress -AddressHost $exportHost.Text -Port $exportPort.Text
-        $configPath = New-TemporaryExportConfig -RepoRoot $exportRepo.Text -BaseConfig $exportConfig.Text -AppName $exportAppName.Text -AppVersion $exportVersion.Text -DistroName $exportDistro.Text -ServerBaseDir $exportBaseDir.Text -PublicAddress $publicAddress -BuildFrontend $exportBuildFrontend.Checked -SkipTritonCheck $exportSkipTriton.Checked -SkipMediaMtxCheck $exportSkipMediaMtx.Checked -SkipGStreamerCheck $exportSkipGStreamer.Checked -WslMirroredNetworking $exportWslMirrored.Checked -PlcWritesAllowed $exportPlcWritesAllowed.Checked -MediaMtxArchivePath $exportMediaMtxArchive.Text
+        $configPath = New-TemporaryExportConfig -RepoRoot $exportRepo.Text -BaseConfig $exportConfig.Text -AppName $exportAppName.Text -AppVersion $exportVersion.Text -DistroName $exportDistro.Text -ServerBaseDir $exportBaseDir.Text -PublicAddress $publicAddress -BuildFrontend $exportBuildFrontend.Checked -SkipTritonCheck $exportSkipTriton.Checked -SkipMediaMtxCheck $exportSkipMediaMtx.Checked -SkipGStreamerCheck $exportSkipGStreamer.Checked -WslMirroredNetworking $exportWslMirrored.Checked -PlcWritesAllowed $exportPlcWritesAllowed.Checked -MediaMtxArchivePath $exportMediaMtxArchive.Text -EdgeRuntimeBundles $edgeBundles -EdgeSigningKeyPath $exportEdgeKey.Text -EdgeOpenSslExecutable $exportEdgeOpenSsl.Text -EdgePackageIndexUrl $exportEdgeIndex.Text -EdgeAdditionalWheelDirectory $exportEdgeWheels.Text
         $scriptPath = Join-Path (Resolve-DeploymentDir -RepoRoot $exportRepo.Text) "export-windows-update.ps1"
-        Start-UiProcess -Form $form -LogBox $logBox -Button $exportUpdateButton -ScriptPath $scriptPath -Arguments @("-Config", $configPath) -WorkingDirectory $exportRepo.Text
+        Start-UiProcess -Form $form -LogBox $logBox -Button $exportUpdateButton -ScriptPath $scriptPath -Arguments @("-Config", $configPath, "-EdgeSigningPassphraseStdin") -WorkingDirectory $exportRepo.Text -EdgeSigningPassphrase $exportEdgePassphrase.Text
+        $exportEdgePassphrase.Clear()
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "YBB Deployment", "OK", "Error") | Out-Null
@@ -1163,7 +1244,529 @@ $openModelsIncomingButton.Add_Click({
     }
 })
 
-if ($Mode -eq "Auto") {
+# A shared workspace wraps the existing handlers. No second installer or runtime.
+function New-WorkspaceStack {
+    param($Page, [string]$Heading, [string]$Description)
+    $Page.Controls.Clear()
+    $Page.AutoScroll = $true
+    $Page.BackColor = [System.Drawing.Color]::White
+    $stack = New-Object System.Windows.Forms.TableLayoutPanel
+    $stack.ColumnCount = 1
+    $stack.Dock = "Top"
+    $stack.AutoSize = $true
+    $stack.Padding = New-Object System.Windows.Forms.Padding(24)
+    $stack.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle("Percent", 100))) | Out-Null
+    $headingControl = New-Label $Heading 0 0 800 36
+    $headingControl.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    $headingControl.AutoSize = $true
+    $stack.Controls.Add($headingControl)
+    $body = New-Label $Description 0 0 810 66
+    $body.Dock = "Top"
+    $body.ForeColor = [System.Drawing.Color]::FromArgb(75, 91, 108)
+    $stack.Controls.Add($body)
+    $Page.Controls.Add($stack)
+    return $stack
+}
+
+function Add-WorkspaceRow {
+    param($Stack, [string]$Label, $Field, $Action = $null)
+    $row = New-Object System.Windows.Forms.TableLayoutPanel
+    $row.ColumnCount = 3
+    $row.AutoSize = $true
+    $row.Dock = "Top"
+    $row.Margin = New-Object System.Windows.Forms.Padding(0, 5, 0, 5)
+    $row.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle("Absolute", 175))) | Out-Null
+    $row.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle("Percent", 100))) | Out-Null
+    $row.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle("Absolute", 145))) | Out-Null
+    $caption = New-Label $Label 0 0 170 26
+    $caption.Anchor = "Left"
+    $row.Controls.Add($caption, 0, 0)
+    $Field.Dock = "Fill"
+    $row.Controls.Add($Field, 1, 0)
+    if ($null -ne $Action) { $Action.Dock = "Fill"; $row.Controls.Add($Action, 2, 0) }
+    $Stack.Controls.Add($row)
+}
+
+function Add-WorkspaceActions {
+    param($Stack, [object[]]$Buttons)
+    $row = New-Object System.Windows.Forms.FlowLayoutPanel
+    $row.AutoSize = $true
+    $row.Dock = "Top"
+    $row.Margin = New-Object System.Windows.Forms.Padding(0, 14, 0, 10)
+    foreach ($button in $Buttons) {
+        $button.AutoSize = $true
+        $button.Height = 38
+        $button.Padding = New-Object System.Windows.Forms.Padding(10, 4, 10, 4)
+        $button.FlatStyle = "Flat"
+        $row.Controls.Add($button)
+    }
+    $Stack.Controls.Add($row)
+}
+
+function New-AdvancedSection {
+    param($Stack, [string]$ToggleText = "Erweiterte Einstellungen anzeigen")
+    $toggle = New-CheckBox $ToggleText $false 0 0 700
+    $Stack.Controls.Add($toggle)
+    $section = New-Object System.Windows.Forms.TableLayoutPanel
+    $section.ColumnCount = 1
+    $section.Dock = "Top"
+    $section.AutoSize = $true
+    $section.Visible = $false
+    $section.Tag = $toggle
+    $section.BackColor = [System.Drawing.Color]::FromArgb(243, 246, 249)
+    $toggle.Add_CheckedChanged({ $section.Visible = $toggle.Checked }.GetNewClosure())
+    $Stack.Controls.Add($section)
+    return $section
+}
+
+$form.Text = "YBB | Updates und Installation"
+$form.Size = New-Object System.Drawing.Size(1100, 860)
+$form.MinimumSize = New-Object System.Drawing.Size(980, 740)
+$form.BackColor = [System.Drawing.Color]::FromArgb(239, 244, 248)
+$title.Text = "Updates und Installation"
+$title.Size = New-Object System.Drawing.Size(480, 30)
+$title.ForeColor = [System.Drawing.Color]::FromArgb(24, 83, 97)
+$adminLabel.Location = New-Object System.Drawing.Point(640, 16)
+$adminLabel.Anchor = "Top,Right"
+$tabs.Size = New-Object System.Drawing.Size(1055, 610)
+$tabs.Anchor = "Top,Left,Right,Bottom"
+$script:WorkspaceTabs = $tabs
+$script:StatusLabel.Location = New-Object System.Drawing.Point(14, 670)
+$script:StatusLabel.Width = 1055
+$logBox.Location = New-Object System.Drawing.Point(14, 698)
+$logBox.Size = New-Object System.Drawing.Size(1055, 110)
+$logBox.BackColor = [System.Drawing.Color]::FromArgb(28, 40, 54)
+$logBox.ForeColor = [System.Drawing.Color]::FromArgb(220, 231, 239)
+$logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
+$exportTab.Text = "Zentrale: Paket"
+$installTab.Text = "Zentrale: Installation"
+$updateTab.Text = "Zentrale: Update"
+
+$exportStack = New-WorkspaceStack $exportTab "Paket fuer die Zentrale erstellen" "Auf dem Entwicklungsrechner erstellen, danach auf den Zielserver uebertragen.`nDas Standardprofil baut die Anwendung samt Weboberflaeche. Die vorhandene GPU-Basis bleibt erhalten."
+$exportPreset = New-Object System.Windows.Forms.ComboBox
+$exportPreset.DropDownStyle = "DropDownList"
+$exportPreset.Items.AddRange(@("Anwendungsupdate (empfohlen)", "Erstinstallation / GPU-Basis mitliefern", "Benutzerdefiniert"))
+Add-WorkspaceRow $exportStack "Aufgabe / Profil" $exportPreset
+Add-WorkspaceRow $exportStack "Repository" $exportRepo $browseRepo
+Add-WorkspaceRow $exportStack "Version" $exportVersion
+$exportProfileHint = New-Label "" 0 0 810 86
+$exportProfileHint.Dock = "Top"
+$exportStack.Controls.Add($exportProfileHint)
+$exportIncludeEdgeProfiles = New-CheckBox "Edge-Runtime-Pakete im Update mitliefern" $true 0 0 600
+$exportIncludeEdgeProfiles.AutoSize = $true
+$exportStack.Controls.Add($exportIncludeEdgeProfiles)
+$exportEdgeSummary = New-Label "Edge-Profile einmalig einrichten; danach werden sie bei jedem Update verwendet." 0 0 810 28
+$exportEdgeSummary.Dock = "Top"
+$exportStack.Controls.Add($exportEdgeSummary)
+$exportEdgePassphrase = New-TextBox "" 0 0 600
+$exportEdgePassphrase.UseSystemPasswordChar = $true
+Add-WorkspaceRow $exportStack "RSA-Passphrase" $exportEdgePassphrase
+Add-WorkspaceActions $exportStack @($exportUpdateButton, $exportInstallerButton)
+$edgeProfileSettings = New-AdvancedSection $exportStack "Edge-Profile und Signierschluessel einrichten / aendern"
+$exportEdgeBundles = New-TextBox "" 0 0 600
+$exportEdgeBundles.Multiline = $true
+$exportEdgeBundles.ScrollBars = "Vertical"
+$exportEdgeBundles.MinimumSize = New-Object System.Drawing.Size(0, 72)
+$exportEdgeAdd = New-Button "Bundle hinzufuegen" 0 0 140
+$exportEdgeAdd.Add_Click({
+    $path = Select-File "Edge-Basisbundle (*.tar.gz;*.zip)|*.tar.gz;*.zip|Alle Dateien (*.*)|*.*"
+    if ($path -and @($exportEdgeBundles.Lines) -notcontains $path) {
+        $exportEdgeBundles.Text = (@($exportEdgeBundles.Lines | Where-Object { $_.Trim() }) + @($path)) -join [Environment]::NewLine
+    }
+})
+Add-WorkspaceRow $edgeProfileSettings "Edge-Basisbundles" $exportEdgeBundles $exportEdgeAdd
+$edgeExportHint = New-Label "Je vorhandenem Geraeteprofil ein Basisbundle, ein Pfad pro Zeile. Zum Entfernen die Zeile loeschen.`nDie Profile bleiben gespeichert. Beim Update wird der aktuelle Edge-Code gebaut; die Geraetebasis wird weiterverwendet." 0 0 810 48
+$edgeExportHint.Dock = "Top"
+$edgeProfileSettings.Controls.Add($edgeExportHint)
+$exportEdgeKey = New-TextBox "" 0 0 600
+$exportEdgeKeyBrowse = New-Button "Schluesseldatei" 0 0 140
+$exportEdgeKeyBrowse.Add_Click({ $path = Select-File "Privater RSA-Schluessel (*.pem)|*.pem|Alle Dateien (*.*)|*.*"; if ($path) { $exportEdgeKey.Text = $path } })
+Add-WorkspaceRow $edgeProfileSettings "Privater RSA-Schluessel" $exportEdgeKey $exportEdgeKeyBrowse
+$exportEdgeOpenSsl = New-TextBox "openssl" 0 0 600
+$exportEdgeIndex = New-TextBox "https://pypi.org/simple" 0 0 600
+$exportEdgeWheels = New-TextBox "" 0 0 600
+$exportEdgeImport = New-Button "Einstellungen aus Edge-Bereich uebernehmen" 0 0 350
+$loadEdgeExportSettings = {
+    $edgeProfilePath = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "YBB\Deployment\edge-builder.json"
+    $saved = Read-JsonFile -Path $edgeProfilePath
+    if ($null -eq $saved) { return }
+    foreach ($pair in @(@("signing_private_key", $exportEdgeKey), @("openssl_executable", $exportEdgeOpenSsl), @("package_index_url", $exportEdgeIndex), @("additional_wheel_directory", $exportEdgeWheels))) {
+        if ($saved.PSObject.Properties.Name -contains $pair[0]) { $pair[1].Text = [string]$saved.($pair[0]) }
+    }
+    if ($saved.PSObject.Properties.Name -contains "previous_bundle" -and $saved.previous_bundle -and @($exportEdgeBundles.Lines) -notcontains [string]$saved.previous_bundle) {
+        $exportEdgeBundles.Text = (@($exportEdgeBundles.Lines | Where-Object { $_.Trim() }) + @([string]$saved.previous_bundle)) -join [Environment]::NewLine
+    }
+}
+$exportEdgeImport.Add_Click($loadEdgeExportSettings)
+Add-WorkspaceActions $edgeProfileSettings @($exportEdgeImport)
+$updateEdgeExportSummary = {
+    $count = @($exportEdgeBundles.Lines | Where-Object { $_.Trim() }).Count
+    $exportEdgeSummary.Text = if (-not $exportIncludeEdgeProfiles.Checked) {
+        "Keine Edge-Pakete mitliefern. Vorhandene Geraete werden durch den Export nicht aktualisiert."
+    } elseif ($count -eq 0) {
+        "Noch kein Edge-Profil eingerichtet. Unten ein Basisbundle und den RSA-Schluessel hinterlegen."
+    } else {
+        "$count gespeicherte Edge-Profile. Passphrase bei verschluesseltem Schluessel eingeben; sie wird nicht gespeichert."
+    }
+}
+$exportEdgeBundles.Add_TextChanged($updateEdgeExportSummary)
+$exportIncludeEdgeProfiles.Add_CheckedChanged({
+    foreach ($control in @($exportEdgeBundles, $exportEdgeAdd, $exportEdgeKey, $exportEdgeKeyBrowse, $exportEdgePassphrase, $exportEdgeImport)) { $control.Enabled = $exportIncludeEdgeProfiles.Checked }
+    & $updateEdgeExportSummary
+})
+$exportAdvanced = New-AdvancedSection $exportStack
+Add-WorkspaceRow $exportAdvanced "Basis-Konfiguration" $exportConfig $browseConfig
+Add-WorkspaceRow $exportAdvanced "Edge: OpenSSL" $exportEdgeOpenSsl
+Add-WorkspaceRow $exportAdvanced "Edge: Paketindex" $exportEdgeIndex
+Add-WorkspaceRow $exportAdvanced "Edge: zusaetzliche Wheels" $exportEdgeWheels
+Add-WorkspaceRow $exportAdvanced "Anwendungsname" $exportAppName
+Add-WorkspaceRow $exportAdvanced "Ziel-Basisordner" $exportBaseDir
+Add-WorkspaceRow $exportAdvanced "WSL-Distribution" $exportDistro
+Add-WorkspaceRow $exportAdvanced "Ziel-IP / Host" $exportHost
+Add-WorkspaceRow $exportAdvanced "HTTPS-Port" $exportPort
+$exportOptions = New-Object System.Windows.Forms.FlowLayoutPanel
+$exportOptions.Dock = "Top"; $exportOptions.AutoSize = $true
+foreach ($control in @($exportBuildFrontend, $exportSkipRuntime, $exportSkipApt, $exportSkipTraining, $exportSkipTriton, $exportSkipMediaMtx, $exportSkipGStreamer, $exportPlcWritesAllowed, $exportWslMirrored)) {
+    $control.AutoSize = $true
+    $control.Margin = New-Object System.Windows.Forms.Padding(12)
+    $exportOptions.Controls.Add($control)
+}
+$exportAdvanced.Controls.Add($exportOptions)
+Add-WorkspaceRow $exportAdvanced "MediaMTX-Archiv" $exportMediaMtxArchive $browseMediaMtxArchive
+$exportPreset.Add_SelectedIndexChanged({
+    $custom = $exportPreset.SelectedIndex -eq 2
+    $installer = $exportPreset.SelectedIndex -eq 1
+    if (-not $custom) {
+        $exportBuildFrontend.Checked = $true
+        $exportSkipRuntime.Checked = $false
+        $exportSkipApt.Checked = -not $installer
+        $exportSkipTraining.Checked = -not $installer
+        $exportSkipTriton.Checked = -not $installer
+        $exportSkipMediaMtx.Checked = -not $installer
+        $exportSkipGStreamer.Checked = -not $installer
+        $exportPlcWritesAllowed.Checked = -not $installer
+        $exportWslMirrored.Checked = $true
+    }
+    $exportOptions.Enabled = $custom
+    $exportUpdateButton.Visible = -not $installer
+    $exportInstallerButton.Visible = $installer -or $custom
+    $exportIncludeEdgeProfiles.Visible = -not $installer
+    $exportEdgeSummary.Visible = -not $installer
+    $exportEdgePassphrase.Parent.Visible = -not $installer
+    $edgeProfileSettings.Tag.Visible = -not $installer
+    if ($installer) { $edgeProfileSettings.Tag.Checked = $false }
+    $exportProfileHint.Text = if ($installer) {
+        "Enthaelt auch die GPU-Basis (Triton). Bei fehlendem Archiv nutzt der Builder Docker auf dem Entwicklungsrechner.`nAuf dem Zielserver wird die vorhandene WSL2-Installation verwendet."
+    } elseif ($custom) {
+        "Die erweiterten Optionen bestimmen den Paketinhalt. Abweichungen werden fuer den naechsten Start gemerkt."
+    } else {
+        "Anwendung, Weboberflaeche und Python-Abhaengigkeiten enthalten; PLC-Schreiben ist erlaubt.`nVorhandene Basis weiterverwenden: MediaMTX, GStreamer und Triton werden nicht mitgeliefert.`nEdge-Pakete fuer die unten gespeicherten Profile werden mitgebaut und auf der Zentrale bereitgestellt.`nNach dem Serverupdate die Geraete im Frontend aktualisieren."
+    }
+})
+$exportPreset.SelectedIndex = 0
+
+$installStack = New-WorkspaceStack $installTab "Zentrale erstmalig installieren" "Auf dem neuen Windows-Zielserver ausfuehren. Die vorbereitete WSL2-Runtime wird importiert.`nBei einer bestehenden Zentrale den Reiter Aktualisieren verwenden."
+Add-WorkspaceRow $installStack "Installer-ZIP" $installBundle $browseInstallBundle
+Add-WorkspaceRow $installStack "Installationsbasis" $installRoot
+Add-WorkspaceRow $installStack "IP / Host" $installHost
+Add-WorkspaceActions $installStack @($installButton)
+$installAdvanced = New-AdvancedSection $installStack
+Add-WorkspaceRow $installAdvanced "WSL-Distribution" $installDistro
+Add-WorkspaceRow $installAdvanced "HTTPS-Port" $installPort
+$installAdvanced.Controls.Add($installPortProxy)
+$installAdvanced.Controls.Add($installSkipHosts)
+Add-WorkspaceActions $installAdvanced @($portProxyButton)
+
+$updateStack = New-WorkspaceStack $updateTab "Zentrale aktualisieren" "Update-ZIP waehlen oder leer lassen: Dann wird der vorhandene Update-Eingang verwendet.`nDaten, Kalibrierungen und Secrets bleiben im persistenten Verzeichnis erhalten. Dienste werden neu gestartet."
+Add-WorkspaceRow $updateStack "Anwendungsverzeichnis" $updateAppDir $browseUpdateAppDir
+Add-WorkspaceRow $updateStack "Update-ZIP" $updateBundle $browseUpdateBundle
+Add-WorkspaceActions $updateStack @($updateButton, $openIncomingButton)
+$updateAdvanced = New-AdvancedSection $updateStack
+Add-WorkspaceRow $updateAdvanced "WSL-Distribution" $updateDistro
+Add-WorkspaceRow $updateAdvanced "Neue IP (optional)" $updateHost
+Add-WorkspaceRow $updateAdvanced "HTTPS-Port" $updatePort
+$updateAdvanced.Controls.Add($updateKeepBundle)
+
+$homeTab = New-Object System.Windows.Forms.TabPage
+$homeTab.Text = "Uebersicht"
+$tabs.TabPages.Insert(0, $homeTab)
+$homeStack = New-WorkspaceStack $homeTab "Was moechten Sie erledigen?" "Ein Einstieg fuer Zentrale, Edge-Geraete und Release-Schluessel.`nWaehlen Sie die Aufgabe. Die technischen Optionen sind bei den jeweiligen Schritten eingeklappt."
+$homeExport = New-Button "Zentrale: Update erstellen" 0 0 275
+$homeExport.Add_Click({ if ($script:IsDevelopmentWorkspace) { $exportPreset.SelectedIndex = 0 }; $tabs.SelectedTab = $exportTab })
+$homeUpdate = New-Button "Zentrale: Update einspielen" 0 0 275
+$homeUpdate.Add_Click({ if ($script:IsDevelopmentWorkspace) { $tabs.SelectedTab = $modelsTab } else { $tabs.SelectedTab = $updateTab } })
+$homeInstall = New-Button "Neue Zentrale installieren" 0 0 275
+$homeInstall.Add_Click({ if ($script:IsDevelopmentWorkspace) { $exportPreset.SelectedIndex = 1; $tabs.SelectedTab = $exportTab } else { $tabs.SelectedTab = $installTab } })
+Add-WorkspaceActions $homeStack @($homeExport, $homeUpdate, $homeInstall)
+
+$edgeTab = New-Object System.Windows.Forms.TabPage
+$edgeTab.Text = "Edge"
+$tabs.TabPages.Add($edgeTab)
+$edgeIntro = New-WorkspaceStack $edgeTab "Edge-Geraete einrichten und RSA-Schluessel verwalten" "Der Neuaufbau eines Edge-Geraets erfolgt weiterhin am Entwicklungsrechner.`nRegulaere Runtime-Updates unter Zentrale: Paket mitliefern und danach im Server-Frontend ausrollen."
+$edgeLoad = New-Button "Edge-Arbeitsbereich laden" 0 0 260
+$edgeLoad.Add_Click({
+    try {
+        if ($null -ne $script:EdgeWorkspace) { return }
+        $source = Join-Path $exportRepo.Text "deployment\edge\bundle-builder\YBB.EdgeBundleBuilder.cs"
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Zum Paketbau das Repository im Reiter 'Zentrale: Paket erstellen' waehlen. Auf dem Zielserver fertige Pakete in der Web-App importieren." }
+        if (-not ("Ybb.Edge.BundleBuilder.MainForm" -as [type])) {
+            Add-Type -Path $source -ReferencedAssemblies @("System.dll", "System.Core.dll", "System.Drawing.dll", "System.Windows.Forms.dll", "System.Web.Extensions.dll")
+        }
+        $script:EdgeWorkspace = New-Object Ybb.Edge.BundleBuilder.MainForm -ArgumentList $exportRepo.Text
+        $script:EdgeWorkspace.TopLevel = $false
+        $script:EdgeWorkspace.FormBorderStyle = "None"
+        $script:EdgeWorkspace.Dock = "Fill"
+        $edgeTab.Controls.Clear()
+        $edgeTab.Controls.Add($script:EdgeWorkspace)
+        $script:EdgeWorkspace.Show()
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Edge-Arbeitsbereich", "OK", "Error") | Out-Null }
+})
+Add-WorkspaceActions $edgeIntro @($edgeLoad)
+$homeEdge = New-Button "Edge: Update oder Installation" 0 0 300
+$homeEdge.Add_Click({ $tabs.SelectedTab = $edgeTab; if ($null -eq $script:EdgeWorkspace) { $edgeLoad.PerformClick() } })
+Add-WorkspaceActions $homeStack @($homeEdge)
+$tabs.Add_Selecting({
+    if ($null -ne $script:EdgeWorkspace -and $script:EdgeWorkspace.IsBusy -and $_.TabPage -ne $edgeTab) { $_.Cancel = $true }
+})
+
+# Runs inside the existing WSL2 distribution; stdin contains public PEM only.
+$script:ReleaseTrustPython = @'
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import uuid
+
+def public_identity(pem):
+    if len(pem) > 32768 or b'PRIVATE KEY' in pem:
+        raise ValueError('Nur einen oeffentlichen RSA-Schluessel auswaehlen.')
+    result = subprocess.run(['openssl', 'rsa', '-pubin', '-pubout'], input=pem,
+                            capture_output=True, timeout=15)
+    if result.returncode:
+        raise ValueError('Ungueltiger oeffentlicher RSA-Schluessel.')
+    der = subprocess.run(['openssl', 'pkey', '-pubin', '-outform', 'DER'],
+                         input=result.stdout, capture_output=True, timeout=15)
+    if der.returncode:
+        raise ValueError('RSA-Fingerabdruck konnte nicht ermittelt werden.')
+    return result.stdout, hashlib.sha256(der.stdout).hexdigest()
+
+def manage_trust(pem, target, action, expected=None):
+    public, fingerprint = public_identity(pem)
+    if target.is_symlink():
+        raise ValueError('Der Vertrauensanker darf kein symbolischer Link sein.')
+    previous = target.read_bytes() if target.exists() else None
+    old_fingerprint = public_identity(previous)[1] if previous is not None else None
+    result = dict(fingerprint=fingerprint, installed=old_fingerprint, path=str(target))
+    if action == 'inspect':
+        return result
+    if action != 'install' or expected != old_fingerprint:
+        raise ValueError('Der installierte Schluessel hat sich geaendert. Erneut pruefen.')
+    if old_fingerprint == fingerprint:
+        return result
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if previous is not None:
+        backup = target.with_name(target.name + '.' + uuid.uuid4().hex + '.bak')
+        with backup.open('xb') as stream:
+            stream.write(previous)
+        result['backup'] = str(backup)
+    descriptor, temporary = tempfile.mkstemp(prefix='.edge-release-', dir=target.parent)
+    try:
+        with os.fdopen(descriptor, 'wb') as stream:
+            stream.write(public)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, target)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    result['installed'] = fingerprint
+    return result
+
+if __name__ == '__main__':
+    try:
+        request = json.load(sys.stdin)
+        print(json.dumps(manage_trust(request['pem'].encode('ascii'),
+              Path('/srv/cv-platform/config/edge-release-public.pem'),
+              request['action'], request.get('expected'))))
+    except Exception as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(1)
+'@
+
+function Invoke-ReleaseTrust {
+    param([string]$Distro, [string]$Pem, [string]$Action, $Expected = $null)
+    if ($script:IsDevelopmentWorkspace) { throw "Auf dem Entwicklungsrechner RSA-Schluessel unter Edge erzeugen oder exportieren. Der oeffentliche Vertrauensanker gehoert auf das Zielsystem." }
+    if ([string]::IsNullOrWhiteSpace($Distro)) { throw "WSL-Distribution auswaehlen." }
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = Join-Path $env:WINDIR "System32\wsl.exe"
+    $info.Arguments = (@("-d", $Distro, "-u", "root", "--exec", "python3", "-c", $script:ReleaseTrustPython) | ForEach-Object { Quote-ProcessArgument $_ }) -join " "
+    $info.UseShellExecute = $false; $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    try {
+        [void]$process.Start()
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $payload = @{ pem = $Pem; action = $Action; expected = $Expected } | ConvertTo-Json -Compress
+        $process.StandardInput.Write($payload)
+        $process.StandardInput.Close()
+        if (-not $process.WaitForExit(45000)) { $process.Kill(); throw "Schluesselpruefung hat das Zeitlimit erreicht." }
+        if ($process.ExitCode -ne 0) { throw $stderr.Result }
+        return $stdout.Result | ConvertFrom-Json
+    } finally { $process.Dispose() }
+}
+
+$keysTab = New-Object System.Windows.Forms.TabPage
+$keysTab.Text = "RSA-Vertrauen"
+$tabs.TabPages.Add($keysTab)
+$keysStack = New-WorkspaceStack $keysTab "Oeffentlichen Release-Schluessel hinterlegen" "Auf dem Windows-Zielserver: Den oeffentlichen RSA-Schluessel fuer die Paketpruefung in WSL2 hinterlegen.`nDen privaten Schluessel und dessen Passphrase ausschliesslich in der Buildumgebung aufbewahren."
+$trustDistro = New-TextBox $defaultDistro 0 0 500
+$trustFile = New-TextBox "" 0 0 500
+$trustBrowse = New-Button "Datei waehlen" 0 0 130
+$trustBrowse.Add_Click({ $path = Select-File "Oeffentlicher RSA-Schluessel (*.pem)|*.pem|Alle Dateien (*.*)|*.*"; if ($path) { $trustFile.Text = $path } })
+Add-WorkspaceRow $keysStack "WSL-Distribution" $trustDistro
+Add-WorkspaceRow $keysStack "Oeffentliche PEM-Datei" $trustFile $trustBrowse
+$trustStatus = New-Label "Noch nicht geprueft. Ziel: /srv/cv-platform/config/edge-release-public.pem" 0 0 850 110
+$trustStatus.Dock = "Top"
+$keysStack.Controls.Add($trustStatus)
+$trustInspect = New-Button "Schluessel pruefen" 0 0 190
+$trustInstall = New-Button "In Zentrale hinterlegen" 0 0 235
+$trustInstall.Enabled = $false
+$script:InspectedTrust = $null
+$trustFile.Add_TextChanged({ $script:InspectedTrust = $null; $trustInstall.Enabled = $false; $trustStatus.Text = "Dateiauswahl geaendert. Bitte erneut pruefen." })
+$trustDistro.Add_TextChanged({ $script:InspectedTrust = $null; $trustInstall.Enabled = $false; $trustStatus.Text = "Ziel geaendert. Bitte erneut pruefen." })
+$trustInspect.Add_Click({
+    try {
+        $trustInstall.Enabled = $false
+        $script:InspectedTrust = $null
+        $file = Get-Item -LiteralPath $trustFile.Text
+        if ($file.Length -gt 32768) { throw "Die PEM-Datei ist zu gross." }
+        $pem = [System.IO.File]::ReadAllText($file.FullName)
+        if ($pem.Contains("PRIVATE KEY")) { throw "Hier ausschliesslich den oeffentlichen RSA-Schluessel auswaehlen." }
+        $result = Invoke-ReleaseTrust -Distro $trustDistro.Text -Pem $pem -Action "inspect"
+        $script:InspectedTrust = @{ pem = $pem; distro = $trustDistro.Text; result = $result }
+        $installed = if ($null -eq $result.installed) { "Noch kein Schluessel installiert" } else { [string]$result.installed }
+        $trustStatus.Text = "Ausgewaehlt (SHA-256 / SPKI):`n$($result.fingerprint)`nAktuell installiert:`n$installed"
+        $trustInstall.Enabled = $true
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Release-Schluessel", "OK", "Error") | Out-Null }
+})
+$trustInstall.Add_Click({
+    try {
+        if ($null -eq $script:InspectedTrust) { throw "Bitte zuerst den Schluessel pruefen." }
+        $inspection = $script:InspectedTrust
+        if ($null -ne $inspection.result.installed -and $inspection.result.installed -ne $inspection.result.fingerprint) {
+            $answer = [System.Windows.Forms.MessageBox]::Show("Der Vertrauensanker wird gewechselt. Mit dem bisherigen Schluessel signierte Pakete koennen danach nicht neu importiert werden. Den neuen oeffentlichen Schluessel auch auf den Edge-Geraeten hinterlegen.`n`nBisher: $($inspection.result.installed)`nNeu: $($inspection.result.fingerprint)`n`nDie bisherige oeffentliche Datei wird gesichert. Wechsel ausfuehren?", "Release-Schluessel wechseln", "YesNo", "Warning")
+            if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+        }
+        $result = Invoke-ReleaseTrust -Distro $inspection.distro -Pem $inspection.pem -Action "install" -Expected $inspection.result.installed
+        $trustStatus.Text = "Oeffentlicher Schluessel hinterlegt.`nSHA-256 / SPKI: $($result.installed)`n$($result.path)`nNun das signierte Edge-Paket in der Web-App importieren."
+        $trustInstall.Enabled = $false
+        Append-Log -LogBox $logBox -Text "Oeffentlicher Edge-Vertrauensanker in WSL2 hinterlegt."
+    } catch { $trustInstall.Enabled = $false; [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Release-Schluessel", "OK", "Error") | Out-Null }
+})
+Add-WorkspaceActions $keysStack @($trustInspect, $trustInstall)
+$keysStack.Controls.Add((New-Label "Bei abweichendem YBB_EDGE_TRUSTED_RELEASE_KEY muss der Dienst auf diesen Standardpfad konfiguriert sein.`nAm Jetson: Im vorhandenen Installer denselben oeffentlichen Schluessel auswaehlen; Fingerabdruck vergleichen." 0 0 850 52))
+$homeKeys = New-Button "RSA-Vertrauen der Zentrale einrichten" 0 0 330
+$homeKeys.Add_Click({ if ($script:IsDevelopmentWorkspace) { $tabs.SelectedTab = $edgeTab } else { $tabs.SelectedTab = $keysTab } })
+Add-WorkspaceActions $homeStack @($homeKeys)
+$tabs.TabPages.Clear()
+if ($script:IsDevelopmentWorkspace) {
+    $form.Text = "YBB | Offlinepakete erstellen"
+    $title.Text = "Offlinepakete erstellen"
+    $adminLabel.Text = "Entwicklungsrechner mit Internetzugang"
+    $homeStack.Controls[1].Text = "Hier Installer, Updates und Modellpakete fuer die Offline-Zielsysteme erstellen.`nPakete anschliessend uebertragen; der bestehende Installationsweg am Server bleibt erhalten."
+    $homeUpdate.Text = "Modellpaket erstellen"
+    $homeInstall.Text = "Zentrale: Installer erstellen"
+    $homeEdge.Text = "Edge: Offlinepaket erstellen"
+    $homeKeys.Text = "RSA-Schluessel im Edge-Bereich verwalten"
+    foreach ($targetAction in @($installButton, $portProxyButton, $updateButton, $applyModelsButton, $trustInspect, $trustInstall)) { $targetAction.Enabled = $false }
+    $modelsStack = New-WorkspaceStack $modelsTab "Modellpaket erstellen" "Gewichte auf diesem Entwicklungsrechner laden und als Offlinepaket exportieren.`nDas fertige ZIP anschliessend ueber den bestehenden Installationsweg am Server einspielen."
+    Add-WorkspaceRow $modelsStack "Repository" $modelsRepo $browseModelsRepo
+    Add-WorkspaceRow $modelsStack "Paket-Zielordner" $modelsOutputDir $browseModelsOutput
+    Add-WorkspaceRow $modelsStack "Quellordner (optional)" $modelsSourceDir $browseModelsSource
+    $modelsList.Dock = "Top"
+    $modelsStack.Controls.Add($modelsList)
+    Add-WorkspaceActions $modelsStack @($modelsAllButton, $modelsRecommendedButton, $modelsNoneButton)
+    Add-WorkspaceActions $modelsStack @($exportModelsButton)
+    $tabs.TabPages.AddRange([System.Windows.Forms.TabPage[]]@($homeTab, $exportTab, $edgeTab, $modelsTab))
+} else {
+    # Preserve the existing target-side entry points shipped in older offline bundles.
+    $tabs.TabPages.AddRange([System.Windows.Forms.TabPage[]]@($homeTab, $exportTab, $installTab, $updateTab, $modelsTab, $edgeTab, $keysTab))
+}
+$tabs.Add_SelectedIndexChanged({
+    $edgeSelected = $tabs.SelectedTab -eq $edgeTab
+    $logBox.Visible = -not $edgeSelected
+    $script:StatusLabel.Visible = -not $edgeSelected
+    $tabs.Height = if ($edgeSelected) { $form.ClientSize.Height - 64 } else { $form.ClientSize.Height - 212 }
+    if ($edgeSelected -and $null -eq $script:EdgeWorkspace -and
+        (Test-Path -LiteralPath (Join-Path $exportRepo.Text "deployment\edge\bundle-builder\YBB.EdgeBundleBuilder.cs") -PathType Leaf)) {
+        $edgeLoad.PerformClick()
+    }
+})
+
+# Settings contain only UI choices and paths, never passphrases or key contents.
+$script:UiProfilePath = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "YBB\Deployment\central-ui.json"
+$profileControls = @{
+    exportRepo = $exportRepo; exportConfig = $exportConfig; exportAppName = $exportAppName
+    exportBaseDir = $exportBaseDir; exportDistro = $exportDistro; exportHost = $exportHost; exportPort = $exportPort
+    exportBuildFrontend = $exportBuildFrontend; exportSkipRuntime = $exportSkipRuntime; exportSkipApt = $exportSkipApt
+    exportSkipTraining = $exportSkipTraining; exportSkipTriton = $exportSkipTriton; exportSkipMediaMtx = $exportSkipMediaMtx
+    exportSkipGStreamer = $exportSkipGStreamer; exportWslMirrored = $exportWslMirrored; exportMediaMtxArchive = $exportMediaMtxArchive
+    exportPlcWritesAllowed = $exportPlcWritesAllowed
+    exportIncludeEdgeProfiles = $exportIncludeEdgeProfiles; exportEdgeBundles = $exportEdgeBundles
+    exportEdgeKey = $exportEdgeKey; exportEdgeOpenSsl = $exportEdgeOpenSsl
+    exportEdgeIndex = $exportEdgeIndex; exportEdgeWheels = $exportEdgeWheels
+    installRoot = $installRoot; installDistro = $installDistro; installHost = $installHost; installPort = $installPort
+    installPortProxy = $installPortProxy; installSkipHosts = $installSkipHosts
+    updateAppDir = $updateAppDir; updateDistro = $updateDistro
+}
+$savedProfile = Read-JsonFile -Path $script:UiProfilePath
+if ($null -ne $savedProfile) {
+    if ($savedProfile.PSObject.Properties.Name -contains "preset") {
+        $exportPreset.SelectedIndex = [Math]::Max(0, [Math]::Min(2, [int]$savedProfile.preset))
+    }
+    foreach ($name in $profileControls.Keys) {
+        if ($savedProfile.PSObject.Properties.Name -notcontains $name) { continue }
+        $control = $profileControls[$name]
+        if ($control -is [System.Windows.Forms.CheckBox]) {
+            if ($name.StartsWith("export") -and $name -ne "exportIncludeEdgeProfiles" -and $exportPreset.SelectedIndex -ne 2) { continue }
+            $control.Checked = [bool]$savedProfile.$name
+        } else { $control.Text = [string]$savedProfile.$name }
+    }
+}
+if ($null -eq $savedProfile -or $savedProfile.PSObject.Properties.Name -notcontains "exportEdgeBundles") {
+    & $loadEdgeExportSettings
+}
+& $updateEdgeExportSummary
+$form.Add_FormClosing({
+    if ($_.Cancel) { return }
+    try {
+        $profile = @{ preset = $exportPreset.SelectedIndex }
+        foreach ($name in $profileControls.Keys) {
+            $control = $profileControls[$name]
+            $profile[$name] = if ($control -is [System.Windows.Forms.CheckBox]) { $control.Checked } else { $control.Text }
+        }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $script:UiProfilePath) -Force | Out-Null
+        $profile | ConvertTo-Json | Set-Content -LiteralPath $script:UiProfilePath -Encoding UTF8
+    } catch { Append-Log -LogBox $logBox -Text "UI-Profil konnte nicht gespeichert werden." }
+})
+
+if ($script:IsDevelopmentWorkspace) {
+    switch ($Mode) {
+        "Export" { $tabs.SelectedTab = $exportTab }
+        "Update" { $exportPreset.SelectedIndex = 0; $tabs.SelectedTab = $exportTab }
+        "Install" { $exportPreset.SelectedIndex = 1; $tabs.SelectedTab = $exportTab }
+        "Models" { $tabs.SelectedTab = $modelsTab }
+        "Edge" { $tabs.SelectedTab = $edgeTab }
+        "Keys" { $tabs.SelectedTab = $edgeTab }
+        default { $tabs.SelectedTab = $homeTab }
+    }
+}
+elseif ($Mode -eq "Auto") {
     $manifest = Read-JsonFile -Path (Join-Path $script:RootDir "windows-bundle-manifest.json")
     $modelsManifest = Read-JsonFile -Path (Join-Path $script:RootDir "pretrained-models-manifest.json")
     if ($null -ne $modelsManifest -and $modelsManifest.PSObject.Properties.Name -contains "package_type" -and [string]$modelsManifest.package_type -eq "pretrained-models-update") {
@@ -1176,7 +1779,7 @@ if ($Mode -eq "Auto") {
         $tabs.SelectedTab = $updateTab
     }
     else {
-        $tabs.SelectedTab = $exportTab
+        $tabs.SelectedTab = $homeTab
     }
 }
 elseif ($Mode -eq "Export") {
@@ -1190,6 +1793,12 @@ elseif ($Mode -eq "Update") {
 }
 elseif ($Mode -eq "Models") {
     $tabs.SelectedTab = $modelsTab
+}
+elseif ($Mode -eq "Edge") {
+    $tabs.SelectedTab = $edgeTab
+}
+elseif ($Mode -eq "Keys") {
+    $tabs.SelectedTab = $keysTab
 }
 
 Append-Log -LogBox $logBox -Text "Bereit. EXE/Script-Pfad: $script:RootDir"

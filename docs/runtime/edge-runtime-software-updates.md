@@ -1,5 +1,18 @@
 # Gemeinsame Edge-Runtime und zentrale Softwareupdates
 
+Der reguläre Ablauf liefert signierte Edge-Pakete inzwischen direkt mit dem
+zentralen Update und importiert sie auf dem Offline-Server automatisch:
+[Edge-Updates mit dem zentralen Offline-Update](../operations/central-offline-edge-updates.md).
+Der nachfolgend beschriebene separate Export und Upload bleibt zusätzlich verfügbar.
+
+Für den geführten UI-Ablauf einschließlich RSA-Schlüsselverwaltung siehe
+[Updates, Installation und RSA-Vertrauen](../operations/deployment-workspace.md).
+Die Windows-Deployment-UI integriert den bestehenden Edge-Builder; die Web-App
+wählt passende Pakete zum zentralen Codestand automatisch pro Gerät vor.
+
+Für FPS, Verarbeitungszeiten und Engine-Wiederverwendung siehe
+[Edge-Leistung und persistente TensorRT-Engines](edge-runtime-performance.md).
+
 Stand: 6. September 2026. Implementierter Softwarepfad; Hardwareabnahme auf den
 Zielgeräten steht aus. Die bestehende Windows-/WSL2-Plattform bleibt die Zentrale.
 
@@ -54,7 +67,40 @@ provisioniert sein. Ein Paket kann seinen eigenen Vertrauensanker nicht setzen:
 `YBB_EDGE_OPENSSL_EXECUTABLE` erlaubt einen absoluten Programmpfad. Der private
 Release-Schlüssel bleibt ausschließlich in der Buildumgebung. Nach dem Bootstrap
 in der zentralen Geräteansicht **Status abrufen**; das Gerät meldet dann
-`software_update_protocol=1`, Codestand und Node-Verträge.
+`software_update_protocol=2` auf Jetson beziehungsweise `1` auf Windows, Codestand und
+Node-Verträge. Jetson-Protokoll 2 umfasst die privilegierte Offline-Nachinstallation von UFW;
+ältere Launcher benötigen dafür einmal den neu gebauten Offline-Installer. Die Zentrale
+berücksichtigt den beobachteten Launcherstand auch bei einem noch älteren aktiven Runtime-Slot.
+Der Root-Helfer verwendet den festen Vertrauensanker `/etc/ybb-edge/release-signing-public.pem`.
+
+### Fehler `EdgeSoftwareRelease: system_packages – Extra inputs are not permitted`
+
+Beim zentralen Export werden die internen Edge-Pakete neu gebaut. Trotzdem prüft auf
+dem Jetson zunächst der installierte Launcher das Update mit den Bibliotheken seiner
+Basisumgebung `/opt/ybb-edge/venv`. Die Bibliotheken im neuen Runtime-ZIP können einen
+veralteten Prüfer nicht ersetzen, bevor dieser das Paket akzeptiert hat. Auch ein
+aktueller aktiver Runtime-Slot aktualisiert die Launcher-Basis nicht automatisch.
+
+Ein früherer Vollbundle-Build konnte neue Installer-Dateien mit älteren internen Wheels
+aus dem Cache kombinieren. Der Builder prüft diese Übereinstimmung jetzt vor der
+Bundle-Erzeugung. Zur Reparatur eines betroffenen Geräts in der Builder-UI am
+Entwicklungsrechner **Online-Inhalte vorbereiten (Internet)** ausführen, anschließend
+ein neues signiertes Jetson-Vollbundle bauen und dessen vorhandenen Installer einmal
+mit `--config /etc/ybb-edge/device.env` ausführen. Die bestehende Gerätekonfiguration,
+Workloads und Engine-Caches bleiben erhalten. Danach das bereits mit dem zentralen
+Update gelieferte Runtime-Paket erneut über das Frontend ausrollen.
+
+Read-only-Diagnose der tatsächlich vom Launcher verwendeten Bibliothek auf dem Jetson:
+
+```bash
+sudo /opt/ybb-edge/venv/bin/python -c "import cv_contracts.edge as e; print(e.__file__); print('system_packages bekannt:', 'system_packages' in e.EdgeSoftwareRelease.model_fields)"
+sudo cat /var/lib/ybb-edge/software/status.json
+```
+
+`False` bestätigt den alten Release-Vertrag in der Launcher-Basis. Bei `True` den
+Zeitpunkt und Auftrag des letzten Fehlers prüfen; ein erneutes Starten des Agent-Dienstes
+lädt die aktualisierten Basisbibliotheken. Das signierte Manifest nicht bearbeiten und
+`system_packages` nicht entfernen: Es beschreibt die offline mitgelieferten Systempakete.
 
 ## Paket bauen und verteilen
 
@@ -70,10 +116,14 @@ python scripts/release/build_edge_runtime_update.py `
   --signing-key C:\ReleaseKeys\release-private.pem
 ```
 
-Für jede Plattform wird deren passendes Bundle verwendet. Das ZIP enthält nur
-Release-Manifest, RSA-Signatur und das vollständige Wheelhouse. Python-, CUDA- und
-OS-Installer werden nicht erneut übertragen. Paket-Digest, Wheels, Runtime-Digest
-und Node-Verträge stammen aus den tatsächlichen Buildartefakten. Wiederholte Exporte
+Für jede Plattform wird deren passendes Bundle verwendet. Das ZIP enthält
+Release-Manifest, RSA-Signatur und das vollständige Wheelhouse. Jetson-Updates enthalten
+zusätzlich `system-packages/` mit dem gepinnten lokalen Ubuntu-Repository für UFW und dessen
+Abhängigkeiten. Fehlende Downloads erfolgen ausschließlich beim Export am Entwicklungsrechner.
+Neue Python-/CUDA-Basisinstallationen bleiben Plattformwartung. Paket-Digest, Wheels, Runtime-Digest
+und Node-Verträge stammen aus den tatsächlichen Buildartefakten. Die Signatur umfasst auch
+die Prüfsummen der Systempakete. Der Root-Helfer installiert diese vor dem Runtime-Wechsel;
+Konfiguration und TensorRT-Cache bleiben erhalten. Wiederholte Exporte
 derselben Artefakte mit demselben Schlüssel sind byteidentisch.
 
 Der USB/OpenCV-Kameraadapter ist Bestandteil des Edge-Agenten und gelangt damit sowohl über

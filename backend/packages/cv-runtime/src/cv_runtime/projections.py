@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from cv_contracts.edge import EdgePlantResponsePolicy
 from cv_contracts.runtime import (
     RuntimeDecisionRule,
     RuntimeNodeSpec,
@@ -56,6 +57,21 @@ class RuntimeProjectionEvaluation:
 
 
 _MISSING = object()
+
+
+def edge_http_response_policy(nodes: list[RuntimeNodeSpec]) -> EdgePlantResponsePolicy:
+    """All Result outputs share one HTTP envelope; legacy graphs keep the full report."""
+    policies = [
+        EdgePlantResponsePolicy(
+            mode=node.config.get("edge_response_mode", "full"),
+            metadata_fields=node.config.get("edge_response_metadata_fields", []),
+        )
+        for node in nodes
+        if node.node_type == "output.result"
+    ]
+    if policies and any(policy != policies[0] for policy in policies[1:]):
+        raise ValueError("All Result output nodes must use the same Edge HTTP response settings.")
+    return policies[0] if policies else EdgePlantResponsePolicy()
 
 
 def normalize_output_result_config(

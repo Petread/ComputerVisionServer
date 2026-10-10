@@ -34,13 +34,22 @@ plattformbezogene Wheelhouse noch nicht vorhanden:
    die in `windows-payload-sources.json` hinterlegten Größe- und SHA-256-Vorgaben geprüft. Dieser
    einmalige Download umfasst mehr als 4 GB. Bereits vollständig vorbereitete Payloads und
    Wheelhouses werden anhand ihrer Source-Locks verifiziert und wiederverwendet.
+   Für Jetson werden UFW und seine Ubuntu-24.04-ARM64-Abhängigkeiten anhand von
+   `ubuntu-noble-arm64-ufw.lock.json` vorbereitet (rund 30 MB). Der Offline-Build nimmt
+   diese Dateien automatisch in jedes neue Jetson-Bundle auf.
 5. Danach `Pfade prüfen` und `Bundle bauen` ausführen. Diese beiden Schritte benötigen keine
    Internetverbindung.
 
-Bestehende Wheelhouses werden bei der Vorbereitung nie vermischt oder überschrieben. Für eine
-neue Freigabe ist ein neues leeres Zielverzeichnis zu verwenden. `Interne Wheels im
-Offline-Build erneut bauen` bleibt im normalen GUI-Ablauf deaktiviert, weil die internen Wheels
-bereits bei der Vorbereitung erstellt und gesperrt wurden.
+Bestehende Wheelhouses mit gültigem Source-Lock werden bei der Vorbereitung geprüft;
+Hersteller- und Fremdpakete werden wiederverwendet, die internen Python-Pakete aus dem
+aktuellen Repository neu gebaut und der Source-Lock aktualisiert. Nach Codeänderungen
+deshalb vor einem neuen Vollbundle erneut **Online-Inhalte vorbereiten (Internet)** ausführen.
+Ein neues leeres Wheelhouse ist dafür nicht erforderlich. `Interne Wheels im Offline-Build
+erneut bauen` kann alternativ mit lokal verfügbaren Build-Abhängigkeiten verwendet werden.
+Der Bundle-Build vergleicht den Python-Code aller sechs internen Wheels mit dem aktuellen
+Repository und lehnt veraltete Pakete ab, auch wenn ihre Versionsnummer unverändert ist.
+Damit können aktuelle Installer-Dateien nicht mehr unbemerkt mit alten Runtime-Verträgen
+aus dem Cache kombiniert werden.
 Die Beispielkonfiguration liegt unter `bundle-builder/example-config.json`.
 
 ### Runtime-Update aus einem vorhandenen Build erstellen
@@ -94,6 +103,9 @@ dürfen, muss seine IP explizit zusätzlich in diese Liste aufgenommen werden.
 Der Befehl `build` des Build-Kerns `scripts/release/build_edge_offline_bundle.py` lädt nichts aus
 dem Internet. Er verwendet ausschließlich das gewählte lokale Wheelhouse und die vorbereiteten
 Windows-Payloads. Der explizite Befehl `prepare-wheelhouse` darf in der vorbereitenden
+Buildzone auch die gepinnten Ubuntu-Dateien für Jetson bereitstellen. Bei fehlenden oder
+beschädigten Cache-Dateien fordert `build` diesen Vorbereitungsschritt an. Der Befehl lädt
+selbst weiterhin nichts nach. `prepare-wheelhouse` darf außerdem in der vorbereitenden
 Buildzone Pakete aus der konfigurierten HTTPS-Quelle beziehen; er lädt passend zur gewählten
 Plattform, Architektur und Python-ABI und erzeugt `wheelhouse-source.lock.json`. Für Windows lädt
 derselbe bestätigte Online-Schritt die in `windows-payload-sources.json` festgeschriebene
@@ -112,6 +124,9 @@ SHA256SUMS
 deployment/edge/*
 deployment/edge/provisioning/*
 wheelhouse/*.whl
+system-packages/*.deb          # nur Jetson: UFW und Abhängigkeiten für Noble/ARM64
+system-packages/Packages       # lokales APT-Repository
+system-packages/manifest.json  # Zielbasis und Prüfsummen
 python-runtime.zip             # nur Windows, verpflichtend
 winsw.exe                      # nur Windows, verpflichtend
 cuda-runtime-installer.exe     # nur Windows, vollständiger lokaler CUDA-Installer
@@ -152,7 +167,10 @@ dokumentiert.
 6. Wenn Tk auf einem Desktop-Image verfügbar ist, erscheint eine grafische Oberfläche. Auf
    Headless-Images verwendet dasselbe Startskript die `whiptail`-Terminal-UI beziehungsweise als
    letzte Rückfallebene einen geführten Terminaldialog.
-7. `configure-ufw.sh` erst nach Prüfung des Wartungszugangs anwenden.
+7. Neue Jetson-Bundles installieren fehlendes UFW offline und richten die Edge-Portregeln
+   automatisch ein. Bestehendes, deaktiviertes UFW verlangt lokale Firewallwartung.
+   Details und der einmalige Umstieg bestehender Geräte stehen unter
+   [Edge-Betriebseinstellungen](../../docs/operations/edge-device-settings.md).
 
 Der Provisioner formatiert oder partitioniert niemals einen Datenträger. TensorRT, CUDA und
 DeepStream stammen aus dem freigegebenen Golden Image. Jetson nutzt dessen OpenCV; das
@@ -177,6 +195,9 @@ Plattformprofil, verifiziert vor jeder Systemänderung das vollständige Bundle 
 anschließend die vorhandenen Skripte `Apply-WindowsBase.ps1` und
 `Install-WindowsOffline.ps1` auf. Eine `device.env` muss weder erstellt, kopiert noch editiert
 werden. Der skriptbasierte Direktaufruf bleibt nur als Diagnose- und Automatisierungsweg erhalten.
+Die Signaturprüfung bei der Windows-Installation verwendet Windows/.NET und benötigt kein
+separat installiertes OpenSSL. Der öffentliche Release-Schlüssel muss weiterhin als externer
+Trust-Anker auf dem Gerät vorhanden oder in der Installationsoberfläche ausgewählt sein.
 
 Die enthaltene vollständige relocatable Python-Runtime muss `venv` und `pip` bereitstellen; das
 reduzierte offizielle Embeddable-Paket ist nicht ausreichend. Sie wird lokal entpackt und `pip`

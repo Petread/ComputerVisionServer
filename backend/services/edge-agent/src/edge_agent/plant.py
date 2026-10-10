@@ -8,6 +8,7 @@ from collections import defaultdict, deque
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from typing import Annotated, Any
 
 from cv_contracts import (
     EdgeControlError,
@@ -16,8 +17,10 @@ from cv_contracts import (
     EdgePlantTriggerRequest,
     EdgePlantTriggerResponse,
 )
-from fastapi import FastAPI, Header, Request, Response
+from cv_contracts.edge import EdgePlantResponsePolicy
+from fastapi import Body, FastAPI, Header, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from edge_agent.state import EdgeAgentConfig, EdgeAgentState, EdgeStateError, _utc_now
 
@@ -88,9 +91,7 @@ def create_plant_app(
             if declared_size is not None and (
                 declared_size < 0 or declared_size > limits.plant_max_request_bytes
             ):
-                return _error_response(
-                    413, "plant_request_too_large", "Trigger body is too large."
-                )
+                return _error_response(413, "plant_request_too_large", "Trigger body is too large.")
             body = await request.body()
             if len(body) > limits.plant_max_request_bytes:
                 return _error_response(413, "plant_request_too_large", "Trigger body is too large.")
@@ -149,14 +150,23 @@ def create_plant_app(
 
     @application.put(
         "/edge-plant/v1/channels/{channel_id}/trigger",
-        response_model=EdgePlantTriggerResponse,
+        response_model=EdgePlantTriggerResponse | dict[str, Any],
+        description=(
+            "The Result output node selects the response: the full legacy report, "
+            "only configured result fields, or {data: result fields, meta: selected metadata}. "
+            "The HTTP Trigger node may require X-Idempotency-Key; otherwise it is optional. "
+            "Keys replay the original result for five minutes, including across restarts. "
+            "Use a fresh key for every new operation. Without history, result_sequence is null. "
+            "An omitted body is equivalent to {}. Errors always use EdgeControlError."
+        ),
     )
     async def trigger(
         channel_id: str,
-        request: EdgePlantTriggerRequest,
-        x_idempotency_key: str = Header(min_length=3, max_length=160),
-    ) -> EdgePlantTriggerResponse:
-        timeout_ms = min(request.timeout_ms, limits.plant_trigger_timeout_ms)
+        request: Annotated[EdgePlantTriggerRequest | None, Body()] = None,
+        x_idempotency_key: Annotated[str | None, Header(min_length=3, max_length=160)] = None,
+    ) -> EdgePlantTriggerResponse | Response:
+        trigger_request = request or EdgePlantTriggerRequest()
+        timeout_ms = min(trigger_request.timeout_ms, limits.plant_trigger_timeout_ms)
         if not semaphore.acquire(blocking=False):
             raise EdgeStateError(
                 "plant_concurrency_limited",
@@ -168,7 +178,7 @@ def create_plant_app(
         def execute_trigger() -> EdgePlantTriggerResponse:
             try:
                 return edge_state.trigger_channel(
-                    channel_id, request, idempotency_key=x_idempotency_key
+                    channel_id, trigger_request, idempotency_key=x_idempotency_key
                 )
             finally:
                 semaphore.release()
@@ -179,7 +189,8 @@ def create_plant_app(
             execute_trigger,
         )
         try:
-            return await asyncio.wait_for(asyncio.shield(future), timeout_ms / 1000)
+            result = await asyncio.wait_for(asyncio.shield(future), timeout_ms / 1000)
+            return _trigger_http_response(result)
         except TimeoutError as exc:
             raise EdgeStateError(
                 "trigger_timeout",
@@ -197,6 +208,50 @@ def create_plant_app(
         return edge_state.last_trigger_result(channel_id)
 
     return application
+
+
+def _trigger_http_response(result: EdgePlantTriggerResponse) -> EdgePlantTriggerResponse | Response:
+    execution = result.execution_result
+    metadata = execution.get("runtime_metadata") or {}
+    policy = EdgePlantResponsePolicy.model_validate(metadata.get("edge_http_response_policy") or {})
+    if policy.mode == "full":
+        return result
+    if execution.get("errors") or execution.get("status") not in {"success", "completed"}:
+        raise EdgeStateError(
+            "trigger_execution_failed",
+            "The pipeline execution did not complete successfully.",
+            status_code=503,
+            detail={"correlation_id": result.correlation_id, "status": execution.get("status")},
+        )
+    final_response = execution.get("final_response")
+    if not isinstance(final_response, dict):
+        raise EdgeStateError(
+            "trigger_result_invalid",
+            "The Result output must produce a JSON object for a compact HTTP response.",
+            status_code=503,
+            detail={"correlation_id": result.correlation_id},
+        )
+    if policy.mode == "result_only":
+        return JSONResponse(content=final_response)
+    timing = execution.get("timing") or {}
+    available_metadata = {
+        "correlation_id": result.correlation_id,
+        "channel_id": result.channel_id,
+        "pipeline_version_id": execution.get("pipeline_version_id"),
+        "workload_release_id": result.workload_release_id,
+        "completed_at": result.completed_at,
+        "result_sequence": result.result_sequence,
+        "duplicate": result.duplicate,
+        "status": execution.get("status"),
+        "duration_ms": timing.get("total_ms"),
+        "timing": timing,
+    }
+    return JSONResponse(
+        content={
+            "data": final_response,
+            "meta": {key: available_metadata[key] for key in policy.metadata_fields},
+        }
+    )
 
 
 def _error_response(

@@ -476,12 +476,12 @@ class RequestLimitsConfig(BaseModel):
     edge_software_upload_timeout_seconds: int = 3600
     edge_software_upload_limit_bytes: int = 8 * 1024**3 + 1024**2
     default_body_limit_bytes: int = 1_048_576
-    inference_body_limit_bytes: int = 3_145_728
+    inference_body_limit_bytes: int = 33_554_432
     upload_body_limit_bytes: int = 33_554_432
     pipeline_graph_body_limit_bytes: int = 157_286_400
     camera_calibration_body_limit_bytes: int = 67_108_864
     batch_manifest_max_bytes: int = 10_485_760
-    max_image_bytes: int = 5_242_880
+    max_image_bytes: int = 31_457_280
 
 
 class UploadSecurityConfig(BaseModel):

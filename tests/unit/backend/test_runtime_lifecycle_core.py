@@ -21,6 +21,7 @@ from cv_db import (
     RuntimeControlCommandRecord,
     RuntimeExecution,
     PipelineVersion,
+    PipelineDefinition,
     TriggerEndpoint,
     build_runtime_operational_summary,
     cleanup_stale_runtime_references,
@@ -467,8 +468,9 @@ def test_publish_rebinds_stale_channel_version_and_restart_loads_new_pipeline(
             assert first_execution.actual_state == "stopping"
             assert first_execution.desired_state == "stopped"
             assert channel.pipeline_version_id == latest_version_id
-            assert channel.desired_state == "start_requested"
-            assert channel.observed_state == "starting"
+            # Coalescing the already queued restart preserves current state.
+            assert channel.desired_state == "running"
+            assert channel.observed_state == "running"
             assert (
                 session.query(RuntimeControlCommandRecord)
                 .filter(
@@ -1061,11 +1063,15 @@ def test_live_runtime_start_does_not_create_or_own_pipeline_trigger_endpoints(
 ) -> None:
     settings, channel_id = _seed_channel(sqlite_engine, tmp_path, mode=RuntimeMode.REALTIME)
     with session_scope(settings) as session:
+        channel = session.get(RuntimeChannel, channel_id)
+        live_version_id = channel.pipeline_version_id
         trigger_version_id = _create_published_pipeline(
             session,
             mode=RuntimeMode.TRIGGER,
             channel_id=channel_id,
         )
+        channel.pipeline_version_id = live_version_id
+        session.flush()
         endpoint = session.query(TriggerEndpoint).one()
         assert endpoint.derived_from_pipeline is True
         assert endpoint.pipeline_version_id == trigger_version_id
@@ -1102,38 +1108,31 @@ def test_live_runtime_start_does_not_create_or_own_pipeline_trigger_endpoints(
         supervisor.shutdown()
 
 
-def test_realtime_channel_can_bind_trigger_pipeline_without_live_start(
-    sqlite_engine: Engine,
-    tmp_path: Path,
+def test_realtime_channel_with_trigger_pipeline_starts_trigger_readiness(
+    sqlite_engine: Engine, tmp_path: Path,
 ) -> None:
     settings, channel_id = _seed_channel(sqlite_engine, tmp_path, mode=RuntimeMode.REALTIME)
     with session_scope(settings) as session:
         trigger_version_id = _create_published_pipeline(
-            session,
-            mode=RuntimeMode.TRIGGER,
-            channel_id=channel_id,
+            session, mode=RuntimeMode.TRIGGER, channel_id=channel_id,
             source_node_type="source.channel_frame",
         )
-        channel = update_runtime_channel(
-            session,
-            channel_id,
-            RuntimeChannelUpdateRequest(pipeline_version_id=trigger_version_id),
-            updated_by="operator",
-        )
-
-        assert channel.mode == RuntimeMode.REALTIME
-        assert channel.pipeline_version_id == trigger_version_id
-        endpoint = session.query(TriggerEndpoint).one()
-        assert endpoint.channel_id == channel_id
-        assert endpoint.pipeline_version_id == trigger_version_id
-        assert endpoint.derived_from_pipeline is True
-
-        try:
-            validate_runtime_channel_start_requirements(session, channel_id=channel_id)
-        except ValueError as exc:
-            assert "triggerable pipelines run through trigger endpoints" in str(exc)
-        else:
-            raise AssertionError("Trigger pipeline assignment must not start as live runtime.")
+        channel = session.get(RuntimeChannel, channel_id)
+        channel.pipeline_version_id = trigger_version_id
+        loaded = validate_runtime_channel_start_requirements(session, channel_id=channel_id)
+        assert loaded.version.mode == RuntimeMode.TRIGGER
+        request_runtime_channel_start(session, channel_id, requested_by="operator")
+    supervisor, orchestrator = _orchestrator(settings)
+    try:
+        assert orchestrator.process_all_available() == 1
+        with session_scope(settings) as session:
+            execution = session.query(RuntimeExecution).one()
+            assert execution.mode == "trigger"
+            assert execution.executor_service == "trigger-executor"
+            assert execution.status == "running"
+            assert supervisor.has_handle(execution.id)
+    finally:
+        supervisor.shutdown()
 
 
 def _orchestrator(
@@ -1337,6 +1336,9 @@ def _create_published_pipeline(
     if mode == RuntimeMode.TRIGGER:
         if channel_id is None:
             raise ValueError("channel_id is required for triggerable pipeline tests")
+        definition_row = session.get(PipelineDefinition, definition.pipeline_definition_id)
+        definition_row.scope = "channel_instance"
+        definition_row.owner_channel_id = channel_id
         trigger_node = _node("http_trigger", "trigger.http_put")
         source_node = _node(
             "channel_snapshot",

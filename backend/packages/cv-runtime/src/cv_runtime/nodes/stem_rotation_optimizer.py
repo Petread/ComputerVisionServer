@@ -10,6 +10,7 @@ from cv_contracts.runtime import RuntimeNodeSpec
 
 from cv_runtime.context import NodeInputs, RuntimeExecutionContext
 from cv_runtime.handlers import NodeExecutionResult
+from cv_runtime.high_rate_phase import HighRateStemPhaseBridge
 from cv_runtime.payloads import (
     ResultPayload,
     StemRotationAngleScorePayload,
@@ -112,6 +113,14 @@ class StemRotationOptimizerHandler:
                     result_ready=model.frozen,
                 )
             )
+        bridge = context.metadata.get("high_rate_stem_phase_bridge")
+        if (isinstance(bridge, HighRateStemPhaseBridge)
+                and model.trace_generation != bridge.generation):
+            return _output(_safe_payload(
+                context, model, priority, state="INVALID",
+                reason_code="PHASE_GENERATION_MISMATCH", config_snapshot=config_snapshot,
+                constraints=constraints,
+            ))
         if not priority.valid:
             return _output(
                 _safe_payload(
@@ -237,6 +246,13 @@ class StemRotationOptimizerHandler:
                     result_ready=True,
                 )
             )
+        if (isinstance(bridge, HighRateStemPhaseBridge)
+                and model.trace_generation != bridge.generation):
+            return _output(_safe_payload(
+                context, model, priority, state="INVALID",
+                reason_code="PHASE_GENERATION_MISMATCH", config_snapshot=config_snapshot,
+                constraints=constraints,
+            ))
         payload = _result_payload(
             context,
             model,

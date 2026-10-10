@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from cv_runtime.basler import basler_gain_setting, basler_pixel_format
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
@@ -247,12 +249,52 @@ class BaslerPylonCameraSource:
                 return
         raise RuntimeError(f"Basler camera property is unavailable: {'/'.join(names)}.")
 
+    def _camera_model(self, config: dict[str, Any]) -> str:
+        configured = str(config.get("model") or "").strip()
+        if configured:
+            return configured
+        try:
+            device_info = self._camera.GetDeviceInfo()
+            return str(device_info.GetModelName() or "").strip()
+        except Exception:
+            return ""
+
+    def _configure_gain(self, config: dict[str, Any], gain: object) -> None:
+        gain_raw = config.get("gain_raw")
+        setting = basler_gain_setting(
+            self._camera_model(config),
+            gain_db=float(gain) if gain is not None else None,
+            gain_raw=int(gain_raw) if gain_raw is not None else None,
+        )
+        if setting is None:
+            return
+        if setting.selector and self._node("GainSelector") is not None:
+            self._set_value("GainSelector", setting.selector)
+        self._set_first(setting.node_names, setting.value)
+
+    def _ensure_even_roi(self) -> None:
+        """NVENC requires even source dimensions; trim one trailing pixel if needed."""
+        for name in ("Width", "Height"):
+            node = self._node(name)
+            if node is None:
+                continue
+            try:
+                value = node.GetValue() if callable(getattr(node, "GetValue", None)) else node.Value
+                dimension = int(value)
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if dimension > 1 and dimension % 2:
+                self._set_value(name, dimension - 1)
+
     def _configure(self, config: dict[str, Any]) -> None:
         transport = str(config.get("transport_mode") or "pylon_direct").lower()
         if transport not in {"auto", "direct", "pylon", "pylon_direct"}:
             raise RuntimeError("Basler Edge acquisition requires the direct pylon transport.")
         self._set_value("AcquisitionMode", config.get("acquisition_mode") or "Continuous")
-        self._set_value("PixelFormat", config.get("pixel_format"))
+        self._set_value(
+            "PixelFormat",
+            basler_pixel_format(self._camera_model(config), config.get("pixel_format")),
+        )
         # Reset ROI offsets before resizing, then apply the requested offsets.
         if config.get("width") is not None or config.get("height") is not None:
             self._set_value("OffsetX", 0, optional=True)
@@ -277,12 +319,14 @@ class BaslerPylonCameraSource:
         # Legacy Edge manifests use exposure_us/gain and free_run/software/line1.
         exposure = config.get("exposure_time_us", config.get("exposure_us"))
         gain = config.get("gain_db", config.get("gain"))
-        if exposure is not None:
+        if config.get("exposure_auto") or exposure is not None:
             self._set_value("ExposureAuto", config.get("exposure_auto") or "Off", optional=True)
+        if exposure is not None:
             self._set_first(("ExposureTime", "ExposureTimeAbs"), float(exposure))
-        if gain is not None:
+        if config.get("gain_auto") or gain is not None or config.get("gain_raw") is not None:
             self._set_value("GainAuto", config.get("gain_auto") or "Off", optional=True)
-            self._set_value("Gain", float(gain))
+        if gain is not None or config.get("gain_raw") is not None:
+            self._configure_gain(config, gain)
         self._set_value(
             "MaxNumBuffer",
             int(config.get("buffer_count") or config.get("max_num_buffer") or 16),
@@ -310,6 +354,7 @@ class BaslerPylonCameraSource:
         features = config.get("features") or {}
         for name, value in features.items():
             self._set_value(str(name), value)
+        self._ensure_even_roi()
         # Feature overrides may change trigger settings; read their effective values.
         effective_mode = str(features.get("TriggerMode", "On" if active else "Off"))
         effective_source = str(features.get("TriggerSource", trigger_source))

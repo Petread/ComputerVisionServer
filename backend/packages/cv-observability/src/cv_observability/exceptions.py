@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from cv_contracts import ApiError, ValidationErrorDetail
+from cv_utils import PlatformError, get_correlation_id
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
-from cv_contracts import ApiError, ValidationErrorDetail
-from cv_utils import PlatformError, get_correlation_id
 
 
 def _build_payload(
@@ -56,8 +56,12 @@ def install_exception_handlers(app: FastAPI) -> None:
         _request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        errors = exc.errors()
-        detail = "; ".join(str(item.get("msg")) for item in errors[:3]) or "Invalid request payload."
+        # Pydantic includes the original exception in ctx.error for custom validators.
+        # Convert it before placing the details in a JSONResponse.
+        errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+        detail = (
+            "; ".join(str(item.get("msg")) for item in errors[:3]) or "Invalid request payload."
+        )
         validation_errors = [
             ValidationErrorDetail(
                 field=".".join(str(part) for part in item.get("loc", [])[1:]) or None,

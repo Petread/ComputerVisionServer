@@ -346,7 +346,8 @@ def test_high_rate_node_publishes_only_the_active_track_as_seed() -> None:
     assert "PHASE_CALIBRATION_MISSING" in payload.reason_codes
 
 
-def test_high_rate_node_keeps_bound_degrees_during_short_geometry_dropout() -> None:
+@pytest.mark.parametrize("matching_phase_available", [False, True])
+def test_high_rate_geometry_dropout_requires_matching_phase(matching_phase_available: bool) -> None:
     profile = _process_profile()
     calibration_result = calculate_stem_surface_phase_calibration(
         source_channel_id="chn_stem",
@@ -388,6 +389,8 @@ def test_high_rate_node_keeps_bound_degrees_during_short_geometry_dropout() -> N
         HighRatePhaseFrame(image, 1, _timestamp(1), time.perf_counter())
     )
     geometry = _geometry(2, track_id="track-fast").model_copy(update={"valid": False})
+    if matching_phase_available:
+        bridge.process_frame(HighRatePhaseFrame(image, 2, _timestamp(2), time.perf_counter()))
     payload = handler.execute(
         context,
         node,
@@ -398,9 +401,13 @@ def test_high_rate_node_keeps_bound_degrees_during_short_geometry_dropout() -> N
         },
     ).outputs["surface_phase"]
 
-    assert payload.phase_locked
-    assert payload.calibrated_phase_valid
-    assert payload.cumulative_phase_deg == pytest.approx(0.0)
+    assert payload.phase_locked is matching_phase_available
+    if matching_phase_available:
+        assert payload.calibrated_phase_valid
+        assert payload.cumulative_phase_deg == pytest.approx(0.0)
+    else:
+        assert payload.cumulative_phase_deg is None
+        assert "PHASE_EXACT_SNAPSHOT_MISSING" in payload.reason_codes
     assert "PHASE_SEED_NOT_REFRESHED" in payload.reason_codes
 
 

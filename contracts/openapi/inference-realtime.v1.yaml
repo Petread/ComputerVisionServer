@@ -508,6 +508,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/realtime/temporal-sequence:
+    post:
+      tags:
+      - realtime-inference
+      summary: Infer Temporal Sequence
+      operationId: infer_temporal_sequence_api_v1_realtime_temporal_sequence_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeTemporalSequenceRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporalSequenceInferenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/realtime/anomaly-bytes:
     post:
       tags:
@@ -2741,12 +2766,139 @@ components:
             minimum: 0.0
           - type: 'null'
           title: Score Threshold
+        return_masks:
+          type: boolean
+          title: Return Masks
+          default: false
       additionalProperties: false
       type: object
       required:
       - deployment_target
       - image_base64
       title: RealtimeSegmentRequest
+    RealtimeTemporalSequenceRequest:
+      properties:
+        deployment_target:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Deployment Target
+        deployment_release_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 3
+          - type: 'null'
+          title: Deployment Release Id
+        timeout_ms:
+          anyOf:
+          - type: integer
+            maximum: 30000.0
+            minimum: 50.0
+          - type: 'null'
+          title: Timeout Ms
+        sequence_id:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Sequence Id
+        track_id:
+          anyOf:
+          - type: string
+            maxLength: 160
+          - type: 'null'
+          title: Track Id
+        feature_set_id:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Feature Set Id
+        feature_schema_version:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Feature Schema Version
+        rotation_schema_version:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Rotation Schema Version
+        calibration_schema_version:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Calibration Schema Version
+        rotation_calibration_id:
+          anyOf:
+          - type: string
+            maxLength: 160
+          - type: 'null'
+          title: Rotation Calibration Id
+        rotation_calibration_hash:
+          anyOf:
+          - type: string
+            maxLength: 160
+          - type: 'null'
+          title: Rotation Calibration Hash
+        rotation_viewpoint_convention:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Rotation Viewpoint Convention
+        positive_rotation_direction:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Positive Rotation Direction
+        frames:
+          items:
+            $ref: '#/components/schemas/TemporalSequenceFrame'
+          type: array
+          maxItems: 4096
+          minItems: 1
+          title: Frames
+        current_frame_index:
+          type: integer
+          minimum: 0.0
+          title: Current Frame Index
+        decision_frame_index:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Decision Frame Index
+        causal:
+          type: boolean
+          const: true
+          title: Causal
+          default: true
+        post_decision_frames_included:
+          type: boolean
+          const: false
+          title: Post Decision Frames Included
+          default: false
+        trace_continuous:
+          type: boolean
+          title: Trace Continuous
+          default: true
+        calibration_valid:
+          type: boolean
+          title: Calibration Valid
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - deployment_target
+      - sequence_id
+      - feature_set_id
+      - feature_schema_version
+      - rotation_schema_version
+      - calibration_schema_version
+      - rotation_viewpoint_convention
+      - positive_rotation_direction
+      - frames
+      - current_frame_index
+      title: RealtimeTemporalSequenceRequest
     ResponseMeta:
       properties:
         request_id:
@@ -2818,6 +2970,46 @@ components:
       - image_width
       - image_height
       title: SegmentationInferenceResponse
+    SegmentationMask:
+      properties:
+        format:
+          type: string
+          const: png_base64
+          title: Format
+          default: png_base64
+        data:
+          type: string
+          minLength: 1
+          title: Data
+        width:
+          type: integer
+          maximum: 16384.0
+          minimum: 1.0
+          title: Width
+        height:
+          type: integer
+          maximum: 16384.0
+          minimum: 1.0
+          title: Height
+        native_width:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Native Width
+        native_height:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Native Height
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      - width
+      - height
+      title: SegmentationMask
     SegmentationPoint:
       properties:
         x:
@@ -2851,6 +3043,10 @@ components:
             $ref: '#/components/schemas/SegmentationPoint'
           type: array
           title: Polygon
+        mask:
+          anyOf:
+          - $ref: '#/components/schemas/SegmentationMask'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -2899,6 +3095,209 @@ components:
       - anomaly
       - temporal_sequence
       title: TaskType
+    TemporalSequenceFrame:
+      properties:
+        frame_index:
+          type: integer
+          minimum: 0.0
+          title: Frame Index
+        timestamp_seconds:
+          type: number
+          minimum: 0.0
+          title: Timestamp Seconds
+        source_timestamp:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Timestamp
+        values:
+          additionalProperties: true
+          type: object
+          title: Values
+      additionalProperties: false
+      type: object
+      required:
+      - frame_index
+      - timestamp_seconds
+      title: TemporalSequenceFrame
+      description: One causal, structured feature row before artifact-defined scaling.
+    TemporalSequenceInferenceResponse:
+      properties:
+        schema_version:
+          type: string
+          const: inference.temporal-sequence.response.v1
+          title: Schema Version
+          default: inference.temporal-sequence.response.v1
+        request_id:
+          type: string
+          title: Request Id
+        correlation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Correlation Id
+        deployment_target:
+          type: string
+          title: Deployment Target
+        route:
+          $ref: '#/components/schemas/ModelRouteRef'
+        architecture:
+          $ref: '#/components/schemas/ModelArchitectureSummary'
+        warm_model:
+          type: boolean
+          title: Warm Model
+        timing:
+          $ref: '#/components/schemas/InferenceTiming'
+        sequence_id:
+          type: string
+          title: Sequence Id
+        track_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Track Id
+        sequence_length:
+          type: integer
+          minimum: 1.0
+          title: Sequence Length
+        last_frame_index:
+          type: integer
+          minimum: 0.0
+          title: Last Frame Index
+        decision_frame_index:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Decision Frame Index
+        feature_set_id:
+          type: string
+          title: Feature Set Id
+        feature_schema_digest:
+          type: string
+          title: Feature Schema Digest
+        scaler_sha256:
+          type: string
+          title: Scaler Sha256
+        snapshot_id:
+          type: string
+          title: Snapshot Id
+        feature_schema_version:
+          type: string
+          title: Feature Schema Version
+        rotation_schema_version:
+          type: string
+          title: Rotation Schema Version
+        calibration_schema_version:
+          type: string
+          title: Calibration Schema Version
+        rotation_calibration_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rotation Calibration Id
+        rotation_calibration_hash:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rotation Calibration Hash
+        rotation_viewpoint_convention:
+          type: string
+          title: Rotation Viewpoint Convention
+        positive_rotation_direction:
+          type: string
+          title: Positive Rotation Direction
+        bow_relevance_probability:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Bow Relevance Probability
+        target_observed_probability:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Target Observed Probability
+        angle_sin_2e:
+          type: number
+          maximum: 1.0
+          minimum: -1.0
+          title: Angle Sin 2E
+        angle_cos_2e:
+          type: number
+          maximum: 1.0
+          minimum: -1.0
+          title: Angle Cos 2E
+        signed_correction_deg:
+          type: number
+          exclusiveMaximum: 90.0
+          minimum: -90.0
+          title: Signed Correction Deg
+        raw_angle_confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Raw Angle Confidence
+        angle_confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Angle Confidence
+        confidence_calibration_valid:
+          type: boolean
+          title: Confidence Calibration Valid
+          default: false
+        final_quality_probabilities:
+          additionalProperties:
+            type: number
+          type: object
+          title: Final Quality Probabilities
+        deadband_deg:
+          type: number
+          exclusiveMaximum: 90.0
+          minimum: 0.0
+          title: Deadband Deg
+        estimate_method:
+          type: string
+          enum:
+          - tcn
+          - gru
+          title: Estimate Method
+        reason_codes:
+          items:
+            type: string
+          type: array
+          title: Reason Codes
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - deployment_target
+      - route
+      - architecture
+      - warm_model
+      - timing
+      - sequence_id
+      - sequence_length
+      - last_frame_index
+      - feature_set_id
+      - feature_schema_digest
+      - scaler_sha256
+      - snapshot_id
+      - feature_schema_version
+      - rotation_schema_version
+      - calibration_schema_version
+      - rotation_viewpoint_convention
+      - positive_rotation_direction
+      - bow_relevance_probability
+      - target_observed_probability
+      - angle_sin_2e
+      - angle_cos_2e
+      - signed_correction_deg
+      - raw_angle_confidence
+      - angle_confidence
+      - deadband_deg
+      - estimate_method
+      title: TemporalSequenceInferenceResponse
     ValidationError:
       properties:
         loc:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from cv_contracts.edge import EdgeDeviceRegistrationRequest
 from cv_contracts.runtime import (
     RuntimeAuthoringNodeSpec,
     RuntimeChannelCreateRequest,
@@ -23,6 +24,7 @@ from cv_db import (
     RuntimeControlCommandRecord,
     TriggerEndpoint,
     archive_pipeline_definition,
+    create_edge_device,
     create_pipeline_definition,
     create_pipeline_version,
     create_runtime_channel,
@@ -34,6 +36,7 @@ from cv_db import (
     request_runtime_channel_start,
     session_scope,
     validate_pipeline_request,
+    validate_runtime_channel_start_requirements,
 )
 from cv_db.pipeline_store import _template_definitions, _validate_box_list, _validate_model_binding_groups
 from cv_status import RuntimeMode, RuntimeNodeCategory, RuntimeSourceType, TargetPath, TaskType
@@ -1033,6 +1036,51 @@ def test_validation_accepts_result_output_as_trigger_response(
     assert "response_field_not_produced" not in codes
 
 
+@pytest.mark.parametrize(
+    ("mode", "metadata", "require_key", "expected_issue"),
+    [
+        ("result_only", [], False, None),
+        ("result_with_metadata", ["correlation_id", "duration_ms"], True, None),
+        ("full", [], False, None),
+        ("unknown", [], False, "edge_http_response_invalid"),
+        ("result_with_metadata", ["secret"], False, "property_option_invalid"),
+        ("result_with_metadata", ["status", "status"], False, "property_option_invalid"),
+        ("result_with_metadata", {"status": True}, False, "property_option_invalid"),
+        ("result_with_metadata", [{"status": True}], False, "property_option_invalid"),
+        ("result_only", [], "false", "property_boolean_invalid"),
+    ],
+)
+def test_edge_trigger_node_settings_validate_through_existing_pipeline_path(
+    sqlite_engine, tmp_path, mode, metadata, require_key, expected_issue
+) -> None:
+    configure_sqlite_factories(sqlite_engine, "runtime-admin-api")
+    settings = build_test_settings("runtime-admin-api", tmp_path)
+    graph = _trigger_classification_result_output_graph()
+    for node in graph.nodes:
+        if node.node_type == "output.result":
+            node.config.update(edge_response_mode=mode, edge_response_metadata_fields=metadata)
+        if node.node_type == "trigger.http_put":
+            node.config["require_idempotency_key"] = require_key
+    with session_scope(settings) as session:
+        seed_deployed_runtime_model(
+            session,
+            release_id="rel_classifier",
+            model_family_id="mf_quality_classifier",
+            model_family_slug="quality-classifier",
+            model_family_display_name="Quality Classifier",
+            model_version_id="mvr_classifier",
+            task_type=TaskType.CLASSIFICATION,
+        )
+        report = validate_pipeline_request(
+            session, RuntimePipelineValidationRequest(mode=RuntimeMode.TRIGGER, graph=graph)
+        )
+    if expected_issue is None:
+        assert report.status == "valid", report.issues
+    else:
+        assert report.status == "invalid"
+        assert expected_issue in {issue.code for issue in report.issues}
+
+
 def test_validation_rejects_active_production_model_ref_when_only_staged(
     sqlite_engine,
     tmp_path,
@@ -1515,6 +1563,124 @@ def test_channel_start_requires_published_channel_instance(
 
         with pytest.raises(ValueError, match="must be published"):
             request_runtime_channel_start(session, channel.channel_id, requested_by="tester")
+
+
+@pytest.mark.parametrize("execution_target", ["server", "edge_device"])
+@pytest.mark.parametrize("running", [False, True])
+def test_publishing_http_trigger_in_assigned_pipeline_rebinds_channel(
+    sqlite_engine: Engine,
+    tmp_path: Path,
+    execution_target: str,
+    running: bool,
+) -> None:
+    configure_sqlite_factories(sqlite_engine, "runtime-admin-api")
+    settings = build_test_settings("runtime-admin-api", tmp_path)
+
+    with session_scope(settings) as session:
+        seed_deployed_runtime_model(session)
+        placement = {"target": execution_target}
+        if execution_target == "edge_device":
+            device = create_edge_device(
+                session,
+                EdgeDeviceRegistrationRequest(
+                    name="Trigger switch Jetson",
+                    address={"management_ip": "192.168.50.21"},
+                    allowed_cidr="192.168.50.0/24",
+                    server_ip="192.168.50.10",
+                ),
+                created_by="tester",
+            )
+            placement["edge_device_id"] = device.edge_device_id
+        template = create_pipeline_definition(
+            session,
+            RuntimePipelineDefinitionCreateRequest(name="Trigger switch basis"),
+            created_by="tester",
+        )
+        original_graph = _valid_detection_graph("persisted_result")
+        template_version = create_pipeline_version(
+            session,
+            template.pipeline_definition_id,
+            RuntimePipelineVersionCreateRequest(mode=RuntimeMode.REALTIME, graph=original_graph),
+            created_by="tester",
+        )
+        publish_pipeline_version(session, template_version.pipeline_version_id, published_by="tester")
+        channel = create_runtime_channel(
+            session,
+            RuntimeChannelCreateRequest(
+                name="Trigger switch camera",
+                technical_place="trigger-switch",
+                source_config={"url": "rtsp://camera.local/live"},
+                pipeline_version_id=template_version.pipeline_version_id,
+                placement=placement,
+            ),
+            created_by="tester",
+        )
+        channel_row = session.get(RuntimeChannel, channel.channel_id)
+        assert channel_row is not None
+        original_version = session.get(PipelineVersion, channel_row.pipeline_version_id)
+        assert original_version is not None
+        instance_id = original_version.pipeline_definition_id
+        if running:
+            channel_row.desired_state = "running"
+            channel_row.observed_state = "running"
+
+        trigger_version = create_pipeline_version(
+            session,
+            instance_id,
+            RuntimePipelineVersionCreateRequest(
+                mode=RuntimeMode.REALTIME,
+                graph=_trigger_detection_projection_graph(),
+            ),
+            created_by="tester",
+        )
+        assert trigger_version.mode == RuntimeMode.TRIGGER
+        assert channel_row.pipeline_version_id == original_version.id
+        assert original_version.status == "published"
+
+        published = publish_pipeline_version(
+            session, trigger_version.pipeline_version_id, published_by="tester"
+        )
+        assert published.status == "published"
+        assert original_version.status == "superseded"
+        assert channel_row.pipeline_version_id == published.pipeline_version_id
+        assert channel_row.mode == "realtime"
+        assert channel_row.execution_target == execution_target
+        endpoint = session.scalar(
+            select(TriggerEndpoint).where(TriggerEndpoint.channel_id == channel.channel_id)
+        )
+        assert endpoint is not None
+        assert endpoint.pipeline_version_id == published.pipeline_version_id
+        assert endpoint.enabled
+        assert session.query(RuntimeControlCommandRecord).filter_by(
+            channel_id=channel.channel_id, command="restart"
+        ).count() == int(running)
+        loaded = validate_runtime_channel_start_requirements(session, channel_id=channel.channel_id)
+        assert loaded.version.id == published.pipeline_version_id
+        assert loaded.version.mode == "trigger"
+
+        if not running:
+            # Reproduce a persisted assignment left behind by the old publisher.
+            channel_row.pipeline_version_id = original_version.id
+            session.flush()
+            publish_pipeline_version(session, published.pipeline_version_id, published_by="tester")
+            assert channel_row.pipeline_version_id == published.pipeline_version_id
+            _, command = request_runtime_channel_start(
+                session, channel.channel_id, requested_by="tester"
+            )
+            assert command.status == "queued"
+
+        restored = create_pipeline_version(
+            session,
+            instance_id,
+            RuntimePipelineVersionCreateRequest(mode=RuntimeMode.REALTIME, graph=original_graph),
+            created_by="tester",
+        )
+        publish_pipeline_version(session, restored.pipeline_version_id, published_by="tester")
+        assert channel_row.pipeline_version_id == restored.pipeline_version_id
+        assert not endpoint.enabled
+        loaded = validate_runtime_channel_start_requirements(session, channel_id=channel.channel_id)
+        assert loaded.version.id == restored.pipeline_version_id
+        assert loaded.version.mode == "realtime"
 
 
 def test_publishing_trigger_channel_instance_does_not_restart_live_channel(

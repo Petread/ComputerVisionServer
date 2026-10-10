@@ -156,6 +156,7 @@ class EdgeFleetReconciler:
                     "mode": "automatic",
                     "boot_id": observation.identity.boot_id,
                     "health_state": observation.health.state,
+                    **observation.software_observation(),
                 },
             )
         return True

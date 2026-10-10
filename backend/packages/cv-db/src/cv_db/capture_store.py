@@ -9,6 +9,7 @@ from typing import Any, Literal
 from cv_contracts.runtime import (
     RuntimeCaptureRequestSummary,
     RuntimeManualCaptureResult,
+    RuntimePipelineCaptureImage,
 )
 from cv_core import generate_prefixed_id
 from cv_runtime.payloads import RuntimeExecutionResult
@@ -64,9 +65,22 @@ def enqueue_manual_capture_request(
     capture_source: str = "LIVE_VIEW_FRAME",
     view_profile_id: str | None = None,
     require_eligibility: bool = False,
+    pipeline_image: RuntimePipelineCaptureImage | None = None,
+    max_image_bytes: int = 20 * 1024 * 1024,
 ) -> RuntimeManualCaptureResult:
     channel = get_runtime_channel_for_manual_capture(session, channel_id)
     target = validate_manual_capture_target(session, capture_target_id)
+    snapshot = None
+    if pipeline_image is not None:
+        from cv_db.pipeline_image_capture import selected_pipeline_capture_frame
+
+        if mode != "single" or capture_source != "PIPELINE_IMAGE_OUTPUT":
+            raise ValueError("A selected pipeline image requires single pipeline-output capture.")
+        snapshot = selected_pipeline_capture_frame(
+            pipeline_image,
+            require_eligibility=require_eligibility,
+            max_image_bytes=max_image_bytes,
+        )
     queued_at = utc_now()
     manual_result = record_manual_capture_result(
         session,
@@ -116,7 +130,7 @@ def enqueue_manual_capture_request(
         target_project_title=target.title,
         source_type="manual",
         capture_mode="full_frame",
-        asset_payload={},
+        asset_payload=snapshot.model_dump(mode="json") if snapshot is not None else {},
         roi={},
         source_frame_metadata={
             "source": "capture_service_latest_live_frame",
@@ -141,6 +155,14 @@ def enqueue_manual_capture_request(
             "require_eligibility": require_eligibility,
         },
     )
+    if snapshot is not None:
+        snapshot_metadata = {
+            **snapshot.metadata,
+            "source": "operator_selected_pipeline_image",
+            "pipeline_snapshot": True,
+        }
+        row.source_frame_metadata = {**row.source_frame_metadata, **snapshot_metadata}
+        row.metadata_json = {**snapshot_metadata, **row.metadata_json, "pipeline_snapshot": True}
     session.add(row)
     if manual_result.capture_request_id:
         manual_row = session.get(
@@ -148,6 +170,8 @@ def enqueue_manual_capture_request(
             manual_result.capture_request_id,
         )
         if manual_row is not None:
+            if snapshot is not None:
+                manual_row.source_frame_metadata = dict(row.source_frame_metadata)
             manual_row.metadata_json = {
                 **(manual_row.metadata_json or {}),
                 "runtime_capture_request_id": row.id,

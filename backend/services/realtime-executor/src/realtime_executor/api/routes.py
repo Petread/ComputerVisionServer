@@ -6,7 +6,6 @@ from cv_contracts.runtime import (
 from cv_core import parse_machine_token
 from cv_db import (
     authenticate_machine_identity,
-    build_runtime_model_resolver,
     get_ready_runtime_execution_binding,
     record_runtime_execution_result,
     session_scope,
@@ -17,6 +16,7 @@ from cv_runtime import (
     RuntimeGraphBuildError,
     runtime_service_boundary,
 )
+from cv_db.runtime_model_store import build_execution_model_resolver, lock_runtime_use, require_runtime_pipeline
 from cv_runtime.payloads import FramePayload
 from cv_runtime.siemens_sps import close_siemens_sps_connection_cache
 from cv_status import RuntimeMode
@@ -88,6 +88,8 @@ def execute_single_frame(
                 detail=str(exc),
                 status_code=422,
             ) from exc
+        lock_runtime_use(session, execution.id)
+        require_runtime_pipeline(session, execution_id=execution.id, pipeline_version_id=loaded.version.id)
         context = RuntimeExecutionContext(
             correlation_id=correlation_id,
             channel_id=loaded.channel.id,
@@ -100,8 +102,10 @@ def execute_single_frame(
                 base_url=settings.runtime.inference_gateway_realtime_url,
                 bearer_token=settings.runtime.inference_gateway_bearer_token(),
                 timeout_seconds=settings.inference_limits.realtime_timeout_ms / 1000,
+                runtime_execution_id=execution.id,
+                pipeline_version_id=loaded.version.id,
             ),
-            model_resolver=build_runtime_model_resolver(session),
+            model_resolver=build_execution_model_resolver(session, execution, loaded.version.id),
             metadata={
                 "executor_service": SERVICE_NAME,
                 "single_frame": True,

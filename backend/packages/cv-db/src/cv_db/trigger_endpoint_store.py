@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Any
 
 from cv_contracts import ResponseMeta
 from cv_contracts.runtime import (
@@ -38,6 +39,8 @@ from cv_db.models import (
     TriggerEndpoint,
 )
 from cv_db.runtime_execution_store import get_active_runtime_execution
+from cv_db.runtime_model_store import require_runtime_pipeline
+from cv_utils import PlatformError
 from cv_db.result_store import result_record_to_summary
 
 
@@ -284,6 +287,17 @@ def trigger_endpoint_readiness(
             endpoint_pipeline_version_id=row.pipeline_version_id,
         )
     endpoint_pipeline_id = row.pipeline_version_id or channel.pipeline_version_id
+    try:
+        runtime_execution = require_runtime_pipeline(
+            session, execution_id=channel.active_runtime_execution_id or "",
+            pipeline_version_id=endpoint_pipeline_id or "",
+        )
+    except PlatformError as exc:
+        return RuntimeTriggerEndpointReadiness(
+            ready=False, reason=exc.message, channel_id=channel.id,
+            endpoint_pipeline_version_id=endpoint_pipeline_id,
+            actual_state=RuntimeObservedState(channel.observed_state),
+        )
     if not row.enabled:
         return RuntimeTriggerEndpointReadiness(
             ready=False,
@@ -305,6 +319,7 @@ def trigger_endpoint_readiness(
     if _pipeline_uses_test_photo(pipeline_version):
         return RuntimeTriggerEndpointReadiness(
             ready=True,
+            runtime_instance_id=runtime_execution.id,
             reason="The embedded test photo is ready.",
             actual_state=RuntimeObservedState(channel.observed_state),
             channel_id=channel.id,
@@ -313,6 +328,7 @@ def trigger_endpoint_readiness(
         )
     source = session.get(RuntimeSource, channel.source_id) if channel.source_id else None
     frame_ready, reason, execution = _source_frame_readiness(session, channel, source)
+    execution = execution or runtime_execution
     if not frame_ready:
         return RuntimeTriggerEndpointReadiness(
             ready=False,

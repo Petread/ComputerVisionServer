@@ -53,7 +53,7 @@ from cv_db import (
     session_scope,
     validate_pipeline_request,
 )
-from cv_db.models import ModelPromotion, RuntimeChannel
+from cv_db.models import DeploymentRelease, ModelPromotion, RuntimeChannel, PipelineDefinition
 from cv_runtime import (
     BUILTIN_NODE_TYPES,
     ExecutablePipelineGraph,
@@ -2477,6 +2477,8 @@ def test_trigger_executor_runs_published_pipeline_and_persists_results(
             channel_id=channel.channel_id,
         )
         endpoint_row = session.query(TriggerEndpoint).one()
+        # This case tests the output node mapping, not a second endpoint mapping.
+        endpoint_row.response_policy = {"mode": "all_final_response"}
         endpoint_slug = endpoint_row.slug
 
     monkeypatch.setattr(
@@ -2505,7 +2507,7 @@ def test_trigger_executor_runs_published_pipeline_and_persists_results(
             headers={"Authorization": "Bearer trigger-client.trigger-secret"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["status"] == "completed"
     assert payload["final_response"] == {"piece_count": 1}
@@ -2788,7 +2790,7 @@ def test_trigger_executor_returns_structured_timeout(
     with session_scope(settings) as session:
         _seed_runtime_capability(session)
         channel = _create_snapshot_channel(session)
-        version = _create_published_pipeline(
+        _create_published_pipeline(
             session,
             name="Slow trigger response",
             mode=RuntimeMode.TRIGGER,
@@ -3031,7 +3033,8 @@ def test_trigger_executor_captures_basler_channel_source_on_demand(
     assert live_state.available is True
     assert live_state.frame is not None
     assert live_state.frame.metadata["source_uri"] == "basler-pylon://Press Basler"
-    assert live_state.frame.metadata["source_type"] == "basler_pylon"
+    assert live_state.source_frame is not None
+    assert live_state.source_frame.metadata["source_type"] == "basler_pylon"
 
 
 def test_trigger_executor_rejects_invalid_pipeline_endpoint_config(
@@ -3058,7 +3061,7 @@ def test_trigger_executor_rejects_invalid_pipeline_endpoint_config(
     with session_scope(settings) as session:
         _seed_runtime_capability(session)
         channel = _create_snapshot_channel(session)
-        trigger_version = _create_published_pipeline(
+        _create_published_pipeline(
             session,
             name="Trigger response",
             mode=RuntimeMode.TRIGGER,
@@ -3098,7 +3101,7 @@ def test_trigger_executor_rejects_invalid_pipeline_endpoint_config(
 
     assert response.status_code == 503
     assert response.json()["code"] == "runtime_trigger_runtime_unavailable"
-    assert "triggerable" in response.json()["detail"]
+    assert "Start the channel" in response.json()["detail"]
     assert response.json()["retryable"] is True
 
 
@@ -3379,6 +3382,10 @@ def test_runtime_model_capabilities_keep_previous_production_release_bindable(
             model_version_id="mver_other_detector_1",
             active_release=True,
         )
+        # Real release creation records the then-active production default.
+        successor = session.get(DeploymentRelease, "rel_other_active")
+        successor.rollback_source_release_id = "rel_previous_production"
+        session.flush()
 
         options = list_runtime_model_capability_options(
             session,
@@ -3677,6 +3684,9 @@ def _create_published_pipeline(
     if channel_id is not None:
         channel = session.get(RuntimeChannel, channel_id)
         assert channel is not None
+        definition_row = session.get(PipelineDefinition, definition.pipeline_definition_id)
+        definition_row.scope = "channel_instance"
+        definition_row.owner_channel_id = channel_id
         channel.pipeline_version_id = version.pipeline_version_id
         channel.assigned_pipeline = name
     published = publish_pipeline_version(
@@ -3684,6 +3694,15 @@ def _create_published_pipeline(
         version.pipeline_version_id,
         published_by="tester",
     )
+    if channel_id is not None and mode == RuntimeMode.TRIGGER:
+        from cv_db import (create_runtime_execution_instance, mark_runtime_execution_running,
+                           validate_runtime_channel_start_requirements)
+        loaded = validate_runtime_channel_start_requirements(session, channel_id=channel_id)
+        execution = create_runtime_execution_instance(
+            session, loaded=loaded, command_id=None,
+            executor_instance_id="trigger-test", assigned_runtime_worker="trigger-test",
+        )
+        mark_runtime_execution_running(session, runtime_execution_id=execution.id)
     return published.pipeline_version_id
 
 

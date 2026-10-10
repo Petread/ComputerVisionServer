@@ -35,6 +35,16 @@ ALLOWED_KEYS = {
     "YBB_EDGE_TRTEXEC_PATH",
 }
 REQUIRED_KEYS = ALLOWED_KEYS
+OPTIONAL_OPERATING_KEYS = {
+    "YBB_EDGE_PLANT_MAX_REQUEST_BYTES",
+    "YBB_EDGE_PLANT_MAX_CONCURRENT_TRIGGERS",
+    "YBB_EDGE_PLANT_TRIGGER_TIMEOUT_MS",
+    "YBB_EDGE_PLANT_RATE_LIMIT_PER_SECOND",
+    "YBB_EDGE_PREVIEW_JPEG_QUALITY",
+    "YBB_EDGE_PREVIEW_MAX_BYTES",
+    "YBB_EDGE_ENGINE_BUILD_TIMEOUT_SECONDS",
+}
+ALLOWED_KEYS = ALLOWED_KEYS | OPTIONAL_OPERATING_KEYS
 
 
 class DeviceEnvironmentError(ValueError):
@@ -87,6 +97,8 @@ def _integer(values: dict[str, str], key: str, minimum: int, maximum: int) -> No
 def validate_environment(
     values: dict[str, str], profile: dict[str, object]
 ) -> dict[str, str]:
+    for key in OPTIONAL_OPERATING_KEYS & values.keys():
+        _integer(values, key, 1, 2**31 - 1)
     metadata = {
         "YBB_EDGE_PLATFORM": profile.get("platform") or "",
         "YBB_EDGE_ARCHITECTURE": profile.get("architecture") or "",

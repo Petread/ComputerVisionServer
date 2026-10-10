@@ -33,7 +33,18 @@ from cv_status import (
     WebhookProcessingStatus,
 )
 from cv_utils import utc_now
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from cv_db.base import Base, NamedPrimaryKeyMixin, TimestampMixin
@@ -553,11 +564,18 @@ class EdgeDevice(Base, NamedPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "edge_devices"
     __table_args__ = (
         Index("ix_edge_devices_connectivity", "connectivity_state", "last_seen_at"),
+        Index(
+            "uq_edge_devices_active_management_ip",
+            "management_ip",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     technical_place: Mapped[str | None] = mapped_column(String(160))
-    management_ip: Mapped[str] = mapped_column(String(15), unique=True, nullable=False)
+    management_ip: Mapped[str] = mapped_column(String(15), nullable=False)
     control_port: Mapped[int] = mapped_column(Integer(), default=9443, nullable=False)
     plant_api_port: Mapped[int] = mapped_column(Integer(), default=9444, nullable=False)
     rtsp_port: Mapped[int] = mapped_column(Integer(), default=8554, nullable=False)

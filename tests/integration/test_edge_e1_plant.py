@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from cv_contracts import EdgeDeploymentManifest, EdgeDeviceAddress
+from cv_contracts.edge import EdgePlantResponsePolicy
 from edge_agent.plant import create_plant_app
 from edge_agent.runtime import SourceFrame
 from edge_agent.state import EdgeAgentConfig, EdgeAgentState
@@ -27,7 +28,10 @@ class _TriggerSupervisor:
         *,
         payload: dict[str, object],
         correlation_id: str,
-    ) -> tuple[EdgeDeploymentManifest, SourceFrame, dict[str, object], object]:
+        idempotency_key: str | None = None,
+    ) -> tuple[
+        EdgeDeploymentManifest, SourceFrame, dict[str, object], object, EdgePlantResponsePolicy
+    ]:
         assert channel_id == self.manifest.channel_id
         self.calls += 1
         frame = SourceFrame(1, 640, 480, datetime.now(UTC).isoformat(), image=object())
@@ -44,7 +48,7 @@ class _TriggerSupervisor:
             correlation_id=correlation_id,
             payload=execution,
         )
-        return self.manifest, frame, execution, envelope
+        return self.manifest, frame, execution, envelope, EdgePlantResponsePolicy()
 
     def close(self) -> None:
         return None
@@ -95,9 +99,16 @@ def test_plant_api_is_bounded_durable_and_idempotent(tmp_path: Path) -> None:
             assert replay.json()["result_sequence"] == first.json()["result_sequence"]
             assert supervisor.calls == 1
 
-            last = client.get(
-                f"/edge-plant/v1/channels/{manifest.channel_id}/last-result"
-            )
+            headerless = client.put(path)
+            empty_json = client.put(path, json={})
+            assert headerless.status_code == 200
+            assert empty_json.status_code == 200
+            assert headerless.json()["duplicate"] is False
+            assert empty_json.json()["duplicate"] is False
+            assert headerless.json()["result_sequence"] != empty_json.json()["result_sequence"]
+            assert supervisor.calls == 3
+
+            last = client.get(f"/edge-plant/v1/channels/{manifest.channel_id}/last-result")
             assert last.status_code == 200
             assert last.json()["result"]["execution_result"]["status"] == "success"
 

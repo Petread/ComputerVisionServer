@@ -82,11 +82,19 @@ def test_device_environment_validator_canonicalizes_ui_configuration(tmp_path: P
     profile = _profile("windows_11")
     values = _environment(profile)
     values["YBB_EDGE_PLANT_ALLOWED_IPS"] = "192.168.50.40, 192.168.50.41"
+    # Reinstalling an Edge must preserve operating values previously changed in the frontend.
+    values["YBB_EDGE_PLANT_TRIGGER_TIMEOUT_MS"] = "6000"
+    values["YBB_EDGE_PREVIEW_JPEG_QUALITY"] = "85"
 
     observed = validator.validate_environment(values, profile)
 
     assert observed["YBB_EDGE_PLANT_ALLOWED_IPS"] == "192.168.50.40,192.168.50.41"
     assert observed["YBB_EDGE_ENGINE_BUILDER_MODE"] == "tensorrt_python"
+    source = tmp_path / "device.env"
+    _write_environment(source, observed)
+    reread = validator.read_environment(source)
+    assert reread["YBB_EDGE_PLANT_TRIGGER_TIMEOUT_MS"] == "6000"
+    assert reread["YBB_EDGE_PREVIEW_JPEG_QUALITY"] == "85"
 
     source = tmp_path / "device.env"
     _write_environment(source, {**values, "UNSUPPORTED_VARIABLE": "unsafe"})

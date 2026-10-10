@@ -9,6 +9,7 @@ from cv_status import RuntimeMode, TargetPath, TaskType
 from cv_utils import utc_now_iso
 
 from cv_runtime.errors import RuntimeNodeExecutionError
+from cv_runtime.frame_analysis_cache import FrameAnalysisCache
 from cv_runtime.inference_client import RuntimeInferenceClient
 from cv_runtime.payloads import (
     AnyRuntimePayload,
@@ -51,6 +52,9 @@ class RuntimeExecutionContext:
     model_resolver: ModelResolver | None = None
     state: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    frame_analysis_cache: FrameAnalysisCache = field(default_factory=FrameAnalysisCache, repr=False)
+    stem_stage_timings_ms: dict[str, float] = field(default_factory=dict, repr=False)
 
     def now_iso(self) -> str:
         return utc_now_iso()

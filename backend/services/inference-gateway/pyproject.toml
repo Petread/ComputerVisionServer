@@ -18,6 +18,7 @@ dependencies = [
   "cv-core",
   "cv-contracts",
   "cv-datasets",
+  "cv-deploy",
   "cv-db",
   "cv-status",
   "cv-utils",

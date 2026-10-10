@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 from importlib import import_module
 import json
@@ -185,6 +186,7 @@ def build_deployment_package(
             f"Expected ONNX export for model version {model_version_id} at {onnx_source}."
         )
     _validate_model_artifact(onnx_source, artifact_format="onnx")
+    export_manifest = normalize_classification_export_manifest(export_manifest, onnx_source)
     class_map = _class_map_from_export(export_manifest)
     deployment_io_schema = _deployment_io_schema(
         export_manifest=export_manifest,
@@ -205,6 +207,7 @@ def build_deployment_package(
             hardware_compatibility=package_hardware_compatibility,
             temporal=dict(export_manifest.get("temporal") or {}),
             instance_group_counts=instance_group_counts,
+            class_map=class_map,
             required_artifact_format=(
                 "tensorrt_plan"
                 if (
@@ -264,7 +267,8 @@ def build_deployment_package(
         _validate_model_artifact(serving_source, artifact_format=serving_artifact_format)
 
         class_map_path = source_root / "class_map.json"
-        _write_json(class_map_path, class_map)
+        # Keep the class-map hash identical on Windows builders and Linux runtimes.
+        class_map_path.write_bytes(json.dumps(class_map, indent=2, sort_keys=True).encode("utf-8"))
 
         deployment_export_manifest = dict(export_manifest)
         deployment_export_manifest["io_schema"] = deployment_io_schema
@@ -342,6 +346,7 @@ def build_deployment_package(
             model_family_slug=model_family_slug,
             version_no=version_no,
             task_type=task_type,
+            trainer_backend=str(deployment_export_manifest.get("trainer_backend") or "") or None,
             contract_major=contract_major,
             built_at=utc_now_iso(),
             training_artifact_manifest_uri=artifact_manifest_uri,
@@ -431,6 +436,98 @@ def _class_map_from_export(export_manifest: dict[str, Any]) -> list[str]:
     return [f"class_{index}" for index in range(class_count)]
 
 
+def normalize_classification_export_manifest(
+    export_manifest: dict[str, Any],
+    onnx_source: Path,
+) -> dict[str, Any]:
+    """Bind classification labels to the exported model, including legacy YOLO exports."""
+    if export_manifest.get("task_type") != "classification":
+        return export_manifest
+    graph = _onnx_graph_io_schema(onnx_source)
+    if graph is None:
+        return export_manifest
+    postprocessing = dict(export_manifest.get("postprocessing") or {})
+    class_map = _class_map_from_export(export_manifest)
+    model_names = (graph.get("metadata") or {}).get("names")
+    if export_manifest.get("trainer_backend") == "ultralytics-yolo" and model_names is not None:
+        source_labels = postprocessing.get("training_class_map", class_map)
+        if not isinstance(source_labels, list) or not all(
+            isinstance(label, str) for label in source_labels
+        ):
+            raise ValueError("Classification training class map must be a list of labels.")
+        class_map = _classification_labels_from_model_names(model_names, source_labels)
+        postprocessing["training_class_map"] = list(source_labels)
+        postprocessing["class_map_source"] = "onnx.names"
+    outputs = graph.get("outputs") or []
+    # Multi-output top-k models have a different output contract.
+    if len(outputs) == 1:
+        shape = outputs[0].get("shape") or []
+        output_count = shape[-1] if len(shape) in {1, 2} else None
+        if isinstance(output_count, int) and output_count > 0 and output_count != len(class_map):
+            raise ValueError(
+                f"Classification model has {output_count} outputs but its class map has "
+                f"{len(class_map)} labels. Re-export with the trained class order or retrain; "
+                "the class map cannot be safely truncated."
+            )
+    normalized = {
+        **export_manifest,
+        "postprocessing": postprocessing,
+        "class_count": len(class_map),
+    }
+    postprocessing["class_map"] = class_map
+    if class_map != _class_map_from_export(export_manifest):
+        digest = sha256_bytes(json.dumps(class_map, indent=2, sort_keys=True).encode("utf-8"))
+        normalized["class_map_sha256"] = digest
+        source_id = export_manifest.get("source_snapshot_id") or export_manifest.get(
+            "training_job_id"
+        )
+        normalized["class_map_version"] = f"{source_id or 'model'}:{digest[:12]}"
+    return normalized
+
+
+def _classification_labels_from_model_names(raw_names: str, source_labels: list[str]) -> list[str]:
+    # Ultralytics stores a Python dictionary literal in ONNX metadata, not necessarily JSON.
+    try:
+        names = ast.literal_eval(raw_names)
+    except (ValueError, SyntaxError) as exc:
+        raise ValueError("Invalid classification class names in ONNX metadata.") from exc
+    if isinstance(names, dict):
+        if set(names) == set(range(len(names))):
+            names = [names[index] for index in range(len(names))]
+        elif set(names) == {str(index) for index in range(len(names))}:
+            names = [names[str(index)] for index in range(len(names))]
+        else:
+            raise ValueError("ONNX classification class indices must be contiguous from zero.")
+    if (
+        not isinstance(names, list)
+        or not names
+        or not all(isinstance(name, str) for name in names)
+    ):
+        raise ValueError("ONNX classification metadata must contain an ordered list of class names.")
+    if len(set(source_labels)) != len(source_labels):
+        raise ValueError("Classification training labels must be unique.")
+    # Match the exact folder convention used by _prepare_classification_dataset.
+    folders = {}
+    for index, label in enumerate(source_labels):
+        safe_label = "".join(
+            char if char.isalnum() or char in {"-", "_"} else "_" for char in label.strip()
+        ) or "class"
+        folders[f"{index:03d}_{safe_label}"] = label
+    candidates = []
+    if all(name in folders for name in names):
+        candidates.append([folders[name] for name in names])
+    if all(name in source_labels for name in names):
+        candidates.append(list(names))
+    if not candidates or any(candidate != candidates[0] for candidate in candidates[1:]):
+        raise ValueError(
+            "ONNX classification names cannot be mapped unambiguously to training labels."
+        )
+    labels = candidates[0]
+    if len(set(labels)) != len(labels):
+        raise ValueError("ONNX classification names contain duplicate classes.")
+    return labels
+
+
 def _validate_model_artifact(path: Path, *, artifact_format: str) -> None:
     if path.stat().st_size <= 0:
         raise ValueError(f"Deployment artifact {path} is empty.")
@@ -450,6 +547,7 @@ def _existing_package_matches(
     temporal: dict[str, Any] | None = None,
     instance_group_counts: dict[TargetPath, int] | None = None,
     required_artifact_format: str | None = None,
+    class_map: list[str] | None = None,
 ) -> bool:
     if not (
         bool(manifest)
@@ -460,6 +558,19 @@ def _existing_package_matches(
     ):
         return False
     package_root = Path(str(manifest.get("package_root") or ""))
+    if class_map is not None:
+        if (
+            _class_map_from_export(manifest) != class_map
+            or manifest.get("class_count") != len(class_map)
+        ):
+            return False
+        descriptor = (manifest.get("source_manifests") or {}).get("class_map") or {}
+        class_map_path = package_root / str(descriptor.get("path") or "")
+        try:
+            if json.loads(class_map_path.read_text(encoding="utf-8")) != class_map:
+                return False
+        except (OSError, ValueError):
+            return False
     if str(manifest.get("task_type") or "") == "temporal_sequence":
         for name in (
             "temporal_contract",
@@ -724,6 +835,7 @@ def _onnx_graph_io_schema(onnx_path: Path) -> dict[str, Any] | None:
     first_input = inputs[0]
     return {
         "input_name": str(first_input.name),
+        "metadata": {item.key: item.value for item in model.metadata_props},
         "input_shape": _onnx_value_shape(first_input),
         "input_data_type": _onnx_elem_type_to_manifest_dtype(first_input),
         "outputs": [
@@ -751,6 +863,7 @@ def _onnxruntime_graph_io_schema(onnx_path: Path) -> dict[str, Any] | None:
     first_input = inputs[0]
     return {
         "input_name": str(first_input.name),
+        "metadata": dict(session.get_modelmeta().custom_metadata_map),
         "input_shape": list(first_input.shape or []),
         "input_data_type": _onnx_type_to_manifest_dtype(str(first_input.type)),
         "outputs": [

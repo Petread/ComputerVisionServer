@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for YBB Edge settings requested by the central server
+
+[Timer]
+OnBootSec=15
+OnUnitInactiveSec=5
+Unit=ybb-edge-settings.service
+
+[Install]
+WantedBy=timers.target

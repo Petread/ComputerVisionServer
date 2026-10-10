@@ -31,12 +31,13 @@ from cv_status import (
     TaskType,
 )
 from cv_utils import utc_now, utc_now_iso
-from sqlalchemy import and_, or_, select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import Session
 
 from cv_db.models import (
     DeploymentRelease,
     DeploymentTarget,
+    LabelProject,
     ModelFamily,
     ModelPromotion,
     ModelVersion,
@@ -166,6 +167,65 @@ def refresh_runtime_model_capability_cache(
         row.deployment_release_id: row
         for row in existing_rows
     }
+    # The deployment target is a global default, while runtime bindings follow
+    # a model family. A release records the production default at creation in
+    # rollback_source_release_id, preserving evidence after another family is
+    # promoted. Read all releases so deleting a successor does not erase it.
+    production_release_ids = set(
+        session.scalars(
+            select(DeploymentRelease.rollback_source_release_id).where(
+                DeploymentRelease.rollback_source_release_id.is_not(None)
+            )
+        ).all()
+    )
+    production_release_ids.update(
+        release_id
+        for release_id, promotion in promotions.items()
+        if promotion.status == PromotionStatus.PRODUCTION.value
+    )
+    production_release_ids.update(
+        target.active_release_id for target in targets.values() if target.active_release_id
+    )
+
+    def production_rank(candidate: DeploymentRelease) -> tuple[bool, bool, float, int, str]:
+        target = targets.get(candidate.target_path)
+        activated_at = _aware_datetime(candidate.activated_at)
+        promotion = promotions.get(candidate.id)
+        return (
+            target is not None and target.active_release_id == candidate.id,
+            promotion is not None and promotion.status == PromotionStatus.PRODUCTION.value,
+            activated_at.timestamp() if activated_at else 0.0,
+            int(candidate.triton_model_version or 0),
+            candidate.id,
+        )
+
+    family_production_releases: dict[tuple[str, str], DeploymentRelease] = {}
+    for release, _version, family in rows:
+        if (
+            release.id not in production_release_ids
+            or release.status != DeploymentReleaseStatus.ACTIVATED.value
+            or release.retired_at is not None
+        ):
+            continue
+        key = (release.target_path, family.id)
+        current = family_production_releases.get(key)
+        if current is None or production_rank(release) > production_rank(current):
+            family_production_releases[key] = release
+    family_production_release_ids = {
+        release.id for release in family_production_releases.values()
+    }
+    projects = {project.id: project for project in session.scalars(select(LabelProject)).all()}
+    project_production: dict[tuple[str, str, str, int], DeploymentRelease] = {}
+    for release, _version, family in rows:
+        if not family.label_project_id or release.id not in family_production_release_ids:
+            continue
+        key = (
+            family.label_project_id, release.target_path, family.task_type, int(family.contract_major)
+        )
+        current = project_production.get(key)
+        if current is None or production_rank(release) > production_rank(current):
+            project_production[key] = release
+    project_production_ids = {release.id for release in project_production.values()}
 
     synced_release_ids: set[str] = set()
     changed = 0
@@ -175,6 +235,7 @@ def refresh_runtime_model_capability_cache(
             release=release,
             target=targets.get(release.target_path),
             promotion=promotions.get(release.id),
+            family_production=release.id in family_production_release_ids,
         )
         capability = _deployment_capability_payload(
             release=release,
@@ -182,6 +243,12 @@ def refresh_runtime_model_capability_cache(
             family=family,
             deployment_status=deployment_status,
             selectable=selectable,
+        )
+        project = projects.get(family.label_project_id)
+        capability.update(
+            label_project_id=family.label_project_id,
+            label_project_title=project.title if project else None,
+            project_active_production=release.id in project_production_ids,
         )
         cache_row = existing.get(release.id)
         if cache_row is None:
@@ -486,7 +553,7 @@ def validate_runtime_channel_start_requirements(
 ) -> LoadedRuntimePipeline:
     loaded = load_published_runtime_pipeline(session, channel_id=channel_id)
     channel_mode = RuntimeMode(loaded.channel.mode)
-    if RuntimeMode(loaded.version.mode) != channel_mode:
+    if RuntimeMode(loaded.version.mode) != channel_mode and RuntimeMode(loaded.version.mode) != RuntimeMode.TRIGGER:
         raise ValueError(
             "Live channel pipelines must match the channel execution mode "
             f"({loaded.version.mode} != {channel_mode.value}). "
@@ -528,12 +595,12 @@ def create_runtime_execution_instance(
     executor_instance_id: str,
     assigned_runtime_worker: str,
 ) -> RuntimeExecution:
-    executor_service = _executor_for_mode(RuntimeMode(loaded.channel.mode))
+    executor_service = _executor_for_mode(RuntimeMode(loaded.version.mode))
     execution = RuntimeExecution(
         id=generate_prefixed_id("rex"),
         channel_id=loaded.channel.id,
         pipeline_version_id=loaded.version.id,
-        mode=loaded.channel.mode,
+        mode=loaded.version.mode,
         executor_service=executor_service,
         executor_instance_id=executor_instance_id,
         assigned_runtime_worker=assigned_runtime_worker,
@@ -922,6 +989,9 @@ def stop_runtime_execution(
     failed: bool = False,
 ) -> RuntimeExecution:
     execution = _get_runtime_execution(session, runtime_execution_id)
+    from cv_db.runtime_model_store import lock_runtime_use
+    if not lock_runtime_use(session, execution.id, exclusive=True):
+        return request_runtime_execution_stop(session, runtime_execution_id=execution.id)
     now = utc_now()
     execution.desired_state = RuntimeChannelDesiredState.STOPPED.value
     execution.status = (
@@ -1038,6 +1108,9 @@ def mark_stale_runtime_executions(
     ).all()
     changed: list[RuntimeExecution] = []
     for execution in stale_rows:
+        from cv_db.runtime_model_store import lock_runtime_use
+        if not lock_runtime_use(session, execution.id, exclusive=True):
+            continue
         if execution.status == RuntimeExecutionStatus.DRAINING.value:
             stopped = stop_runtime_execution(
                 session,
@@ -1128,6 +1201,26 @@ def list_recoverable_runtime_executions(session: Session) -> list[RuntimeExecuti
     ).all()
 
 
+def runtime_model_reference_query(
+    model_ref: RuntimeLogicalModelRef,
+) -> Select[tuple[RuntimeModelCapabilityCache]]:
+    query = select(RuntimeModelCapabilityCache).where(
+        RuntimeModelCapabilityCache.target_path == model_ref.target_path.value,
+        RuntimeModelCapabilityCache.contract_major == model_ref.contract_major,
+    )
+    if model_ref.selection_policy == "active_production" and model_ref.label_project_id:
+        return query.join(
+            ModelFamily, ModelFamily.slug == RuntimeModelCapabilityCache.model_family_slug
+        ).where(
+            ModelFamily.label_project_id == model_ref.label_project_id,
+            RuntimeModelCapabilityCache.task_type == model_ref.required_task_type.value,
+            RuntimeModelCapabilityCache.capability["project_active_production"].as_boolean().is_(True),
+        )
+    return query.where(
+        RuntimeModelCapabilityCache.model_family_slug == model_ref.model_family_slug
+    )
+
+
 def build_runtime_model_resolver(session: Session):
     # Refresh once when a resolver is created. A resolver may be reused for all
     # inference nodes in a runtime; refreshing inside _resolve made every frame
@@ -1136,10 +1229,7 @@ def build_runtime_model_resolver(session: Session):
 
     def _resolve(model_ref: RuntimeLogicalModelRef) -> RuntimeModelBinding:
         now = utc_now()
-        query = select(RuntimeModelCapabilityCache).where(
-            RuntimeModelCapabilityCache.model_family_slug == model_ref.model_family_slug,
-            RuntimeModelCapabilityCache.target_path == model_ref.target_path.value,
-            RuntimeModelCapabilityCache.contract_major == model_ref.contract_major,
+        query = runtime_model_reference_query(model_ref).where(
             RuntimeModelCapabilityCache.expires_at > now,
         )
         candidate_rows = session.scalars(query).all()
@@ -1727,9 +1817,10 @@ def _runtime_plan_summary(session: Session, loaded: LoadedRuntimePipeline) -> di
     return {
         "pipeline_version_id": loaded.version.id,
         "pipeline_definition_id": loaded.definition.id,
-        "mode": loaded.channel.mode,
-        "executor_service": _executor_for_mode(RuntimeMode(loaded.channel.mode)),
+        "mode": loaded.version.mode,
+        "executor_service": _executor_for_mode(RuntimeMode(loaded.version.mode)),
         "binding_signature": _runtime_binding_signature(session, loaded),
+        "trigger_pipelines": _runtime_trigger_bindings(session, loaded),
         "source_id": loaded.source.id if loaded.source is not None else None,
         "source_type": loaded.source.source_type if loaded.source is not None else None,
         "source_config": dict(loaded.source.config or {}) if loaded.source is not None else {},
@@ -1751,7 +1842,7 @@ def _runtime_plan_summary(session: Session, loaded: LoadedRuntimePipeline) -> di
 
 def _runtime_binding_signature(session: Session, loaded: LoadedRuntimePipeline) -> dict[str, Any]:
     return {
-        "mode": loaded.channel.mode,
+        "mode": loaded.version.mode,
         "pipeline_version_id": loaded.version.id,
         "source_id": loaded.source.id if loaded.source is not None else None,
         "source_type": loaded.source.source_type if loaded.source is not None else None,
@@ -1760,7 +1851,25 @@ def _runtime_binding_signature(session: Session, loaded: LoadedRuntimePipeline) 
         if loaded.source is not None
         else {},
         "model_bindings": _runtime_model_binding_signature(session, loaded),
+        "trigger_pipelines": _runtime_trigger_bindings(session, loaded),
     }
+
+
+def _runtime_trigger_bindings(session: Session, loaded: LoadedRuntimePipeline) -> list[dict[str, Any]]:
+    endpoints = session.scalars(select(TriggerEndpoint).where(
+        TriggerEndpoint.channel_id == loaded.channel.id,
+        TriggerEndpoint.enabled.is_(True),
+    )).all()
+    version_ids = sorted({endpoint.pipeline_version_id for endpoint in endpoints
+                          if endpoint.pipeline_version_id and endpoint.pipeline_version_id != loaded.version.id})
+    result = []
+    for version_id in version_ids:
+        trigger = load_published_runtime_pipeline(
+            session, channel_id=loaded.channel.id, pipeline_version_id=version_id,
+        )
+        result.append({"pipeline_version_id": version_id,
+                       "model_bindings": _runtime_model_binding_signature(session, trigger)})
+    return result
 
 
 def _runtime_model_binding_signature(
@@ -1788,11 +1897,12 @@ def _runtime_model_binding_signature(
             {
                 "node_key": node.node_key,
                 "node_type": node.node_type,
-                "model_family_slug": model_ref.model_family_slug,
+                "model_family_slug": binding.model_family_slug,
                 "target_path": model_ref.target_path.value,
                 "required_task_type": model_ref.required_task_type.value,
                 "selection_policy": model_ref.selection_policy,
                 "requested_deployment_release_id": model_ref.deployment_release_id,
+                "logical_model_ref": model_ref.model_dump(mode="json"),
                 "deployment_release_id": binding.deployment_release_id,
                 "deployment_target": binding.deployment_target,
                 "model_version_id": binding.model_version_id,
@@ -1951,6 +2061,7 @@ def _runtime_deployment_status(
     release: DeploymentRelease,
     target: DeploymentTarget | None,
     promotion: ModelPromotion | None,
+    family_production: bool = False,
 ) -> tuple[str, bool]:
     release_status = DeploymentReleaseStatus(release.status)
     if release_status == DeploymentReleaseStatus.RETIRED or release.retired_at is not None:
@@ -1960,6 +2071,8 @@ def _runtime_deployment_status(
     if release_status == DeploymentReleaseStatus.ACTIVATION_FAILED:
         return "failed", False
     if target is not None and target.active_release_id == release.id:
+        return "production", release_status == DeploymentReleaseStatus.ACTIVATED
+    if family_production:
         return "production", release_status == DeploymentReleaseStatus.ACTIVATED
     if promotion is not None and promotion.status == PromotionStatus.STAGED.value:
         return "staged", release_status == DeploymentReleaseStatus.ACTIVATED
@@ -2140,9 +2253,8 @@ def runtime_model_capability_is_selectable_for_policy(
         return False
     status = str(capability.get("deployment_status") or "").casefold()
     if selection_policy == "active_production":
-        # Only the release explicitly selected by the deployment target is
-        # production. Other activated releases remain selectable when pinned,
-        # but must not be followed by an active-production binding.
+        # The cache projects one production release per model family and target.
+        # Merely staged/activated releases must not become production bindings.
         return status == "production"
     if selection_policy == "staged_test":
         return status in {"staged", "testing", "test", "production", "activated", "active"}

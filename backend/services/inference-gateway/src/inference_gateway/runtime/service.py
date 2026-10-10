@@ -75,6 +75,7 @@ from cv_db import (
     update_batch_job_state,
     write_idempotency_response,
 )
+from cv_runtime.segmentation_masks import encode_mask
 from cv_runtime.temporal_execution import (
     _bounded_probability as _bounded_probability,
 )
@@ -138,6 +139,18 @@ class _OutputTensor:
     values: Sequence[float]
 
 
+@dataclass(frozen=True)
+class _ImagePreprocessingTransform:
+    original_width: int
+    original_height: int
+    model_width: int
+    model_height: int
+    resized_width: int
+    resized_height: int
+    pad_left: int = 0
+    pad_top: int = 0
+
+
 @dataclass
 class _BackendPhaseTiming:
     preprocessing_ms: float = 0.0
@@ -150,6 +163,10 @@ class _BackendPhaseTiming:
 _backend_phase_timing: ContextVar[_BackendPhaseTiming | None] = ContextVar(
     "inference_backend_phase_timing",
     default=None,
+)
+
+_return_segmentation_masks: ContextVar[bool] = ContextVar(
+    "return_segmentation_masks", default=False
 )
 
 
@@ -652,9 +669,14 @@ class TritonInferenceBackend:
         score_threshold: float,
         timeout_seconds: float | None,
     ) -> list[DetectionPrediction]:
-        outputs = await self._model_outputs_via_triton(
+        tensor, preprocessing_transform = await asyncio.to_thread(
+            _detection_tensor,
+            image_bytes,
+            route,
+        )
+        outputs = await self._model_outputs_for_tensor_via_triton(
             route=route,
-            image_bytes=image_bytes,
+            tensor=tensor,
             timeout_seconds=timeout_seconds,
         )
         return _detection_predictions_from_outputs(
@@ -662,6 +684,7 @@ class TritonInferenceBackend:
             outputs=outputs,
             max_detections=max_detections,
             score_threshold=score_threshold,
+            preprocessing_transform=preprocessing_transform,
         )
 
     async def _segment_via_triton(
@@ -1222,12 +1245,18 @@ class TritonInferenceBackend:
         max_detections: int,
         score_threshold: float,
     ) -> list[DetectionPrediction]:
-        outputs = self._model_outputs_via_local_onnx(route=route, image_bytes=image_bytes)
+        tensor, preprocessing_transform = _detection_tensor(image_bytes, route)
+        outputs = self._model_outputs_via_local_onnx(
+            route=route,
+            image_bytes=image_bytes,
+            tensor=tensor,
+        )
         return _detection_predictions_from_outputs(
             route=route,
             outputs=outputs,
             max_detections=max_detections,
             score_threshold=score_threshold,
+            preprocessing_transform=preprocessing_transform,
         )
 
     def _segment_via_local_onnx(
@@ -1251,6 +1280,7 @@ class TritonInferenceBackend:
         *,
         route: ReleaseContext,
         image_bytes: bytes,
+        tensor: Any | None = None,
     ) -> dict[str, _OutputTensor]:
         artifact_path = _deployment_artifact_path(route)
         try:
@@ -1292,7 +1322,8 @@ class TritonInferenceBackend:
                 status_code=500,
                 metadata={"deployment_release_id": route.deployment_release_id},
             )
-        tensor = _classification_tensor(image_bytes, route)
+        if tensor is None:
+            tensor = _classification_tensor(image_bytes, route)
         return self._run_local_onnx_tensor(session=session, tensor=tensor)
 
     def _model_outputs_for_tensor_via_local_onnx(
@@ -1465,6 +1496,29 @@ class BaseGatewayService:
 
     def close(self) -> None:
         self.backend.close()
+        self.anomaly_backend._inferencers.clear()
+
+    def release_unused_local_models(self) -> None:
+        from cv_db.runtime_model_store import demanded_release_ids
+        with session_scope(self.settings) as session:
+            demanded = demanded_release_ids(session)
+        paths = set()
+        for release in self.resolver.list_release_contexts(target_path=self.target_path):
+            if release.deployment_release_id in demanded:
+                try:
+                    paths.add(str(_deployment_artifact_path(release)))
+                except PlatformError:
+                    pass
+        for path in list(self.backend._onnx_sessions):
+            if path not in paths:
+                self.backend._onnx_sessions.pop(path, None)
+        for release_id in list(self.anomaly_backend._inferencers):
+            if release_id not in demanded:
+                self.anomaly_backend._inferencers.pop(release_id, None)
+        for backend in (self.backend, self.anomaly_backend):
+            for release_id in list(backend._last_used_at):
+                if release_id not in demanded:
+                    backend._last_used_at.pop(release_id, None)
 
     async def list_capabilities(self) -> ModelCapabilitiesResponse:
         releases = await asyncio.to_thread(self._servable_release_contexts)
@@ -1538,18 +1592,8 @@ class BaseGatewayService:
         return ModelStatusResponse(items=items, meta=self._meta())
 
     def _servable_release_contexts(self) -> list[ReleaseContext]:
-        releases = self.resolver.list_release_contexts(target_path=self.target_path)
-        if not releases or all(_uses_simulated_inference(release) for release in releases):
-            return releases
-        ready_versions = self.backend.ready_model_versions()
-        if ready_versions is None:
-            return releases
-        return [
-            release
-            for release in releases
-            if _uses_simulated_inference(release)
-            or (release.triton_model_name, release.triton_model_version) in ready_versions
-        ]
+        # Deployment availability remains independent of runtime residency.
+        return self.resolver.list_release_contexts(target_path=self.target_path)
 
     def _resolve_release(
         self,
@@ -1557,6 +1601,8 @@ class BaseGatewayService:
         deployment_release_id: str | None,
         missing_active_message: str,
     ) -> ReleaseContext:
+        from inference_gateway.runtime.admission import require_bound_release
+        require_bound_release(deployment_release_id)
         if deployment_release_id:
             release = self.resolver.resolve_release(
                 deployment_release_id=deployment_release_id,
@@ -1598,6 +1644,8 @@ class BaseGatewayService:
         wait_timeout_seconds: float | None = None,
     ):
         release_gate = self._release_gate(release)
+        from inference_gateway.runtime.admission import require_bound_release
+        require_bound_release(release.deployment_release_id)
         release_admitted = await release_gate.try_acquire(
             wait=wait,
             timeout_seconds=wait_timeout_seconds,
@@ -1612,6 +1660,9 @@ class BaseGatewayService:
             )
         global_admitted = False
         try:
+            from inference_gateway.runtime.admission import operator_direct_inference
+            if operator_direct_inference.get():
+                await asyncio.to_thread(self._load_direct_operator_release, release)
             global_admitted = await self.gate.try_acquire(
                 wait=wait,
                 timeout_seconds=wait_timeout_seconds,
@@ -1630,6 +1681,26 @@ class BaseGatewayService:
             if global_admitted:
                 await self.gate.release()
             await release_gate.release()
+
+    def _load_direct_operator_release(self, release: ReleaseContext) -> None:
+        """Load one activated release for an authenticated, channel-independent test."""
+        from cv_deploy.runtime import reconcile_runtime_models
+
+        try:
+            with session_scope(self.settings) as session:
+                reconcile_runtime_models(
+                    session,
+                    self.settings,
+                    extra_demanded_release_ids={release.deployment_release_id},
+                )
+        except Exception as exc:
+            raise PlatformError(
+                code="deployment_model_load_failed",
+                message="The selected deployment model could not be loaded for direct operator inference.",
+                detail=str(exc),
+                status_code=503,
+                retryable=True,
+            ) from exc
 
     def _meta(self) -> ResponseMeta:
         return ResponseMeta(
@@ -1808,6 +1879,7 @@ class BaseGatewayService:
             max_segments=payload.max_segments,
             score_threshold=payload.score_threshold,
             timeout_ms=payload.timeout_ms,
+            return_masks=payload.return_masks,
         )
 
     async def _run_segmentation_from_bytes(
@@ -1818,6 +1890,7 @@ class BaseGatewayService:
         max_segments: int,
         score_threshold: float | None,
         timeout_ms: int | None,
+        return_masks: bool = False,
     ) -> tuple[InferenceTiming, int, int, list[SegmentationPrediction]]:
         received_at = utc_now_iso()
         _, normalized_bytes, validation_ms, preprocessing_ms, width, height = (
@@ -1832,10 +1905,13 @@ class BaseGatewayService:
             timeout_ms,
             default_ms=self.settings.inference_limits.realtime_timeout_ms,
         )
-        threshold = score_threshold or route.confidence_threshold_default
+        threshold = (
+            score_threshold if score_threshold is not None else route.confidence_threshold_default
+        )
         backend_started = time.perf_counter()
         backend_timing = _BackendPhaseTiming()
         timing_token = _backend_phase_timing.set(backend_timing)
+        mask_token = _return_segmentation_masks.set(return_masks)
         try:
             segments = await asyncio.wait_for(
                 self.backend.segment(
@@ -1850,6 +1926,7 @@ class BaseGatewayService:
         except TimeoutError as exc:
             raise _inference_timeout_error(route, timeout_seconds) from exc
         finally:
+            _return_segmentation_masks.reset(mask_token)
             _backend_phase_timing.reset(timing_token)
         backend_total_ms = _elapsed_ms(backend_started)
         if backend_timing.measured:
@@ -3671,6 +3748,40 @@ def _classification_tensor(image_bytes: bytes, route: ReleaseContext) -> object:
     return tensor
 
 
+def _detection_tensor(
+    image_bytes: bytes,
+    route: ReleaseContext,
+) -> tuple[Any, _ImagePreprocessingTransform]:
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise PlatformError(
+            code="dependency_missing",
+            message="NumPy is required for image tensor preprocessing.",
+            status_code=503,
+        ) from exc
+    width, height = _classification_image_size(route)
+    preprocessing = route.manifest.get("preprocessing") or {}
+    letterbox = preprocessing.get("letterbox") or {}
+    use_letterbox = route.task_type == TaskType.DETECTION and (
+        str(preprocessing.get("resize_mode") or "").lower() == "letterbox"
+        or bool(letterbox.get("enabled"))
+    )
+    tensor, transform = _image_tensor_rgb_nchw_with_transform(
+        image_bytes,
+        width=width,
+        height=height,
+        letterbox=use_letterbox,
+        padding_value=int(letterbox.get("padding_value", 114)),
+        center=bool(letterbox.get("center", True)),
+    )
+    if _is_ultralytics_route(route):
+        tensor *= np.float32(1.0 / 255.0)
+    else:
+        _apply_manifest_normalization_inplace(tensor, route)
+    return tensor, transform
+
+
 def _image_tensor_rgb_nchw(image_bytes: bytes, *, width: int, height: int) -> Any:
     try:
         import cv2
@@ -3715,6 +3826,145 @@ def _image_tensor_rgb_nchw(image_bytes: bytes, *, width: int, height: int) -> An
         return tensor
 
 
+def _image_tensor_rgb_nchw_with_transform(
+    image_bytes: bytes,
+    *,
+    width: int,
+    height: int,
+    letterbox: bool,
+    padding_value: int,
+    center: bool,
+) -> tuple[Any, _ImagePreprocessingTransform]:
+    padding_value = max(0, min(int(padding_value), 255))
+    try:
+        import cv2
+        import numpy as np
+
+        encoded = np.frombuffer(image_bytes, dtype=np.uint8)
+        decoded = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+        if decoded is not None:
+            original_height, original_width = decoded.shape[:2]
+            resized_width, resized_height, pad_left, pad_top = _resized_image_geometry(
+                original_width=original_width,
+                original_height=original_height,
+                model_width=width,
+                model_height=height,
+                letterbox=letterbox,
+                center=center,
+            )
+            interpolation = cv2.INTER_LINEAR
+            if not letterbox and (
+                original_height > resized_height or original_width > resized_width
+            ):
+                interpolation = cv2.INTER_AREA
+            resized = cv2.resize(
+                decoded,
+                (resized_width, resized_height),
+                interpolation=interpolation,
+            )
+            if letterbox:
+                prepared = np.full(
+                    (height, width, 3),
+                    padding_value,
+                    dtype=np.uint8,
+                )
+                prepared[
+                    pad_top : pad_top + resized_height,
+                    pad_left : pad_left + resized_width,
+                ] = resized
+            else:
+                prepared = resized
+            tensor = np.empty((1, 3, height, width), dtype="float32")
+            tensor[0, 0, :, :] = prepared[:, :, 2]
+            tensor[0, 1, :, :] = prepared[:, :, 1]
+            tensor[0, 2, :, :] = prepared[:, :, 0]
+            return tensor, _ImagePreprocessingTransform(
+                original_width=original_width,
+                original_height=original_height,
+                model_width=width,
+                model_height=height,
+                resized_width=resized_width,
+                resized_height=resized_height,
+                pad_left=pad_left,
+                pad_top=pad_top,
+            )
+    except Exception:
+        pass
+
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError as exc:
+        raise PlatformError(
+            code="dependency_missing",
+            message="Pillow and NumPy are required for image tensor preprocessing.",
+            status_code=503,
+        ) from exc
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        image = image.convert("RGB")
+        original_width, original_height = image.size
+        resized_width, resized_height, pad_left, pad_top = _resized_image_geometry(
+            original_width=original_width,
+            original_height=original_height,
+            model_width=width,
+            model_height=height,
+            letterbox=letterbox,
+            center=center,
+        )
+        resized = image.resize(
+            (resized_width, resized_height),
+            Image.Resampling.BILINEAR,
+        )
+        if letterbox:
+            prepared = Image.new(
+                "RGB",
+                (width, height),
+                (padding_value,) * 3,
+            )
+            prepared.paste(resized, (pad_left, pad_top))
+        else:
+            prepared = resized
+        pixels = np.asarray(prepared)
+        tensor = np.empty((1, 3, height, width), dtype="float32")
+        tensor[0, 0, :, :] = pixels[:, :, 0]
+        tensor[0, 1, :, :] = pixels[:, :, 1]
+        tensor[0, 2, :, :] = pixels[:, :, 2]
+        return tensor, _ImagePreprocessingTransform(
+            original_width=original_width,
+            original_height=original_height,
+            model_width=width,
+            model_height=height,
+            resized_width=resized_width,
+            resized_height=resized_height,
+            pad_left=pad_left,
+            pad_top=pad_top,
+        )
+
+
+def _resized_image_geometry(
+    *,
+    original_width: int,
+    original_height: int,
+    model_width: int,
+    model_height: int,
+    letterbox: bool,
+    center: bool,
+) -> tuple[int, int, int, int]:
+    if not letterbox:
+        return model_width, model_height, 0, 0
+    scale = min(model_width / original_width, model_height / original_height)
+    resized_width = max(1, min(model_width, round(original_width * scale)))
+    resized_height = max(1, min(model_height, round(original_height * scale)))
+    if not center:
+        return resized_width, resized_height, 0, 0
+    return (
+        resized_width,
+        resized_height,
+        (model_width - resized_width) // 2,
+        (model_height - resized_height) // 2,
+    )
+
+
 def _classification_image_size(route: ReleaseContext) -> tuple[int, int]:
     input_tensors = (route.manifest.get("io_schema") or {}).get("input_tensors") or []
     if input_tensors and isinstance(input_tensors[0], dict):
@@ -3737,10 +3987,11 @@ def _classification_image_size(route: ReleaseContext) -> tuple[int, int]:
 
 def _is_ultralytics_route(route: ReleaseContext) -> bool:
     value = str(route.manifest.get("trainer_backend") or "").lower()
-    if value == "ultralytics-yolo":
-        return True
+    if value:
+        return value == "ultralytics-yolo"
     family = str(route.architecture.family or "").lower()
-    return family == "yolo" and route.task_type == TaskType.CLASSIFICATION
+    version = str(route.architecture.version or "").lower()
+    return family == "yolo" and version in {"v11", "v26"}
 
 
 def _apply_manifest_normalization_inplace(tensor: object, route: ReleaseContext) -> None:
@@ -3959,6 +4210,7 @@ def _detection_predictions_from_outputs(
     outputs: dict[str, _OutputTensor],
     max_detections: int,
     score_threshold: float,
+    preprocessing_transform: _ImagePreprocessingTransform | None = None,
 ) -> list[DetectionPrediction]:
     if not outputs:
         return []
@@ -3973,6 +4225,7 @@ def _detection_predictions_from_outputs(
             labels=labels,
             max_detections=max_detections,
             score_threshold=score_threshold,
+            preprocessing_transform=preprocessing_transform,
         )
     if boxes is not None and labels is not None:
         return _detections_from_dets_labels(
@@ -3981,12 +4234,14 @@ def _detection_predictions_from_outputs(
             labels=labels,
             max_detections=max_detections,
             score_threshold=score_threshold,
+            preprocessing_transform=preprocessing_transform,
         )
     return _detections_from_compact_tensor(
         route=route,
         tensor=next(iter(outputs.values())),
         max_detections=max_detections,
         score_threshold=score_threshold,
+        preprocessing_transform=preprocessing_transform,
     )
 
 
@@ -3998,6 +4253,7 @@ def _detections_from_explicit_tensors(
     labels: _OutputTensor,
     max_detections: int,
     score_threshold: float,
+    preprocessing_transform: _ImagePreprocessingTransform | None = None,
 ) -> list[DetectionPrediction]:
     rows = _rows_from_tensor(
         boxes,
@@ -4021,7 +4277,11 @@ def _detections_from_explicit_tensors(
                 box=(
                     _axis_aligned_box_from_oriented(oriented_box)
                     if oriented_box is not None
-                    else _detection_box_from_values(box, route=route)
+                    else _detection_box_from_values(
+                        box,
+                        route=route,
+                        preprocessing_transform=preprocessing_transform,
+                    )
                 ),
                 oriented_box=oriented_box,
             )
@@ -4036,6 +4296,7 @@ def _detections_from_dets_labels(
     labels: _OutputTensor,
     max_detections: int,
     score_threshold: float,
+    preprocessing_transform: _ImagePreprocessingTransform | None = None,
 ) -> list[DetectionPrediction]:
     rows = _rows_from_tensor(
         dets,
@@ -4066,7 +4327,11 @@ def _detections_from_dets_labels(
                 box=(
                     _axis_aligned_box_from_oriented(oriented_box)
                     if oriented_box is not None
-                    else _detection_box_from_values(row[:4], route=route)
+                    else _detection_box_from_values(
+                        row[:4],
+                        route=route,
+                        preprocessing_transform=preprocessing_transform,
+                    )
                 ),
                 oriented_box=oriented_box,
             )
@@ -4080,6 +4345,7 @@ def _detections_from_compact_tensor(
     tensor: _OutputTensor,
     max_detections: int,
     score_threshold: float,
+    preprocessing_transform: _ImagePreprocessingTransform | None = None,
 ) -> list[DetectionPrediction]:
     if route.task_type == TaskType.ORIENTED_DETECTION:
         return _oriented_detections_from_compact_tensor(
@@ -4091,34 +4357,82 @@ def _detections_from_compact_tensor(
     rows = _rows_from_model_output(tensor)
     results: list[DetectionPrediction] = []
     class_count = max(len(route.class_labels), 1)
+    raw_yolo_layout = _raw_yolo_detection_layout(
+        route=route,
+        tensor=tensor,
+        class_count=class_count,
+    )
     for row in rows:
-        if len(row) < 6:
-            continue
-        if len(row) == 6:
-            x1, y1, x2, y2, score, label_index = row
+        if raw_yolo_layout is not None:
+            class_offset = 5 if raw_yolo_layout == "objectness" else 4
+            if len(row) < class_offset + class_count:
+                continue
+            class_scores = row[class_offset : class_offset + class_count]
+            label_index, class_score = max(
+                enumerate(class_scores),
+                key=lambda item: item[1],
+            )
+            score = (
+                float(row[4]) * float(class_score)
+                if raw_yolo_layout == "objectness"
+                else float(class_score)
+            )
+            if score < score_threshold:
+                continue
+            box_values = _xywh_to_xyxy(row[:4])
+        elif len(row) >= 6:
+            x1, y1, x2, y2, score, label_index = row[:6]
             if score < score_threshold:
                 continue
             box_values = [x1, y1, x2, y2]
         else:
-            box_values = _xywh_to_xyxy(row[:4])
-            class_scores = row[4 : 4 + class_count] or row[4:]
-            label_index, score = max(
-                enumerate(class_scores),
-                key=lambda item: item[1],
-            )
-            if score < score_threshold:
-                continue
+            continue
         results.append(
             DetectionPrediction(
                 label=_label_for_index(route, int(label_index)),
                 score=round(_clip01(score), 6),
-                box=_detection_box_from_values(box_values, route=route),
+                box=_detection_box_from_values(
+                    box_values,
+                    route=route,
+                    preprocessing_transform=preprocessing_transform,
+                ),
             )
         )
     results = sorted(results, key=lambda item: item.score, reverse=True)
     if bool((route.manifest.get("nms") or {}).get("enabled", False)):
-        results = _nms(results, iou_threshold=float((route.manifest.get("nms") or {}).get("iou_threshold") or 0.5))
+        results = _nms(
+            results,
+            iou_threshold=float(
+                (route.manifest.get("nms") or {}).get("iou_threshold") or 0.5
+            ),
+        )
     return results[:max_detections]
+
+
+def _raw_yolo_detection_layout(
+    *,
+    route: ReleaseContext,
+    tensor: _OutputTensor,
+    class_count: int,
+) -> str | None:
+    if route.task_type != TaskType.DETECTION or not _is_ultralytics_route(route):
+        return None
+    # For two classes Ultralytics emits [1, 6, N]. The six values are
+    # xywh + two class scores, not the equally wide post-NMS xyxy/score/class row.
+    shape = tensor.shape
+    if len(shape) == 3:
+        _, channel_count, candidate_count = shape
+    elif len(shape) == 2:
+        channel_count, candidate_count = shape
+    else:
+        return None
+    if channel_count <= 0 or candidate_count <= channel_count:
+        return None
+    if channel_count == 4 + class_count:
+        return "class_scores"
+    if channel_count == 5 + class_count:
+        return "objectness"
+    return None
 
 
 def _oriented_detections_from_compact_tensor(
@@ -4369,13 +4683,17 @@ def _segments_from_yolo_rows(
             reverse=True,
         )[:pre_nms_limit]
     selected = _nms_yolo_segments(route, candidates)[:max_segments]
+    full_masks: list[Any] = []
     polygons = _yolo_mask_polygons(
         proto_tensor=proto_tensor,
         selected=selected,
         route=route,
+        mask_sink=full_masks if _return_segmentation_masks.get() else None,
     )
     results: list[SegmentationPrediction] = []
-    for (detection, _coefficients), polygon in zip(selected, polygons, strict=False):
+    for index, ((detection, _coefficients), polygon) in enumerate(
+        zip(selected, polygons, strict=False)
+    ):
         polygon = polygon or _box_polygon(
             detection.box.x_min,
             detection.box.y_min,
@@ -4387,6 +4705,7 @@ def _segments_from_yolo_rows(
                 label=detection.label,
                 score=detection.score,
                 polygon=polygon,
+                mask=full_masks[index] if index < len(full_masks) else None,
             )
         )
     return results
@@ -4492,6 +4811,7 @@ def _yolo_mask_polygons(
     proto_tensor: _OutputTensor,
     selected: Sequence[tuple[DetectionPrediction, list[float]]],
     route: ReleaseContext,
+    mask_sink: list[Any] | None = None,
 ) -> list[list[SegmentationPoint] | None]:
     if not selected:
         return []
@@ -4540,6 +4860,8 @@ def _yolo_mask_polygons(
             active_mask &= (
                 (y_centers >= float(box.y_min)) & (y_centers <= float(box.y_max))
             )[:, None]
+            if mask_sink is not None:
+                mask_sink.append(encode_mask(active_mask))
             polygons.append(
                 _mask_polygon_from_binary_mask(active_mask)
                 if bool(active_mask.any())
@@ -4547,6 +4869,8 @@ def _yolo_mask_polygons(
             )
         return polygons
     except (ImportError, TypeError, ValueError):
+        if mask_sink is not None:
+            mask_sink.clear()
         return [
             _yolo_mask_polygon(
                 proto_tensor=proto_tensor,
@@ -4634,6 +4958,8 @@ def _segments_from_semantic_masks(
     max_segments: int,
     score_threshold: float,
 ) -> list[SegmentationPrediction]:
+    if _return_segmentation_masks.get():
+        return _lossless_semantic_predictions(route, masks, max_segments, score_threshold)
     shape = masks.shape
     if len(shape) < 3:
         return []
@@ -4672,6 +4998,55 @@ def _segments_from_semantic_masks(
             )
         )
     return sorted(results, key=lambda item: item.score, reverse=True)[:max_segments]
+
+
+def _lossless_semantic_predictions(
+    route: ReleaseContext,
+    masks: _OutputTensor,
+    max_segments: int,
+    threshold: float,
+) -> list[SegmentationPrediction]:
+    import numpy as np
+
+    logits = np.asarray(masks.values, dtype=np.float32).reshape(masks.shape)
+    if logits.ndim == 4 and logits.shape[0] == 1:
+        logits = logits[0]
+    if logits.ndim != 3 or not np.isfinite(logits).all():
+        raise ValueError("Semantic masks require finite C/H/W scores.")
+    labels = list(route.class_labels)
+    # The existing torchvision semantic trainer reserves channel zero for
+    # background; other exports must provide one label per output channel.
+    if logits.shape[0] == len(labels) + 1 and "background" not in labels:
+        labels = ["background", *labels]
+    if logits.shape[0] != len(labels) or len(set(labels)) != len(labels):
+        raise ValueError("Semantic output channels do not match the model class contract.")
+    is_probability = bool(
+        np.all((logits >= 0) & (logits <= 1)) and np.allclose(logits.sum(axis=0), 1, atol=1e-3)
+    )
+    if is_probability:
+        probabilities = logits
+    else:
+        exp = np.exp(logits - logits.max(axis=0, keepdims=True))
+        probabilities = exp / exp.sum(axis=0, keepdims=True)
+    winners = probabilities.argmax(axis=0)
+    confidence = probabilities.max(axis=0)
+    results = []
+    for index, label in enumerate(labels):
+        active = (winners == index) & (confidence >= threshold)
+        if active.any():
+            results.append(
+                SegmentationPrediction(
+                    label=label,
+                    score=float(confidence[active].mean()),
+                    polygon=_mask_polygon_from_binary_mask(active) or [],
+                    mask=encode_mask(active),
+                )
+            )
+    if len(results) > max_segments:
+        raise ValueError(
+            "max_segments would discard semantic classes required by the mask contract."
+        )
+    return results
 
 
 def _output_by_role(outputs: dict[str, _OutputTensor], role: str) -> _OutputTensor | None:
@@ -4890,13 +5265,40 @@ def _normalize_degrees(value: float) -> float:
     return round(normalized, 6)
 
 
-def _detection_box_from_values(values: Sequence[float], *, route: ReleaseContext) -> DetectionBox:
+def _detection_box_from_values(
+    values: Sequence[float],
+    *,
+    route: ReleaseContext,
+    preprocessing_transform: _ImagePreprocessingTransform | None = None,
+) -> DetectionBox:
     x1, y1, x2, y2 = [float(item) for item in values[:4]]
     width, height = _classification_image_size(route)
-    if max(abs(x1), abs(x2)) > 1.0:
+    if max(abs(x1), abs(x2)) <= 1.0:
+        x1 *= width
+        x2 *= width
+    if max(abs(y1), abs(y2)) <= 1.0:
+        y1 *= height
+        y2 *= height
+    if preprocessing_transform is not None:
+        x1 = (x1 - preprocessing_transform.pad_left) / max(
+            preprocessing_transform.resized_width,
+            1,
+        )
+        x2 = (x2 - preprocessing_transform.pad_left) / max(
+            preprocessing_transform.resized_width,
+            1,
+        )
+        y1 = (y1 - preprocessing_transform.pad_top) / max(
+            preprocessing_transform.resized_height,
+            1,
+        )
+        y2 = (y2 - preprocessing_transform.pad_top) / max(
+            preprocessing_transform.resized_height,
+            1,
+        )
+    else:
         x1 /= width
         x2 /= width
-    if max(abs(y1), abs(y2)) > 1.0:
         y1 /= height
         y2 /= height
     x_min = _clip01(min(x1, x2))
@@ -5181,7 +5583,11 @@ def _looks_like_probability_mask(values: Sequence[float]) -> bool:
 def _nms(detections: list[DetectionPrediction], *, iou_threshold: float) -> list[DetectionPrediction]:
     kept: list[DetectionPrediction] = []
     for detection in detections:
-        if all(_box_iou(detection.box, kept_detection.box) <= iou_threshold for kept_detection in kept):
+        if all(
+            detection.label != kept_detection.label
+            or _box_iou(detection.box, kept_detection.box) <= iou_threshold
+            for kept_detection in kept
+        ):
             kept.append(detection)
     return kept
 

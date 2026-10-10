@@ -19,6 +19,11 @@ from typing import Any
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+try:
+    from scripts.release import edge_system_packages
+except ImportError:  # Direct script execution.
+    import edge_system_packages
+
 ROOT = Path(__file__).resolve().parents[2]
 PROFILE_FILES = {
     "jetson_orin_nano": "jetson-orin-nano.json",
@@ -34,6 +39,14 @@ WINDOWS_TENSORRT_DISTRIBUTIONS = {
     "tensorrt-cu13-libs",
 }
 LARGE_WHEEL_NORMALIZATION_LIMIT = 128 * 1024 * 1024
+INTERNAL_PROJECTS = (
+    ROOT / "backend/packages/cv-status",
+    ROOT / "backend/packages/cv-contracts",
+    ROOT / "backend/packages/cv-utils",
+    ROOT / "backend/packages/cv-edge",
+    ROOT / "backend/packages/cv-runtime",
+    ROOT / "backend/services/edge-agent",
+)
 
 
 class BundleError(RuntimeError):
@@ -285,14 +298,7 @@ def _build_internal_wheels(
     if not bool(config.get("build_internal_wheels", False)) and not build_isolation:
         return
     python = str(config.get("python_executable") or sys.executable)
-    for project in (
-        ROOT / "backend/packages/cv-status",
-        ROOT / "backend/packages/cv-contracts",
-        ROOT / "backend/packages/cv-utils",
-        ROOT / "backend/packages/cv-edge",
-        ROOT / "backend/packages/cv-runtime",
-        ROOT / "backend/services/edge-agent",
-    ):
+    for project in INTERNAL_PROJECTS:
         with tempfile.TemporaryDirectory(prefix="ybb-edge-internal-wheel-") as temporary:
             built_directory = Path(temporary)
             command = [
@@ -317,6 +323,46 @@ def _build_internal_wheels(
                 if _normalized_distribution(previous.name) == distribution:
                     previous.unlink()
             os.replace(built[0], destination / built[0].name)
+
+
+def _validate_internal_wheel_sources(directory: Path) -> None:
+    """Never combine current installer scripts with stale cached first-party Python code."""
+    stale: list[str] = []
+    wheels = list(directory.glob("*.whl"))
+    for project in INTERNAL_PROJECTS:
+        candidates = [
+            wheel for wheel in wheels if _normalized_distribution(wheel.name) == project.name
+        ]
+        if len(candidates) != 1:
+            stale.append(project.name)
+            continue
+        source_root = project / "src"
+        sources = {
+            path.relative_to(source_root).as_posix(): path.read_text(encoding="utf-8-sig")
+            for path in source_root.rglob("*.py")
+        }
+        try:
+            with zipfile.ZipFile(candidates[0]) as archive:
+                names = [name for name in archive.namelist() if name.endswith(".py")]
+                if len(names) != len(set(names)) or set(names) != set(sources):
+                    stale.append(project.name)
+                    continue
+                if any(
+                    archive.read(name).decode("utf-8-sig").replace("\r\n", "\n") != source
+                    for name, source in sources.items()
+                ):
+                    stale.append(project.name)
+        except (OSError, ValueError, zipfile.BadZipFile):
+            stale.append(project.name)
+    if stale:
+        raise BundleError(
+            "Veraltete oder unvollständige interne Python-Pakete im Wheelhouse: "
+            + ", ".join(stale)
+            + ". Die Installer-Dateien und diese Pakete müssen aus demselben Codestand stammen. "
+            "In der Builder-UI zuerst 'Online-Inhalte vorbereiten (Internet)' ausführen und "
+            "anschließend das Bundle neu bauen. Alternativ 'Interne Wheels im Offline-Build "
+            "erneut bauen' mit lokal verfügbaren Build-Abhängigkeiten aktivieren."
+        )
 
 
 def _runtime_distribution_names(config: dict[str, Any]) -> list[str]:
@@ -809,7 +855,8 @@ def _generate_env(config: dict[str, Any], profile: dict[str, Any]) -> str:
         "YBB_ALLOW_PLC_WRITES": str(bool(config.get("allow_plc_writes", False))).lower(),
         "YBB_EDGE_DATA_ROOT": config.get("state_root", "/var/lib/ybb-edge"),
         "YBB_EDGE_ARTIFACT_QUOTA_BYTES": int(config.get("artifact_quota_bytes", 34359738368)),
-        "YBB_EDGE_OUTBOX_QUOTA_BYTES": int(config.get("outbox_quota_bytes", 2147483648)),
+        "YBB_EDGE_OUTBOX_QUOTA_BYTES": int(config.get("outbox_quota_bytes", 67108864)),
+        "YBB_EDGE_OUTBOX_MAX_ITEMS": int(config.get("outbox_max_items", 10000)),
         "YBB_EDGE_MINIMUM_DISK_FREE_BYTES": int(config.get("minimum_disk_free_bytes", 2147483648)),
         "YBB_EDGE_ENGINE_BUILDER_MODE": config.get(
             "engine_builder_mode", default_engine_builder
@@ -856,12 +903,14 @@ def _validate_device_configuration(config: dict[str, Any]) -> None:
 
 
 def _stage_payload(config: dict[str, Any], profile: dict[str, Any], stage: Path) -> None:
+    edge_system_packages.stage(profile, stage)
     wheel_source = _require_path(config, "wheelhouse_directory", directory=True)
     raw_wheels = Path(tempfile.mkdtemp(prefix="ybb-edge-wheels-"))
     try:
         for wheel in sorted(wheel_source.glob("*.whl")):
             _link_or_copy(wheel, raw_wheels / wheel.name)
         _build_internal_wheels(config, raw_wheels)
+        _validate_internal_wheel_sources(raw_wheels)
         wheels = sorted(raw_wheels.glob("*.whl"))
         runtime_distributions = _validate_wheelhouse(raw_wheels, profile, config)
         target_wheels = stage / "wheelhouse"
@@ -908,6 +957,10 @@ def _stage_payload(config: dict[str, Any], profile: dict[str, Any], stage: Path)
         "configure-ufw.sh",
         "edge-watchdog.py",
         "edge-runtime-launcher.py",
+        "edge-settings-helper.py",
+        "edge-system-packages.py",
+        "ybb-edge-settings.service",
+        "ybb-edge-settings.timer",
         "check-runtime-dependencies.py",
         "ybb-edge-agent.service",
         "ybb-edge-watchdog.service",
@@ -915,6 +968,10 @@ def _stage_payload(config: dict[str, Any], profile: dict[str, Any], stage: Path)
         "ybb-edge-watchdog.timer",
     ):
         shutil.copyfile(ROOT / "deployment/edge" / name, deployment_target / name)
+    shutil.copyfile(
+        ROOT / "backend/packages/cv-contracts/src/cv_contracts/edge_environment.py",
+        deployment_target / "edge_environment.py",
+    )
     provisioning = ROOT / "deployment/edge/provisioning"
     if provisioning.exists():
         _copy_tree_files(provisioning, stage / "deployment/edge/provisioning")
@@ -942,6 +999,10 @@ def _stage_payload(config: dict[str, Any], profile: dict[str, Any], stage: Path)
     )
 
     if profile["platform"] == "windows_11":
+        shutil.copyfile(
+            ROOT / "deployment/edge/WindowsReleaseSignatureVerifier.cs",
+            deployment_target / "WindowsReleaseSignatureVerifier.cs",
+        )
         runtime, winsw, _lock = _windows_payload_paths(config)
         sources = _json(WINDOWS_PAYLOAD_SOURCES)
         inference_payloads = _windows_inference_payload_paths(config, sources)
@@ -1023,9 +1084,14 @@ def _prepare_signature(stage: Path, config: dict[str, Any]) -> bool:
     return True
 
 
-def _sign_checksums(stage: Path, config: dict[str, Any]) -> None:
+def _sign_checksums(stage: Path, config: dict[str, Any], passphrase: str = "") -> None:
+    try:
+        from build_edge_runtime_update import _passphrase_input, _resolve_openssl
+    except ModuleNotFoundError:
+        from scripts.release.build_edge_runtime_update import _passphrase_input, _resolve_openssl
+
     private_key = Path(str(config["signing_private_key"])).expanduser().resolve()
-    openssl = str(config.get("openssl_executable") or "openssl")
+    openssl = _resolve_openssl(str(config.get("openssl_executable") or "openssl"))
     signature = stage / "SHA256SUMS.sig"
     completed = subprocess.run(
         [
@@ -1034,14 +1100,36 @@ def _sign_checksums(stage: Path, config: dict[str, Any]) -> None:
             "-sha256",
             "-sign",
             str(private_key),
+            "-passin",
+            "stdin",
             "-out",
             str(signature),
             str(stage / "SHA256SUMS"),
         ],
+        input=_passphrase_input(passphrase),
+        capture_output=True,
+        timeout=30,
         check=False,
     )
     if completed.returncode:
-        raise BundleError("OpenSSL could not create the release signature.")
+        raise BundleError("Release-Signatur fehlgeschlagen. RSA-Schlüssel und Passphrase prüfen.")
+    verified = subprocess.run(
+        [
+            openssl,
+            "dgst",
+            "-sha256",
+            "-verify",
+            str(stage / "release-signing-public.pem"),
+            "-signature",
+            str(signature),
+            str(stage / "SHA256SUMS"),
+        ],
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if verified.returncode:
+        raise BundleError("Privater und öffentlicher Release-Schlüssel passen nicht zusammen.")
 
 
 def _checksums(stage: Path) -> None:
@@ -1086,7 +1174,9 @@ def _tar_gz(stage: Path, output: Path, epoch: int) -> None:
                     archive.addfile(info, stream)
 
 
-def build(config_path: Path, output_directory: Path | None = None) -> Path:
+def build(
+    config_path: Path, output_directory: Path | None = None, *, signing_passphrase: str = ""
+) -> Path:
     config = _json(config_path)
     platform_name = str(config.get("target_platform", ""))
     if platform_name not in PROFILE_FILES:
@@ -1114,7 +1204,7 @@ def build(config_path: Path, output_directory: Path | None = None) -> Path:
         signing_enabled = _prepare_signature(stage, config)
         _checksums(stage)
         if signing_enabled:
-            _sign_checksums(stage, config)
+            _sign_checksums(stage, config, signing_passphrase)
         if extension == ".zip":
             _zip(stage, output)
         else:
@@ -1122,9 +1212,7 @@ def build(config_path: Path, output_directory: Path | None = None) -> Path:
     result = {"bundle": str(output), "sha256": _sha256(output)}
     if platform_name == "windows_11":
         companion_installer = destination / f"ybb-edge-{platform_name}-{version}-installer.exe"
-        shutil.copyfile(
-            _require_path(config, "windows_installer_executable"), companion_installer
-        )
+        shutil.copyfile(_require_path(config, "windows_installer_executable"), companion_installer)
         result["installer"] = str(companion_installer)
         result["installer_sha256"] = _sha256(companion_installer)
     print(json.dumps(result, sort_keys=True))
@@ -1201,6 +1289,7 @@ def prepare_wheelhouse(config_path: Path) -> Path:
     python = str(config.get("python_executable") or sys.executable)
     if platform_name == "windows_11":
         prepare_windows_payloads(config, profile)
+    edge_system_packages.prepare(profile)
     if reuse_wheelhouse:
         _validate_prepared_wheelhouse(
             destination,
@@ -1332,6 +1421,7 @@ def main() -> int:
     build_parser = sub.add_parser("build")
     build_parser.add_argument("--config", type=Path, required=True)
     build_parser.add_argument("--output-directory", type=Path)
+    build_parser.add_argument("--signing-passphrase-stdin", action="store_true")
     prepare_parser = sub.add_parser("prepare-wheelhouse")
     prepare_parser.add_argument("--config", type=Path, required=True)
     verify_parser = sub.add_parser("verify")
@@ -1341,7 +1431,12 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "build":
-            build(args.config, args.output_directory)
+            passphrase = (
+                sys.stdin.buffer.readline().decode("utf-8").rstrip("\r\n")
+                if args.signing_passphrase_stdin
+                else ""
+            )
+            build(args.config, args.output_directory, signing_passphrase=passphrase)
         elif args.command == "prepare-wheelhouse":
             prepare_wheelhouse(args.config)
         else:

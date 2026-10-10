@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +16,7 @@ from cv_contracts.runtime import (
 )
 
 from cv_runtime.context import NodeInputs, RuntimeExecutionContext
+from cv_runtime.frame_analysis_cache import immutable_roi_mask
 from cv_runtime.handlers import NodeExecutionResult
 from cv_runtime.high_rate_phase import (
     HighRatePhaseSnapshot,
@@ -140,6 +142,7 @@ class StemSurfacePhaseHandler:
                 snapshot = high_rate_bridge.snapshot(
                     track_id,
                     geometry.frame_sequence if geometry is not None else None,
+                    source_generation=frame.metadata.get("high_rate_phase_source_generation"),
                 )
                 if snapshot.track_id is not None:
                     fallback_profile, fallback_profile_error = _process_profile(frame)
@@ -265,11 +268,13 @@ class StemSurfacePhaseHandler:
         )
 
         try:
+            preparation_started = time.perf_counter()
             cv2 = _opencv()
             axis = _axis_observation(geometry)
-            gray = _frame_gray(frame, cv2)
+            gray = context.frame_analysis_cache.get(frame, "gray", lambda: _frame_gray(frame, cv2))
             mask = _segment_mask(
-                segments, image_width=axis.image_width, image_height=axis.image_height, cv2=cv2
+                segments, image_width=axis.image_width, image_height=axis.image_height, cv2=cv2,
+                cache=context.frame_analysis_cache,
             )
             mask = cv2.bitwise_and(mask, _surface_roi_mask(process_profile, cv2=cv2))
             sequence = _rotation_frame_sequence(context, frame, geometry)
@@ -309,6 +314,9 @@ class StemSurfacePhaseHandler:
                 }
             )
 
+        context.stem_stage_timings_ms[f"{node.node_key}_image_preparation_ms"] = (
+            time.perf_counter() - preparation_started
+        ) * 1000
         calibration, calibration_parse_reason = _calibration(node)
         diameter_mm = _metric_cross_section_diameter_mm(geometry, process_profile)
         if high_rate_requested:
@@ -355,13 +363,21 @@ class StemSurfacePhaseHandler:
                     ),
                 )
             else:
+                seed_started = time.perf_counter()
                 tracking_metadata = segments.metadata.get("active_stem_tracking")
                 session_id = (
                     str(tracking_metadata.get("session_id") or "").strip() or None
                     if isinstance(tracking_metadata, Mapping)
                     else None
                 )
-                high_rate_bridge.publish_seed(
+                deadline = context.metadata.get("pipeline_deadline_perf")
+                capture_ns = frame.metadata.get("capture_monotonic_ns")
+                if isinstance(capture_ns, int) and capture_ns > 0:
+                    remaining = (high_rate_bridge.config.phase_replay_window_ms / 1000.0
+                                 - max(time.monotonic_ns() - capture_ns, 0) / 1e9)
+                    deadline = min(deadline if deadline is not None else math.inf,
+                                   time.perf_counter() + remaining)
+                generation = high_rate_bridge.publish_seed(
                     StemPhaseSeed(
                         track_id=track_id,
                         session_id=session_id,
@@ -384,9 +400,18 @@ class StemSurfacePhaseHandler:
                         image_context_id=geometry.image_context_id,
                         intrinsic_calibration_hash=process_profile.intrinsic_calibration_hash,
                         process_calibration_hash=process_profile.calibration_hash,
+                        source_generation=frame.metadata.get("high_rate_phase_source_generation"),
+                        deadline_perf=deadline,
                     )
                 )
-                snapshot = high_rate_bridge.snapshot(track_id, sequence)
+                snapshot = high_rate_bridge.wait_for_snapshot(
+                    track_id, sequence, generation=generation,
+                    deadline_perf=deadline,
+                )
+                context.stem_stage_timings_ms[f"{node.node_key}_seed_handoff_wait_ms"] = (
+                    time.perf_counter() - seed_started
+                ) * 1000
+                high_rate_bridge.record_measurement_pair(snapshot)
             return self._high_rate_result(
                 node=node,
                 frame=frame,
@@ -974,9 +999,10 @@ def _surface_roi_mask(
         [[point.x_px, point.y_px] for point in image_points],
         dtype=np.float64,
     )
-    mask = np.zeros((profile.image_height, profile.image_width), dtype=np.uint8)
-    cv2.fillPoly(mask, [np.rint(points).astype(np.int32)], 255)
-    return mask
+    return immutable_roi_mask(
+        profile.calibration_hash, profile.image_width, profile.image_height,
+        tuple(map(tuple, np.rint(points).astype(np.int32).tolist())),
+    )
 
 
 def _canonical_patch(

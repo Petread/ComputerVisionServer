@@ -25,6 +25,8 @@ def test_settings_loader_reads_base_and_env_files(monkeypatch) -> None:
     assert settings.database.database == "cv_platform"
     assert settings.redis.host == "redis"
     assert settings.api_keys.enabled is False
+    assert settings.request_limits.inference_body_limit_bytes == 33_554_432
+    assert settings.request_limits.max_image_bytes == 31_457_280
 
 
 def test_prepare_runtime_paths_creates_quarantine_backup_and_dvc_roots(tmp_path: Path) -> None:

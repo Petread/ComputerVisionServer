@@ -91,6 +91,8 @@ class HttpInferenceGatewayClient:
     overload_policy: Literal["fail", "wait"] = "fail"
     overload_retry_interval_seconds: float = 0.025
     overload_retry_max_interval_seconds: float = 0.25
+    runtime_execution_id: str | None = None
+    pipeline_version_id: str | None = None
     _client: httpx.Client | None = field(default=None, init=False, repr=False)
     _client_lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
@@ -334,6 +336,10 @@ class HttpInferenceGatewayClient:
                     base_url=self.base_url.rstrip("/"),
                     headers={
                         "Content-Type": "application/json",
+                        **({"X-Runtime-Execution-Id": self.runtime_execution_id}
+                           if self.runtime_execution_id else {}),
+                        **({"X-Runtime-Pipeline-Version-Id": self.pipeline_version_id}
+                           if self.pipeline_version_id else {}),
                         **(
                             {"Authorization": f"Bearer {self.bearer_token}"}
                             if self.bearer_token

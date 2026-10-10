@@ -53,6 +53,29 @@ def _registration(ip: str = "192.168.50.21") -> EdgeDeviceRegistrationRequest:
     )
 
 
+def test_routed_edge_server_can_be_registered_and_updated(sqlite_engine: Engine) -> None:
+    with Session(sqlite_engine) as session:
+        created = create_edge_device(
+            session,
+            EdgeDeviceRegistrationRequest(
+                name="Routed Edge Device",
+                address=EdgeDeviceAddress(management_ip="192.168.50.21"),
+                allowed_cidr="192.168.50.21/32",
+                server_ip="10.20.30.40",
+            ),
+            created_by="admin",
+        )
+        assert str(created.allowed_cidr) == "192.168.50.21/32"
+        assert str(created.server_ip) == "10.20.30.40"
+        updated = update_edge_device(
+            session,
+            created.edge_device_id,
+            EdgeDeviceUpdateRequest(server_ip="10.20.30.41"),
+            updated_by="admin",
+        )
+        assert str(updated.server_ip) == "10.20.30.41"
+
+
 def _observation(
     *,
     boot_id: str,
@@ -297,7 +320,11 @@ def test_channel_placement_requires_registered_enabled_edge_and_requires_publish
         assert server_channel.placement.edge_device_id is None
         archived = archive_edge_device(session, device.edge_device_id, archived_by="admin")
         assert archived.edge_device_id == device.edge_device_id
-        with pytest.raises(ValueError, match="archived record"):
+        replacement = create_edge_device(session, _registration(), created_by="admin")
+        assert replacement.edge_device_id != archived.edge_device_id
+        assert replacement.address.management_ip == archived.address.management_ip
+        assert session.get(EdgeDevice, archived.edge_device_id).deleted_at is not None
+        with pytest.raises(ValueError, match="active record"):
             create_edge_device(session, _registration(), created_by="admin")
 
         disabled = create_edge_device(

@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cv_contracts.runtime import RuntimeResultHistoryPolicy
-from cv_core import load_platform_settings
+from cv_core import PlatformSettings, load_platform_settings
 from cv_db import (
     create_audit_event,
     get_training_job_detail,
@@ -33,6 +33,7 @@ from cv_utils import remove_path_within_root, utc_now, utc_now_iso
 from redis import Redis
 from rq import Queue, Retry
 from sqlalchemy import delete, exists, or_, select, text, update
+from sqlalchemy.orm import Session
 
 GPU_LOCK_KEY_PATTERNS = (
     "cv-platform:training:gpu:*",
@@ -278,7 +279,7 @@ def runtime_result_retention() -> dict[str, object]:
                     .limit(remaining)
                 ).all()
             )
-            deleted = _delete_result_ids(session, stale_ids)
+            deleted = _delete_result_ids(session, stale_ids, settings=settings)
             deleted_result_count += deleted
             remaining -= deleted
 
@@ -297,7 +298,7 @@ def runtime_result_retention() -> dict[str, object]:
                     .limit(remaining)
                 ).all()
             )
-            deleted = _delete_result_ids(session, excess_ids)
+            deleted = _delete_result_ids(session, excess_ids, settings=settings)
             deleted_result_count += deleted
             remaining -= deleted
 
@@ -317,7 +318,7 @@ def runtime_result_retention() -> dict[str, object]:
                     .limit(remaining)
                 ).all()
             )
-            deleted_result_count += _delete_result_ids(session, orphan_ids)
+            deleted_result_count += _delete_result_ids(session, orphan_ids, settings=settings)
 
         deleted_delivery_count = _delete_terminal_metadata(
             session,
@@ -624,9 +625,16 @@ def _result_has_no_active_dependents():
     return ~active_capture & ~active_delivery & ~durable_stem_review
 
 
-def _delete_result_ids(session, result_ids: list[str]) -> int:
+def _delete_result_ids(
+    session: Session, result_ids: list[str], *, settings: PlatformSettings | None = None
+) -> int:
     if not result_ids:
         return 0
+    if settings is not None:
+        from cv_db.bark_artifacts import remove_bark_artifacts
+
+        for row in session.scalars(select(ResultRecord).where(ResultRecord.id.in_(result_ids))):
+            remove_bark_artifacts(settings, row)
     session.execute(
         update(RuntimeExecution)
         .where(RuntimeExecution.last_result_id.in_(result_ids))

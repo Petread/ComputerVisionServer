@@ -553,8 +553,13 @@ Invoke-RestMethod 'http://172.23.27.245:9443/edge/v1/capabilities' |
 Diese Prüfung belegt den tatsächlichen Pfad Server → Edge und nicht nur einen lokalen Zugriff auf
 dem Jetson.
 
-`configure-ufw.sh` wird erst nach separater Prüfung des SSH-/Wartungszugangs angewendet. Die
-Firewall-Aktivierung ist nicht Bestandteil dieser Erstinstallation.
+Das hier dokumentierte ältere Bundle 1.0.2 verlangt noch eine separate Firewall-Einrichtung.
+Neu gebaute Pakete enthalten seit dem 22. September 2026 UFW und seine Noble/ARM64-Abhängigkeiten.
+Der Offline-Installer richtet fehlendes UFW und die Edge-Portregeln automatisch ein; bestehende
+SSH-/Kamerazugriffe erhalten keine neue globale Eingangsperre. Bereits konfiguriertes, aber
+deaktiviertes UFW verlangt weiterhin lokale Firewallwartung. Nach dem einmaligen Installer-Update
+können Frontend-Runtime-Updates fehlende Pakete offline nachinstallieren. Siehe
+[Edge-Betriebseinstellungen](../operations/edge-device-settings.md).
 
 ## 18. Edge-Gerät in der Plattform registrieren
 

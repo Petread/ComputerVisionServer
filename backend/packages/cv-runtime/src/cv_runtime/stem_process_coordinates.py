@@ -17,8 +17,15 @@ from cv_contracts.runtime import (
     RuntimeStemCurvatureProcessGate,
     RuntimeStemCurvatureProcessPoint,
     RuntimeStemCurvatureProcessPolygon,
+    RuntimeStemSpatialCalibration,
 )
 from cv_utils import utc_now_iso
+
+from cv_runtime.stem_spatial_calibration import (
+    SpatialCalibrationError,
+    calculate_spatial_calibration,
+    validate_spatial_calibration,
+)
 
 
 @dataclass(frozen=True)
@@ -62,7 +69,20 @@ def calculate_stem_curvature_process_calibration(
             cv2=cv2,
             np=np,
         )
-        homography, _mask = cv2.findHomography(image_points, process_points, method=0)
+        spatial = None
+        if request.spatial_calibration_enabled:
+            spatial = calculate_spatial_calibration(request, source_channel_id=source_channel_id)
+            projection = np.asarray(spatial.projection_matrix).reshape(3, 4)
+            plane_projection = np.column_stack(
+                (
+                    projection[:, 0],
+                    projection[:, 1],
+                    projection[:, 3] + request.reference_plane.z_mm * projection[:, 2],
+                )
+            )
+            homography = np.linalg.inv(plane_projection)
+        else:
+            homography, _mask = cv2.findHomography(image_points, process_points, method=0)
         if homography is None:
             raise _CalibrationError(
                 "stem_process_homography_degenerate",
@@ -147,6 +167,13 @@ def calculate_stem_curvature_process_calibration(
             cv2=cv2,
             np=np,
         )
+    except SpatialCalibrationError as exc:
+        return StemCurvatureProcessCalibrationComputation(
+            status="invalid",
+            profile=None,
+            failure_code=exc.code,
+            failure_message=str(exc),
+        )
     except _CalibrationError as exc:
         return StemCurvatureProcessCalibrationComputation(
             status="invalid",
@@ -173,6 +200,7 @@ def calculate_stem_curvature_process_calibration(
         intrinsic_calibration_hash=request.intrinsic_calibration_hash,
         reference_points=request.reference_points,
         coordinate_frame_definition=request.coordinate_frame_definition,
+        spatial_calibration=spatial,
         measurement_geometry_mode=request.measurement_geometry_mode,
         canonical_view_profile_id=request.canonical_view_profile_id,
         canonical_view_profile_checksum=request.canonical_view_profile_checksum,
@@ -196,6 +224,9 @@ def calculate_stem_curvature_process_calibration(
         maximum_reprojection_error_px=maximum_error,
         maximum_allowed_reprojection_error_px=request.maximum_rms_reprojection_error_px,
         provenance=RuntimeStemCurvatureProcessCalibrationProvenance(
+            method=(
+                spatial.method if spatial is not None else "MANUAL_REFERENCE_POINT_HOMOGRAPHY"
+            ),
             created_at=generated_at or utc_now_iso(),
             operator_user_id=operator_user_id,
             reference_frame_timestamp=request.reference_frame_timestamp,
@@ -225,6 +256,8 @@ def stem_curvature_process_calibration_hash(
         else dict(profile)
     )
     payload.pop("calibration_hash", None)
+    if payload.get("spatial_calibration") is None:
+        payload.pop("spatial_calibration", None)
     if payload.get("coordinate_frame_definition") is None:
         payload.pop("coordinate_frame_definition", None)
     if payload.get("measurement_geometry_mode") == "EXPLICIT_GEOMETRY_V1":
@@ -308,6 +341,7 @@ def validate_stem_curvature_process_calibration(
         cv2=cv2,
         np=np,
     )
+    validate_spatial_calibration(profile)
     if stem_curvature_process_calibration_hash(profile) != profile.calibration_hash:
         raise ValueError("stem process calibration hash does not match the profile")
     return profile
@@ -365,6 +399,14 @@ def process_profile_for_rectified_view(
         updates["homography_image_to_process"] = image_to_process
     if isinstance(process_to_image, list) and len(process_to_image) == 9:
         updates["homography_process_to_image"] = process_to_image
+    if profile.spatial_calibration is not None:
+        if "homography_process_to_image" not in updates and (
+            image_width != profile.image_width or image_height != profile.image_height
+        ):
+            raise ValueError("spatial calibration requires the actual canonical view transform")
+        updates["spatial_calibration"] = _spatial_calibration_for_view(
+            profile, updates.get("homography_process_to_image", profile.homography_process_to_image)
+        )
     return profile.model_copy(
         update=updates
     )
@@ -395,7 +437,30 @@ def process_profile_for_aligned_measurement_grid(
             "homography_process_to_image": [
                 float(value) for value in process_to_image.reshape(-1)
             ],
+            "spatial_calibration": _spatial_calibration_for_view(
+                profile, process_to_image.reshape(-1).tolist()
+            ),
         }
+    )
+
+
+def _spatial_calibration_for_view(
+    profile: RuntimeStemCurvatureProcessCalibrationProfile,
+    process_to_image: list[float],
+) -> RuntimeStemSpatialCalibration | None:
+    """Apply the same image homography to the 3D projection in transient geometry profiles."""
+    if profile.spatial_calibration is None:
+        return None
+    _cv2, np = _opencv_modules()
+    image_warp = (
+        np.asarray(process_to_image).reshape(3, 3)
+        @ np.asarray(profile.homography_image_to_process).reshape(3, 3)
+    )
+    projection = image_warp @ np.asarray(profile.spatial_calibration.projection_matrix).reshape(
+        3, 4
+    )
+    return profile.spatial_calibration.model_copy(
+        update={"projection_matrix": projection.reshape(-1).tolist()}
     )
 
 

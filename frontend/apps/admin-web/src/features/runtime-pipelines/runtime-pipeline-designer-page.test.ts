@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  RuntimeCameraIntrinsicCalibrationProfile,
   RuntimeImageViewProfile,
   RuntimeLogicalModelRef,
   RuntimeLiveViewState,
   RuntimeModelCapabilityOption,
   RuntimeNodePort,
+  RuntimeNodePropertySpec,
   RuntimeNodeSpec,
   RuntimeNodeTypeSummary,
   RuntimePipelineOutputCatalog,
@@ -64,6 +66,7 @@ import {
   stemSurfacePhaseCalibrationCaptureFromLiveState,
   stemSurfacePhaseCalibrationFitPreview,
   stemCoordinateFrameDefinition,
+  stemSpatialCalibrationUnavailableReason,
   stemCoordinateFrameReferencePoints,
   stemProcessGeometryFromCanonicalView,
   stemProcessUndistortedCalibrationFrame,
@@ -72,10 +75,30 @@ import {
   upstreamIntrinsicCalibrationProfile,
   upstreamImageViewProfile,
   upstreamStemSurfacePhaseCalibrationProfile,
-  validationIssueSummary
+  validationIssueSummary,
+  visiblePropertyFields
 } from './runtime-pipeline-designer-page';
 
 describe('runtime pipeline designer helpers', () => {
+  it('shows the metadata selection only for the configured Edge metadata response mode', () => {
+    const fields = ['edge_response_mode', 'edge_response_metadata_fields', 'projections'].map(
+      (key) => ({ key } as RuntimeNodePropertySpec)
+    );
+    const node = {
+      node_key: 'result', node_type: 'output.result', node_category: 'output',
+      node_contract_version: 1, input_ports: [], output_ports: [], config: {}, position: {}
+    } as RuntimeNodeSpec;
+    expect(visiblePropertyFields(fields, node).map((field) => field.key)).toEqual([
+      'edge_response_mode', 'projections'
+    ]);
+    node.config.edge_response_mode = 'result_with_metadata';
+    expect(visiblePropertyFields(fields, node)).toEqual(fields);
+    node.config.edge_response_mode = 'result_only';
+    expect(visiblePropertyFields(fields, node).map((field) => field.key)).toEqual([
+      'edge_response_mode', 'projections'
+    ]);
+  });
+
   it('previews an inconsistent raw-phase angle fit before applying calibration', () => {
     const rawValues = [0, -0.1582, -0.1918, -0.1327];
     const knownAngles = [0, 30, 60, 90];
@@ -237,6 +260,18 @@ describe('runtime pipeline designer helpers', () => {
     expect(references).toHaveLength(4);
     expect(definition?.z_axis_image_endpoint).toEqual(draft.z_axis_image_endpoint);
     expect(definition?.z_reference_length_mm).toBe(250);
+    const measured = {
+      status: 'valid', calibration_method: 'CHECKERBOARD_OR_CHARUCO',
+      accepted_observation_count: 8
+    } as RuntimeCameraIntrinsicCalibrationProfile;
+    expect(stemSpatialCalibrationUnavailableReason(measured, definition)).toBeNull();
+    expect(stemSpatialCalibrationUnavailableReason(null, definition)).toContain('camera');
+    expect(stemSpatialCalibrationUnavailableReason({
+      ...measured, calibration_method: 'IDENTITY_PASSTHROUGH'
+    }, definition)).toContain('passthrough');
+    expect(stemSpatialCalibrationUnavailableReason(measured, {
+      ...definition!, z_reference_length_mm: null
+    })).toContain('measured vertical distance');
   });
 
   it('reuses the canonical view as the complete process measurement corridor', () => {
@@ -444,6 +479,35 @@ describe('runtime pipeline designer helpers', () => {
     expect(formatModelCapabilityOption(capability)).toBe(
       'Defect Detector | 2026.05 | YOLOv11 Medium | production'
     );
+    const projectCapability = {
+      ...capability,
+      capability: {
+        label_project_id: 'project-a',
+        label_project_title: 'Project A',
+        project_active_production: true
+      }
+    };
+    const projectRef = buildLogicalModelRefFromCapability(
+      projectCapability, 'detection', 'active_production'
+    );
+    expect(projectRef.label_project_id).toBe('project-a');
+    expect(formatModelCapabilityOption(projectCapability)).toBe(
+      'Project A / Defect Detector | 2026.05 | YOLOv11 Medium | production'
+    );
+    expect(resolveSelectedModelReleaseId(projectRef, [
+      { ...projectCapability, deployment_release_id: 'other-project', capability: {
+        label_project_id: 'project-b', project_active_production: true
+      } },
+      { ...projectCapability, deployment_release_id: 'replacement', model_family_slug: 'other-model' }
+    ])).toBe('replacement');
+    expect(modelCapabilityMatchesSelectionPolicy({
+      ...projectCapability,
+      capability: { ...projectCapability.capability, project_active_production: false }
+    }, 'active_production')).toBe(false);
+    expect(modelCapabilityMatchesSelectionPolicy({
+      ...projectCapability,
+      capability: { ...projectCapability.capability, project_active_production: false }
+    }, 'explicit_release')).toBe(true);
   });
 
   it('generates immutable board-cut rules from deployed class labels without text input', () => {
@@ -1049,6 +1113,9 @@ describe('runtime pipeline designer helpers', () => {
     ).toBe(rawPassthroughState.frame);
     expect(stemProcessUndistortedCalibrationFrame(rawPassthroughState, intrinsic)).toBeNull();
     expect(normalizeStemCurvatureProcessCalibrationProfile(processProfile)?.calibration_id).toBe('stem-process-v1');
+    expect(normalizeStemCurvatureProcessCalibrationProfile({
+      ...processProfile, spatial_calibration: { camera_center_mm: 'invalid' }
+    })).toBeNull();
     expect(
       normalizeStemSurfacePhaseCalibrationProfile({
         schema_version: 'stem.surface-phase-calibration.v1',
@@ -1755,6 +1822,7 @@ describe('runtime pipeline designer helpers', () => {
     }).map((item) => item.node_type);
     expect(sourceEligible).toContain('preprocessing.crop');
     expect(sourceEligible).toContain('inference.detection');
+    expect(sourceEligible).toContain('trigger.http_put');
     expect(sourceEligible).not.toContain('source.channel_frame');
     expect(sourceEligible).not.toContain('output.result');
 
@@ -1766,6 +1834,7 @@ describe('runtime pipeline designer helpers', () => {
       edges: []
     };
     expect(canAddNodeToGraph(detectionGraph, resultType, nodeTypeMap, 'realtime').eligible).toBe(true);
+    expect(canAddNodeToGraph(detectionGraph, triggerType, nodeTypeMap, 'realtime').eligible).toBe(true);
 
     const triggerGraph: RuntimePipelineGraph = {
       nodes: [testGraphNode(triggerType, 'http_trigger')],
@@ -1773,6 +1842,19 @@ describe('runtime pipeline designer helpers', () => {
     };
     expect(canAddNodeToGraph(triggerGraph, intervalTriggerType, nodeTypeMap, 'trigger').eligible).toBe(false);
     expect(canAddNodeToGraph(triggerGraph, sourceType, nodeTypeMap, 'trigger').eligible).toBe(true);
+    const csvSource = testNodeType({
+      node_type: 'source.stem_csv_measurements', node_category: 'source', display_name: 'CSV measurements',
+      supported_modes: ['trigger'], input_ports: [],
+      output_ports: [{ key: 'measurement', data_type: 'stem_csv', required: true }],
+      compatibility_constraints: { auxiliary_source: true, authoring: { starter: true } }
+    });
+    nodeTypeMap.set(csvSource.node_type, csvSource);
+    const pairedGraph: RuntimePipelineGraph = {
+      nodes: [...triggerGraph.nodes, testGraphNode(sourceType, 'photo')], edges: []
+    };
+    expect(canAddNodeToGraph(pairedGraph, csvSource, nodeTypeMap, 'trigger').eligible).toBe(true);
+    pairedGraph.nodes.push(testGraphNode(csvSource, 'csv'));
+    expect(canAddNodeToGraph(pairedGraph, sourceType, nodeTypeMap, 'trigger').eligible).toBe(false);
   });
 
   it('normalizes Siemens SPS mappings and groups the node under Industrial PLC', () => {

@@ -238,6 +238,105 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EdgeControlError'
+  /edge/v1/settings:
+    get:
+      summary: Get Settings
+      operationId: get_settings_edge_v1_settings_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSettingsStatus'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+    put:
+      summary: Put Settings
+      operationId: put_settings_edge_v1_settings_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeSettingsCommand'
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeSettingsStatus'
+        '404':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '409':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '413':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '422':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '503':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
+        '507':
+          description: Edge control error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeControlError'
   /edge/v1/software/commands:
     post:
       summary: Software Command
@@ -2025,6 +2124,108 @@ components:
       - acknowledged_sequence
       - pending_count
       title: EdgeResultStreamSummary
+    EdgeRuntimeEngine:
+      properties:
+        node_key:
+          type: string
+          title: Node Key
+        cache_hit:
+          type: boolean
+          title: Cache Hit
+        cache_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cache Key
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        duration_ms:
+          type: number
+          minimum: 0.0
+          title: Duration Ms
+          default: 0
+        engine_size_bytes:
+          type: integer
+          minimum: 0.0
+          title: Engine Size Bytes
+          default: 0
+      additionalProperties: false
+      type: object
+      required:
+      - node_key
+      - cache_hit
+      title: EdgeRuntimeEngine
+    EdgeRuntimeMetrics:
+      properties:
+        observed_at:
+          type: string
+          title: Observed At
+        window_seconds:
+          type: number
+          maximum: 10.0
+          minimum: 0.0
+          title: Window Seconds
+        acquired_frames:
+          type: integer
+          minimum: 0.0
+          title: Acquired Frames
+          default: 0
+        processed_frames:
+          type: integer
+          minimum: 0.0
+          title: Processed Frames
+          default: 0
+        sampled_out_frames:
+          type: integer
+          minimum: 0.0
+          title: Sampled Out Frames
+          default: 0
+        execution_errors:
+          type: integer
+          minimum: 0.0
+          title: Execution Errors
+          default: 0
+        source_fps:
+          type: number
+          minimum: 0.0
+          title: Source Fps
+          default: 0
+        processed_fps:
+          type: number
+          minimum: 0.0
+          title: Processed Fps
+          default: 0
+        last_frame_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Frame At
+        last_execution_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Execution At
+        stages:
+          items:
+            $ref: '#/components/schemas/EdgeTimingSummary'
+          type: array
+          maxItems: 16
+          title: Stages
+        nodes:
+          items:
+            $ref: '#/components/schemas/EdgeTimingSummary'
+          type: array
+          maxItems: 256
+          title: Nodes
+      additionalProperties: false
+      type: object
+      required:
+      - observed_at
+      - window_seconds
+      title: EdgeRuntimeMetrics
     EdgeRuntimeProcess:
       properties:
         deployment_id:
@@ -2067,6 +2268,25 @@ components:
             maxLength: 2000
           - type: 'null'
           title: Last Error
+        channel_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Id
+        workload_release_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workload Release Id
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/EdgeRuntimeMetrics'
+          - type: 'null'
+        engines:
+          items:
+            $ref: '#/components/schemas/EdgeRuntimeEngine'
+          type: array
+          title: Engines
       additionalProperties: false
       type: object
       required:
@@ -2183,6 +2403,81 @@ components:
       - storage
       - observed_at
       title: EdgeRuntimeStatus
+    EdgeSettingsCommand:
+      properties:
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9-]{8,80}$
+          title: Request Id
+        expected_revision:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Expected Revision
+        values:
+          additionalProperties:
+            type: string
+          type: object
+          title: Values
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - expected_revision
+      - values
+      title: EdgeSettingsCommand
+    EdgeSettingsStatus:
+      properties:
+        supported:
+          type: boolean
+          title: Supported
+          default: true
+        writable:
+          type: boolean
+          title: Writable
+          default: false
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+        boot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Boot Id
+        revision:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Revision
+        values:
+          additionalProperties:
+            type: string
+          type: object
+          title: Values
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        phase:
+          type: string
+          enum:
+          - idle
+          - queued
+          - applying
+          - succeeded
+          - failed
+          title: Phase
+          default: idle
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+      additionalProperties: false
+      type: object
+      title: EdgeSettingsStatus
     EdgeSoftwareCommand:
       properties:
         request_id:
@@ -2325,3 +2620,48 @@ components:
       - disk_free_bytes
       - minimum_disk_free_bytes
       title: EdgeStorageQuotaStatus
+    EdgeTimingSummary:
+      properties:
+        key:
+          type: string
+          title: Key
+        node_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Node Type
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        sample_count:
+          type: integer
+          minimum: 1.0
+          title: Sample Count
+        mean_ms:
+          type: number
+          minimum: 0.0
+          title: Mean Ms
+        p95_ms:
+          type: number
+          minimum: 0.0
+          title: P95 Ms
+        max_ms:
+          type: number
+          minimum: 0.0
+          title: Max Ms
+        last_ms:
+          type: number
+          minimum: 0.0
+          title: Last Ms
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - sample_count
+      - mean_ms
+      - p95_ms
+      - max_ms
+      - last_ms
+      title: EdgeTimingSummary

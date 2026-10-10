@@ -11,6 +11,7 @@ from cv_contracts.runtime import RuntimeNodeSpec
 
 from cv_runtime.context import NodeInputs, RuntimeExecutionContext
 from cv_runtime.handlers import NodeExecutionResult
+from cv_runtime.high_rate_phase import HighRateStemPhaseBridge
 from cv_runtime.payloads import (
     EventsPayload,
     ProvenanceLink,
@@ -70,6 +71,18 @@ class StemSliceModelHandler:
 
         curvature = inputs.get("curvature")
         phase = inputs.get("surface_phase")
+        bridge = context.metadata.get("high_rate_stem_phase_bridge")
+        if (isinstance(phase, StemSurfacePhasePayload)
+                and phase.execution_mode == "HIGH_RATE_SEEDED"
+                and isinstance(bridge, HighRateStemPhaseBridge)
+                and phase.trace_generation != bridge.generation):
+            identity = state.get("identity")
+            if (isinstance(identity, Mapping)
+                    and identity.get("trace_generation") != bridge.generation):
+                _reset_state(state)
+            return NodeExecutionResult(outputs={"slice_model": _payload_from_state(
+                state, reasons=["PHASE_GENERATION_MISMATCH"], state_override="INVALID",
+            )})
         active_stem = inputs.get("active_stem")
         active = _active_tracking(active_stem)
         try:
@@ -149,6 +162,12 @@ class StemSliceModelHandler:
                 builder_config=builder_config,
             )
             if accepted:
+                if (phase.execution_mode == "HIGH_RATE_SEEDED"
+                        and isinstance(bridge, HighRateStemPhaseBridge)):
+                    assert phase.track_id is not None and phase.frame_sequence is not None
+                    bridge.record_profile_pair(
+                        phase.track_id, phase.frame_sequence, phase.trace_generation
+                    )
                 state["last_frame_sequence"] = curvature.frame_sequence
                 state["last_timestamp"] = curvature.timestamp or phase.timestamp
                 state["last_phase_deg"] = phase.cumulative_phase_deg
@@ -327,6 +346,11 @@ def _observation_rejection_reason(
         return "PROCESS_CALIBRATION_MISMATCH"
     if not curvature.process_calibration_hash or not phase.calibration_hash:
         return "CALIBRATION_BINDING_MISSING"
+    if phase.execution_mode == "HIGH_RATE_SEEDED" and (
+        curvature.frame_sequence is None or phase.frame_sequence is None
+        or curvature.frame_sequence != phase.frame_sequence
+    ):
+        return "PHASE_EXACT_FRAME_REQUIRED"
     if curvature.frame_sequence is not None and phase.frame_sequence is not None:
         if abs(curvature.frame_sequence - phase.frame_sequence) > int(
             config["maximum_frame_sequence_gap"]

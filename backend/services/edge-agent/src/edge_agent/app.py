@@ -21,10 +21,17 @@ from cv_contracts import (
     EdgeResultStreamList,
     EdgeRuntimeStatus,
 )
-from cv_contracts.edge import EdgeSoftwareCommand, EdgeSoftwareStatus
+from cv_contracts.edge import (
+    EdgeSettingsCommand,
+    EdgeSettingsStatus,
+    EdgeSoftwareCommand,
+    EdgeSoftwareStatus,
+)
 from fastapi import FastAPI, Header, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 
+from edge_agent.settings import _LOCK as SETTINGS_LOCK
+from edge_agent.settings import queue_settings, settings_busy, settings_status
 from edge_agent.software import queue_software_command, software_status
 from edge_agent.state import EdgeAgentConfig, EdgeAgentState, EdgeStateError
 
@@ -113,12 +120,26 @@ def create_app(config: EdgeAgentConfig | None = None) -> FastAPI:
     def installed_software() -> EdgeSoftwareStatus:
         return software_status(edge_state.config.data_root)
 
+    @application.get("/edge/v1/settings", response_model=EdgeSettingsStatus)
+    def get_settings() -> EdgeSettingsStatus:
+        return settings_status(edge_state)
+
+    @application.put("/edge/v1/settings", response_model=EdgeSettingsStatus, status_code=202)
+    def put_settings(command: EdgeSettingsCommand) -> EdgeSettingsStatus:
+        try:
+            return queue_settings(edge_state, command)
+        except ValueError as exc:
+            raise EdgeStateError("settings_rejected", str(exc), status_code=409) from exc
+
     @application.post(
         "/edge/v1/software/commands", response_model=EdgeSoftwareStatus, status_code=202
     )
     def software_command(command: EdgeSoftwareCommand) -> EdgeSoftwareStatus:
         try:
-            return queue_software_command(edge_state.config.data_root, command)
+            with SETTINGS_LOCK:
+                if settings_busy(edge_state):
+                    raise ValueError("Eine Einstellungsänderung läuft bereits.")
+                return queue_software_command(edge_state.config.data_root, command)
         except ValueError as exc:
             raise EdgeStateError("software_command_rejected", str(exc), status_code=409) from exc
 

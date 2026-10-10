@@ -1054,6 +1054,7 @@ version = "0.1.0"
 source = { editable = "backend/packages/cv-deploy" }
 dependencies = [
     { name = "cv-core", marker = "(python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform == 'win32')" },
+    { name = "cv-db", marker = "(python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform == 'win32')" },
     { name = "cv-status", marker = "(python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform == 'win32')" },
     { name = "httpx", marker = "(python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform == 'win32')" },
     { name = "pydantic", marker = "(python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform == 'win32')" },
@@ -1062,6 +1063,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cv-core", editable = "backend/packages/cv-core" },
+    { name = "cv-db", editable = "backend/packages/cv-db" },
     { name = "cv-status", editable = "backend/packages/cv-status" },
     { name = "httpx", specifier = ">=0.27.2,<1" },
     { name = "pydantic", specifier = ">=2.8.2,<3" },

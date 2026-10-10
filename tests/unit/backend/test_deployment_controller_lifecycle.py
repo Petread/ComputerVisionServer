@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -16,7 +15,10 @@ from cv_core.settings import PlatformSettings, ServiceRuntimeConfig, StorageRoot
 from cv_db import Base
 from cv_db.models import DeploymentRelease, DeploymentTarget
 from cv_status import DeploymentReleaseStatus, TargetPath
-from deployment_controller.lifecycle import reload_active_releases, reload_active_releases_until_ready
+from deployment_controller.lifecycle import (
+    reload_active_releases,
+    reload_active_releases_until_ready,
+)
 
 
 @pytest.fixture()
@@ -44,384 +46,255 @@ def settings(tmp_path) -> PlatformSettings:
     )
 
 
-def test_startup_reloads_latest_release_per_model_and_target_bound_previous(
-    engine,
-    settings: PlatformSettings,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with Session(engine, expire_on_commit=False) as session:
-        _seed_release(
-            session,
-            release_id="rel_active",
-            version_id="mvr_active",
-            model_name="rt__active",
-            triton_model_version=3,
+@pytest.fixture()
+def serving(engine, settings, monkeypatch):
+    import cv_deploy.runtime as runtime
+
+    state = {"ready": {}, "loads": [], "unloads": [], "fail": False}
+
+    @contextmanager
+    def scope(_settings):
+        with Session(engine, expire_on_commit=False) as session:
+            yield session
+            session.commit()
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def repository_index(self, **kwargs):
+            return [
+                {"name": name, "version": str(version), "state": "READY"}
+                for name, versions in state["ready"].items()
+                for version in versions
+            ]
+
+        def unload_model(self, name):
+            state["unloads"].append(name)
+            state["ready"].pop(name, None)
+
+        def is_model_ready(self, name, version):
+            return version in state["ready"].get(name, set())
+
+    class Manager:
+        def __init__(self, _settings):
+            pass
+
+        def _render_target_config(self, **kwargs):
+            return "compatible"
+
+        def stage_release(self, **kwargs):
+            pass
+
+        def load_required_versions(self, **kwargs):
+            if state["fail"]:
+                raise RuntimeError("GPU unavailable")
+            name, versions = kwargs["stable_model_name"], set(kwargs["versions"])
+            state["loads"].append((name, versions))
+            state["ready"][name] = versions
+
+        def smoke_test_report(self, **kwargs):
+            return {"passed": True}
+
+    monkeypatch.setattr("deployment_controller.lifecycle.session_scope", scope)
+    monkeypatch.setattr(runtime, "TritonHttpControlClient", Client)
+    monkeypatch.setattr(runtime, "TritonRepositoryManager", Manager)
+    monkeypatch.setattr(
+        runtime,
+        "get_deployment_package_detail",
+        lambda *args, **kwargs: SimpleNamespace(serving_manifest={"task_type": "detection"}),
+    )
+    app = FastAPI()
+    app.state.settings = settings
+    return app, state
+
+
+def add_execution(session, execution_id, release_ids, *, status="running"):
+    from cv_db.models import RuntimeExecution, RuntimeChannel
+
+    session.add(
+        RuntimeChannel(
+            id="chn_" + execution_id,
+            slug=execution_id,
+            name=execution_id,
+            technical_place="test",
+            active_runtime_execution_id=execution_id,
+            desired_state="running",
+            observed_state="running",
         )
-        _seed_release(
-            session,
-            release_id="rel_previous",
-            version_id="mvr_previous",
-            model_name="rt__rollback",
-        )
-        _seed_release(
-            session,
-            release_id="rel_old",
-            version_id="mvr_old",
-            model_name="rt__active",
-            triton_model_version=1,
-        )
-        _seed_release(
-            session,
-            release_id="rel_compare",
-            version_id="mvr_compare",
-            model_name="rt__compare",
-            triton_model_version=2,
-        )
-        _seed_release(
-            session,
-            release_id="rel_failed",
-            version_id="mvr_failed",
-            model_name="rt__failed",
-            status=DeploymentReleaseStatus.ACTIVATION_FAILED,
-        )
-        _seed_release(
-            session,
-            release_id="rel_retired",
-            version_id="mvr_retired",
-            model_name="rt__retired",
-            retired=True,
-        )
+    )
+    row = RuntimeExecution(
+        id=execution_id,
+        channel_id="chn_" + execution_id,
+        pipeline_version_id="plv_test",
+        executor_service="realtime-executor",
+        status=status,
+        desired_state="running",
+        actual_state=status,
+        runtime_plan={
+            "binding_signature": {
+                "model_bindings": [
+                    {"deployment_release_id": release_id} for release_id in release_ids
+                ]
+            }
+        },
+    )
+    session.add(row)
+    return row
+
+
+def test_deployed_model_without_started_channel_is_not_loaded(engine, serving):
+    app, state = serving
+    with Session(engine) as session:
+        _seed_release(session, release_id="rel_one", version_id="mvr_one", model_name="rt__one")
         session.add(
             DeploymentTarget(
-                target_path=TargetPath.REALTIME.value,
-                active_release_id="rel_active",
-                previous_release_id="rel_previous",
+                target_path="realtime",
+                active_release_id="rel_one",
                 updated_at=datetime.now(timezone.utc),
             )
         )
         session.commit()
+    asyncio.run(reload_active_releases(app))
+    assert state["loads"] == []
 
-    staged: list[tuple[str, str, int, bool]] = []
-    loaded: list[tuple[str, str, int]] = []
 
-    @contextmanager
-    def _session_scope(_settings) -> Generator[Session, None, None]:
-        session = Session(engine, expire_on_commit=False)
-        try:
-            yield session
-            session.commit()
-        finally:
-            session.close()
+def test_direct_operator_demand_loads_an_activated_model_without_a_channel(engine, serving):
+    from cv_deploy.runtime import reconcile_runtime_models
 
-    class FakeTritonClient:
-        def __init__(self, *, endpoint_url: str, timeout_seconds: int) -> None:
-            self.endpoint_url = endpoint_url
-            self.timeout_seconds = timeout_seconds
+    app, state = serving
+    with Session(engine) as session:
+        _seed_release(session, release_id="rel_operator", version_id="mvr_operator", model_name="rt__operator")
+        session.commit()
 
-    class FakeRepositoryManager:
-        def __init__(self, _settings: PlatformSettings) -> None:
-            pass
+    with Session(engine, expire_on_commit=False) as session:
+        reconcile_runtime_models(
+            session,
+            app.state.settings,
+            extra_demanded_release_ids={"rel_operator"},
+        )
+        session.commit()
 
-        def stage_release(
-            self,
-            *,
-            target_path: TargetPath,
-            stable_model_name: str,
-            triton_model_version: int,
-            package_manifest: dict[str, str],
-            allow_repository_config_replacement: bool = False,
-        ) -> None:
-            _ = package_manifest
-            staged.append(
-                (
-                    target_path.value,
-                    stable_model_name,
-                    triton_model_version,
-                    allow_repository_config_replacement,
-                )
+    assert state["loads"] == [("rt__operator", {1})]
+
+
+def test_start_loads_only_required_versions_and_last_stop_unloads(engine, serving):
+    from cv_db.models import RuntimeExecution
+
+    app, state = serving
+    with Session(engine) as session:
+        for version in (1, 2, 3):
+            _seed_release(
+                session,
+                release_id=f"rel_{version}",
+                version_id=f"mvr_{version}",
+                model_name="rt__shared",
+                triton_model_version=version,
             )
-
-        def load_release(
-            self,
-            *,
-            target_path: TargetPath,
-            stable_model_name: str,
-            triton_model_version: int,
-            triton_client: FakeTritonClient,
-        ) -> None:
-            _ = triton_client
-            loaded.append((target_path.value, stable_model_name, triton_model_version))
-
-    monkeypatch.setattr("deployment_controller.lifecycle.session_scope", _session_scope)
-    monkeypatch.setattr(
-        "deployment_controller.lifecycle.get_deployment_package_detail",
-        lambda _session, *, model_version_id: SimpleNamespace(
-            serving_manifest={"model_version_id": model_version_id}
-        ),
-    )
-    monkeypatch.setattr("deployment_controller.lifecycle.TritonRepositoryManager", FakeRepositoryManager)
-    monkeypatch.setattr("deployment_controller.lifecycle.TritonHttpControlClient", FakeTritonClient)
-
-    app = FastAPI()
-    app.state.settings = settings
-
+        add_execution(session, "rex_a", ["rel_1"])
+        add_execution(session, "rex_b", ["rel_1", "rel_2"])
+        session.commit()
     asyncio.run(reload_active_releases(app))
-
-    assert set(staged) == {
-        ("realtime", "rt__active", 3, True),
-        ("realtime", "rt__rollback", 1, True),
-        ("realtime", "rt__compare", 2, True),
-    }
-    assert set(loaded) == {
-        ("realtime", "rt__active", 3),
-        ("realtime", "rt__rollback", 1),
-        ("realtime", "rt__compare", 2),
-    }
-
-
-def test_reload_active_releases_retries_until_target_active_release_is_ready(
-    settings: PlatformSettings,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[str] = []
-    missing_checks = iter([True, False])
-
-    async def _reload(_app: FastAPI) -> None:
-        calls.append("reload")
-
-    monkeypatch.setattr("deployment_controller.lifecycle.reload_active_releases", _reload)
-    monkeypatch.setattr(
-        "deployment_controller.lifecycle._model_serving_state_drift",
-        lambda _settings: next(missing_checks),
-    )
-
-    app = FastAPI()
-    app.state.settings = settings
-
-    missing_after_reload = asyncio.run(
-        reload_active_releases_until_ready(
-            app,
-            attempts=3,
-            retry_delay_seconds=0,
-        )
-    )
-
-    assert missing_after_reload is False
-    assert calls == ["reload", "reload"]
+    assert state["loads"] == [("rt__shared", {1, 2})]
+    with Session(engine) as session:
+        session.get(RuntimeExecution, "rex_a").status = "stopped"
+        session.commit()
+    asyncio.run(reload_active_releases(app))
+    assert state["unloads"] == []
+    assert len(state["loads"]) == 1
+    with Session(engine) as session:
+        session.get(RuntimeExecution, "rex_b").status = "stopped"
+        session.commit()
+    asyncio.run(reload_active_releases(app))
+    assert state["unloads"] == ["rt__shared"]
 
 
-def test_startup_unloads_model_after_failed_reload_without_undeploying_release(
-    engine,
-    settings: PlatformSettings,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with Session(engine, expire_on_commit=False) as session:
-        _seed_release(session, release_id="rel_good", version_id="mvr_good", model_name="rt__good")
-        _seed_release(session, release_id="rel_bad", version_id="mvr_bad", model_name="rt__bad")
-        session.add(
-            DeploymentTarget(
-                target_path=TargetPath.REALTIME.value,
-                active_release_id="rel_good",
-                previous_release_id="rel_bad",
-                updated_at=datetime.now(timezone.utc),
+def test_draining_trigger_retains_models_until_completed(engine, serving):
+    app, state = serving
+    with Session(engine) as session:
+        _seed_release(session, release_id="rel_one", version_id="mvr_one", model_name="rt__one")
+        execution = add_execution(session, "rex_trigger", [], status="draining")
+        execution.runtime_plan = {
+            "trigger_pipelines": [
+                {
+                    "pipeline_version_id": "plv_trigger",
+                    "model_bindings": [{"deployment_release_id": "rel_one"}],
+                }
+            ]
+        }
+        session.commit()
+    asyncio.run(reload_active_releases(app))
+    assert state["ready"] == {"rt__one": {1}}
+
+
+def test_stopping_one_selected_version_preserves_other_channel_version(engine, serving):
+    from cv_db.models import RuntimeExecution
+
+    app, state = serving
+    with Session(engine) as session:
+        for version in (1, 2, 3):
+            _seed_release(
+                session,
+                release_id=f"rel_{version}",
+                version_id=f"mvr_{version}",
+                model_name="rt__shared",
+                triton_model_version=version,
             )
+        add_execution(session, "rex_old", ["rel_1"])
+        add_execution(session, "rex_new", ["rel_3"])
+        session.commit()
+    asyncio.run(reload_active_releases(app))
+    assert state["ready"] == {"rt__shared": {1, 3}}
+    with Session(engine) as session:
+        session.get(RuntimeExecution, "rex_old").status = "stopped"
+        session.commit()
+    asyncio.run(reload_active_releases(app))
+    assert state["ready"] == {"rt__shared": {3}}
+    assert state["loads"] == [("rt__shared", {1, 3}), ("rt__shared", {3})]
+    assert state["unloads"] == []
+
+
+def test_recovery_unloads_previously_deployed_unused_model(engine, serving):
+    app, state = serving
+    with Session(engine) as session:
+        _seed_release(
+            session, release_id="rel_unused", version_id="mvr_unused", model_name="rt__unused"
         )
         session.commit()
-
-    unloaded: list[str] = []
-
-    @contextmanager
-    def _session_scope(_settings) -> Generator[Session, None, None]:
-        session = Session(engine, expire_on_commit=False)
-        try:
-            yield session
-            session.commit()
-        finally:
-            session.close()
-
-    class FakeTritonClient:
-        def __init__(self, *, endpoint_url: str, timeout_seconds: int) -> None:
-            self.endpoint_url = endpoint_url
-            self.timeout_seconds = timeout_seconds
-
-        def unload_model(self, model_name: str) -> None:
-            unloaded.append(model_name)
-
-    class FakeRepositoryManager:
-        def __init__(self, _settings: PlatformSettings) -> None:
-            pass
-
-        def stage_release(self, **_kwargs: object) -> None:
-            return None
-
-        def load_release(self, **kwargs: object) -> None:
-            if kwargs.get("stable_model_name") == "rt__bad":
-                raise RuntimeError("load failed")
-
-    monkeypatch.setattr("deployment_controller.lifecycle.session_scope", _session_scope)
-    monkeypatch.setattr(
-        "deployment_controller.lifecycle.get_deployment_package_detail",
-        lambda _session, *, model_version_id: SimpleNamespace(
-            serving_manifest={"model_version_id": model_version_id}
-        ),
-    )
-    monkeypatch.setattr("deployment_controller.lifecycle.TritonRepositoryManager", FakeRepositoryManager)
-    monkeypatch.setattr("deployment_controller.lifecycle.TritonHttpControlClient", FakeTritonClient)
-
-    app = FastAPI()
-    app.state.settings = settings
-
+    state["ready"] = {"rt__unused": {1}}
     asyncio.run(reload_active_releases(app))
-
-    assert unloaded == ["rt__bad"]
-    with Session(engine, expire_on_commit=False) as session:
-        release = session.get(DeploymentRelease, "rel_bad")
-    assert release is not None
-    assert release.status == DeploymentReleaseStatus.ACTIVATED.value
+    assert state["unloads"] == ["rt__unused"]
+    with Session(engine) as session:
+        assert session.get(DeploymentRelease, "rel_unused").status == "activated"
 
 
-def test_startup_recovers_passive_reload_failed_release(
-    engine,
-    settings: PlatformSettings,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    activated_at = datetime.now(timezone.utc)
-    with Session(engine, expire_on_commit=False) as session:
-        _seed_release(
-            session,
-            release_id="rel_recoverable",
-            version_id="mvr_recoverable",
-            model_name="rt__recoverable",
-            status=DeploymentReleaseStatus.ACTIVATION_FAILED,
-            activated_at=activated_at,
-            smoke_report={"passed": True},
-            compatibility_report={"compatible": True},
-        )
-        _seed_release(
-            session,
-            release_id="rel_explicit_failed",
-            version_id="mvr_explicit_failed",
-            model_name="rt__explicit_failed",
-            status=DeploymentReleaseStatus.ACTIVATION_FAILED,
-            activated_at=None,
-            smoke_report={"passed": False},
-            compatibility_report={"compatible": True},
-        )
+def test_load_failure_does_not_undeploy_release_and_retries(engine, serving, monkeypatch):
+    app, state = serving
+    with Session(engine) as session:
+        _seed_release(session, release_id="rel_one", version_id="mvr_one", model_name="rt__one")
+        add_execution(session, "rex_a", ["rel_one"])
         session.commit()
-
-    loaded: list[str] = []
-
-    @contextmanager
-    def _session_scope(_settings) -> Generator[Session, None, None]:
-        session = Session(engine, expire_on_commit=False)
-        try:
-            yield session
-            session.commit()
-        finally:
-            session.close()
-
-    class FakeTritonClient:
-        def __init__(self, *, endpoint_url: str, timeout_seconds: int) -> None:
-            self.endpoint_url = endpoint_url
-            self.timeout_seconds = timeout_seconds
-
-    class FakeRepositoryManager:
-        def __init__(self, _settings: PlatformSettings) -> None:
-            pass
-
-        def stage_release(self, **_kwargs: object) -> None:
-            return None
-
-        def load_release(self, **kwargs: object) -> None:
-            loaded.append(str(kwargs.get("stable_model_name")))
-
-    monkeypatch.setattr("deployment_controller.lifecycle.session_scope", _session_scope)
-    monkeypatch.setattr(
-        "deployment_controller.lifecycle.get_deployment_package_detail",
-        lambda _session, *, model_version_id: SimpleNamespace(
-            serving_manifest={"model_version_id": model_version_id}
-        ),
-    )
-    monkeypatch.setattr("deployment_controller.lifecycle.TritonRepositoryManager", FakeRepositoryManager)
-    monkeypatch.setattr("deployment_controller.lifecycle.TritonHttpControlClient", FakeTritonClient)
-
-    app = FastAPI()
-    app.state.settings = settings
-
-    asyncio.run(reload_active_releases(app))
-
-    assert loaded == ["rt__recoverable"]
-    with Session(engine, expire_on_commit=False) as session:
-        recoverable = session.get(DeploymentRelease, "rel_recoverable")
-        explicit_failed = session.get(DeploymentRelease, "rel_explicit_failed")
-    assert recoverable is not None
-    assert recoverable.status == DeploymentReleaseStatus.ACTIVATED.value
-    assert explicit_failed is not None
-    assert explicit_failed.status == DeploymentReleaseStatus.ACTIVATION_FAILED.value
+    state["fail"] = True
+    assert asyncio.run(reload_active_releases_until_ready(app, attempts=2)) is True
+    with Session(engine) as session:
+        assert session.get(DeploymentRelease, "rel_one").status == "activated"
+    state["fail"] = False
+    assert asyncio.run(reload_active_releases_until_ready(app)) is False
+    assert state["ready"] == {"rt__one": {1}}
 
 
-def test_startup_unloads_deactivated_model_without_removing_release(
-    engine,
-    settings: PlatformSettings,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with Session(engine, expire_on_commit=False) as session:
-        _seed_release(
-            session,
-            release_id="rel_deactivated",
-            version_id="mvr_deactivated",
-            model_name="rt__deactivated",
-            status=DeploymentReleaseStatus.DEACTIVATED,
-        )
+def test_unused_model_is_unloaded_even_when_another_model_fails_to_load(engine, serving):
+    app, state = serving
+    with Session(engine) as session:
+        _seed_release(session, release_id="rel_needed", version_id="mvr_needed", model_name="rt__a")
+        _seed_release(session, release_id="rel_unused", version_id="mvr_unused", model_name="rt__z")
+        add_execution(session, "rex_needed", ["rel_needed"])
         session.commit()
-
-    unloaded: list[str] = []
-
-    @contextmanager
-    def _session_scope(_settings) -> Generator[Session, None, None]:
-        session = Session(engine, expire_on_commit=False)
-        try:
-            yield session
-            session.commit()
-        finally:
-            session.close()
-
-    class FakeTritonClient:
-        def __init__(self, *, endpoint_url: str, timeout_seconds: int) -> None:
-            self.endpoint_url = endpoint_url
-            self.timeout_seconds = timeout_seconds
-
-        def repository_index(self, *, ready_only: bool = False) -> list[dict[str, str]]:
-            _ = ready_only
-            return [{"name": "rt__deactivated", "version": "1", "state": "READY"}]
-
-        def unload_model(self, model_name: str) -> None:
-            unloaded.append(model_name)
-
-    class FakeRepositoryManager:
-        def __init__(self, _settings: PlatformSettings) -> None:
-            pass
-
-    monkeypatch.setattr("deployment_controller.lifecycle.session_scope", _session_scope)
-    monkeypatch.setattr(
-        "deployment_controller.lifecycle.TritonRepositoryManager",
-        FakeRepositoryManager,
-    )
-    monkeypatch.setattr(
-        "deployment_controller.lifecycle.TritonHttpControlClient",
-        FakeTritonClient,
-    )
-
-    app = FastAPI()
-    app.state.settings = settings
-
-    asyncio.run(reload_active_releases(app))
-
-    assert unloaded == ["rt__deactivated"]
-    with Session(engine, expire_on_commit=False) as session:
-        release = session.get(DeploymentRelease, "rel_deactivated")
-    assert release is not None
-    assert release.status == DeploymentReleaseStatus.DEACTIVATED.value
+    state["ready"] = {"rt__z": {1}}
+    state["fail"] = True
+    assert asyncio.run(reload_active_releases_until_ready(app)) is True
+    assert state["unloads"] == ["rt__z"]
+    assert state["ready"] == {}
 
 
 def _seed_release(

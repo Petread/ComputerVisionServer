@@ -621,7 +621,17 @@ def _process_transform_metadata(
             "y_min_mm": float(y_min),
             "y_max_mm": float(y_max),
         }
+    spatial_metadata = {}
+    if profile.spatial_calibration is not None:
+        spatial = profile.spatial_calibration
+        projection = np.asarray(spatial.projection_matrix, dtype=np.float64).reshape(3, 4)
+        spatial_metadata = {
+            "spatial_calibration_method": spatial.method,
+            "spatial_projection_matrix": (image_to_view @ projection).reshape(-1).tolist(),
+            "spatial_camera_center_mm": list(spatial.camera_center_mm),
+        }
     return {
+        **spatial_metadata,
         "process_calibration_id": profile.calibration_id,
         "process_calibration_hash": profile.calibration_hash,
         "homography_image_to_process": profile.homography_image_to_process,

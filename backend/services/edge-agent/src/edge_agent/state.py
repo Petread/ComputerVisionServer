@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
-import json
 import os
 import shutil
 import threading
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -37,6 +38,8 @@ from cv_contracts import (
     EdgeRuntimeStatus,
     EdgeStorageQuotaStatus,
 )
+from cv_contracts.edge import EdgeRuntimeEngine
+from cv_contracts.runtime import RuntimeResultHistoryPolicy
 from cv_runtime.distribution import edge_node_contracts, runtime_code_digest
 
 from edge_agent.engine import EdgeEngineAdmissionError, EdgeEngineManager
@@ -47,7 +50,8 @@ from edge_agent.graph import (
     build_productive_registry,
 )
 from edge_agent.inventory import PlatformInventoryProbe
-from edge_agent.persistence import EdgeStateStore
+from edge_agent.persistence import EdgeStateStore, TriggerCacheFullError
+from edge_agent.result_storage import TransientCache, history_payload
 from edge_agent.runtime import EdgeRuntimeSupervisor, EdgeRuntimeTriggerError, SourceFrame
 
 
@@ -95,8 +99,8 @@ class EdgeAgentConfig:
     max_blob_chunk_bytes: int = 4 * 1024 * 1024
     max_result_batch_bytes: int = 512 * 1024
     artifact_quota_bytes: int = 32 * 1024**3
-    result_outbox_quota_bytes: int = 2 * 1024**3
-    result_outbox_max_items: int = 250_000
+    result_outbox_quota_bytes: int = 64 * 1024**2
+    result_outbox_max_items: int = 10_000
     minimum_disk_free_bytes: int = 2 * 1024**3
     supervisor_max_restarts: int = 3
     supervisor_base_backoff_seconds: float = 0.25
@@ -158,9 +162,9 @@ class EdgeAgentConfig:
             capability_inventory=os.getenv("YBB_EDGE_CAPABILITY_INVENTORY", "probe"),
             artifact_quota_bytes=int(os.getenv("YBB_EDGE_ARTIFACT_QUOTA_BYTES", str(32 * 1024**3))),
             result_outbox_quota_bytes=int(
-                os.getenv("YBB_EDGE_OUTBOX_QUOTA_BYTES", str(2 * 1024**3))
+                os.getenv("YBB_EDGE_OUTBOX_QUOTA_BYTES", str(64 * 1024**2))
             ),
-            result_outbox_max_items=int(os.getenv("YBB_EDGE_OUTBOX_MAX_ITEMS", "250000")),
+            result_outbox_max_items=int(os.getenv("YBB_EDGE_OUTBOX_MAX_ITEMS", "10000")),
             minimum_disk_free_bytes=int(
                 os.getenv("YBB_EDGE_MINIMUM_DISK_FREE_BYTES", str(2 * 1024**3))
             ),
@@ -207,7 +211,13 @@ class EdgeAgentState:
         self._artifact_capacity_rejected = False
         self._outbox_capacity_rejected = False
         self._preview_last_emitted: dict[str, float] = {}
-        self._trigger_locks: dict[tuple[str, str], threading.Lock] = {}
+        self._trigger_locks = tuple(threading.Lock() for _ in range(64))
+        self._trigger_cache_reservations = 0
+        self._last_trigger_results: TransientCache[EdgePlantTriggerResponse] = TransientCache()
+        self._previews: TransientCache[EdgePreviewFrame] = TransientCache()
+        self._preview_sequence = 0
+        self._history_last_emitted: TransientCache[float] = TransientCache(ttl_seconds=3601)
+        self._runtime_engine_builds: dict[str, list[dict[str, Any]]] = {}
         self.boot_id = str(uuid.uuid4())
         self._inventory_probe = inventory_probe or PlatformInventoryProbe()
         self._lock = threading.RLock()
@@ -296,6 +306,32 @@ class EdgeAgentState:
         self.ensure_online()
         storage = self._storage_status()
         processes = self.store.processes()
+        deployments = {
+            manifest.deployment_id: manifest for manifest, *_ in self.store.deployments()
+        }
+        processes = [
+            process.model_copy(
+                update={
+                    "channel_id": deployments[process.deployment_id].channel_id,
+                    "workload_release_id": deployments[process.deployment_id].workload_release_id,
+                    "metrics": self.supervisor.performance(process.deployment_id),
+                    "engines": [
+                        EdgeRuntimeEngine(
+                            node_key=build["node_key"],
+                            cache_hit=build["cache_hit"],
+                            cache_key=build.get("cache_key"),
+                            reason=build.get("reason"),
+                            duration_ms=build["duration_ms"],
+                            engine_size_bytes=build["engine_size_bytes"],
+                        )
+                        for build in self._runtime_engine_builds.get(process.deployment_id, [])
+                    ],
+                }
+            )
+            if process.deployment_id in deployments
+            else process
+            for process in processes
+        ]
         supervisor_state = "idle"
         if any(process.state == "crash_loop" for process in processes) or storage.pressure:
             supervisor_state = "degraded"
@@ -366,7 +402,9 @@ class EdgeAgentState:
             supported_node_types=list(self._supported_node_types()),
             runtime_code_digest=runtime_code_digest(),
             node_contract_versions=edge_node_contracts(),
-            software_update_protocol=1 if os.getenv("YBB_EDGE_SOFTWARE_LAUNCHER") == "1" else 0,
+            software_update_protocol=(
+                2 if os.getenv("YBB_EDGE_SOFTWARE_UPDATE_PROTOCOL") == "2" else 1
+            ) if os.getenv("YBB_EDGE_SOFTWARE_LAUNCHER") == "1" else 0,
             camera_adapters=available_adapters,
             camera_inventory=camera_inventory,
             inventory_source=inventory.source if inventory else "configured_fallback",
@@ -648,7 +686,19 @@ class EdgeAgentState:
                 return state
             command_keys["stop"] = idempotency_key
             stopped = state.model_copy(update={"status": "stopped", "last_error": None})
-            self.supervisor.stop(deployment_id)
+            # Persist the stop intent before waiting, so an agent restart cannot
+            # recover this workload and reopen its camera after a stop timeout.
+            self.store.save_deployment_state(
+                deployment_id,
+                state.model_copy(update={"status": "stopping"}),
+                updated_at=_utc_now(),
+            )
+            if not self.supervisor.stop(deployment_id):
+                raise EdgeStateError(
+                    "runtime_stop_pending",
+                    "The Edge worker is still stopping; the camera may still be in use.",
+                    retryable=True,
+                )
             self.store.stop_deployment(deployment_id, stopped, command_keys, updated_at=_utc_now())
             return stopped
 
@@ -697,6 +747,7 @@ class EdgeAgentState:
                     status_code=507,
                     retryable=True,
                 )
+            self._ensure_result_disk_capacity(size)
             self.store.insert_result(envelope, size_bytes=size)
             self._outbox_capacity_rejected = False
             return envelope
@@ -706,17 +757,22 @@ class EdgeAgentState:
         channel_id: str,
         request: EdgePlantTriggerRequest,
         *,
-        idempotency_key: str,
+        idempotency_key: str | None,
     ) -> EdgePlantTriggerResponse:
         self.ensure_online()
         request_digest = hashlib.sha256(
             request.model_dump_json(exclude_none=False).encode("utf-8")
         ).hexdigest()
-        lock_key = (channel_id, idempotency_key)
-        with self._lock:
-            trigger_lock = self._trigger_locks.setdefault(lock_key, threading.Lock())
+        if idempotency_key is None:
+            trigger_lock = nullcontext()
+        else:
+            trigger_lock = self._trigger_locks[hash((channel_id, idempotency_key)) % 64]
         with trigger_lock:
-            existing = self.store.plant_trigger_response(channel_id, idempotency_key)
+            existing = (
+                self.store.plant_trigger_response(channel_id, idempotency_key)
+                if idempotency_key is not None
+                else None
+            )
             if existing is not None:
                 existing_digest, response = existing
                 if existing_digest != request_digest:
@@ -725,46 +781,104 @@ class EdgeAgentState:
                         "The trigger idempotency key was reused with another request.",
                     )
                 return response.model_copy(update={"duplicate": True})
-            correlation_id = request.correlation_id or f"plant:{uuid.uuid4()}"
+            if idempotency_key is not None:
+                with self._lock:
+                    reservations = self._trigger_cache_reservations + 1
+                    if not self.store.trigger_cache_has_capacity(
+                        reservations * self.config.max_result_batch_bytes,
+                        additional_items=reservations,
+                    ):
+                        raise EdgeStateError(
+                            "trigger_cache_full",
+                            "The trigger replay cache is full; "
+                            "retry after entries expire (5 minutes).",
+                            status_code=507,
+                            retryable=True,
+                        )
+                    self._ensure_result_disk_capacity(self.config.max_result_batch_bytes)
+                    self._trigger_cache_reservations += 1
             try:
-                manifest, _frame, execution, envelope = self.supervisor.trigger(
-                    channel_id,
-                    payload=request.payload,
-                    correlation_id=correlation_id,
-                )
-            except EdgeRuntimeTriggerError as exc:
-                status_code = 404 if exc.code == "channel_not_running" else 503
-                raise EdgeStateError(
-                    exc.code,
-                    str(exc),
-                    status_code=status_code,
-                    retryable=status_code == 503,
-                ) from exc
-            response = EdgePlantTriggerResponse(
-                channel_id=channel_id,
-                workload_release_id=manifest.workload_release_id,
-                correlation_id=correlation_id,
-                boot_id=self.boot_id,
-                result_sequence=envelope.sequence,
-                execution_result=(
-                    execution
-                    if request.include_overlay
-                    else {**execution, "overlay_primitives": []}
-                ),
-                completed_at=_utc_now(),
-            )
-            self.store.save_plant_trigger_response(
+                return self._execute_trigger(channel_id, request, idempotency_key, request_digest)
+            finally:
+                if idempotency_key is not None:
+                    with self._lock:
+                        self._trigger_cache_reservations -= 1
+
+    def _execute_trigger(
+        self,
+        channel_id: str,
+        request: EdgePlantTriggerRequest,
+        idempotency_key: str | None,
+        request_digest: str,
+    ) -> EdgePlantTriggerResponse:
+        correlation_id = request.correlation_id or f"plant:{uuid.uuid4()}"
+        try:
+            manifest, _frame, execution, envelope, response_policy = self.supervisor.trigger(
                 channel_id,
-                idempotency_key,
-                request_digest,
-                response,
-                created_at=response.completed_at,
+                payload=request.payload,
+                correlation_id=correlation_id,
+                idempotency_key=idempotency_key,
             )
-            return response
+        except EdgeRuntimeTriggerError as exc:
+            status_code = {
+                "channel_not_running": 404,
+                "trigger_idempotency_key_required": 422,
+                "trigger_configuration_invalid": 422,
+            }.get(exc.code, 503)
+            raise EdgeStateError(
+                exc.code,
+                str(exc),
+                status_code=status_code,
+                retryable=status_code == 503,
+            ) from exc
+        http_execution = dict(execution)
+        if not request.include_overlay:
+            http_execution["overlay_primitives"] = []
+        if response_policy.mode != "full":
+            # Persist the policy with the executed result, so retries keep their
+            # original representation even after a pipeline update or restart.
+            # The existing arbitrary metadata field is readable by older runtimes.
+            http_execution["runtime_metadata"] = {
+                **dict(execution.get("runtime_metadata") or {}),
+                "edge_http_response_policy": response_policy.model_dump(mode="json"),
+            }
+        response = EdgePlantTriggerResponse(
+            channel_id=channel_id,
+            workload_release_id=manifest.workload_release_id,
+            correlation_id=correlation_id,
+            boot_id=self.boot_id,
+            result_sequence=envelope.sequence if envelope is not None else None,
+            execution_result=http_execution,
+            completed_at=_utc_now(),
+        )
+        size = len(response.model_dump_json().encode("utf-8"))
+        if idempotency_key is not None:
+            if size > self.config.max_result_batch_bytes:
+                raise EdgeStateError(
+                    "trigger_result_too_large",
+                    "Trigger response exceeds the replay cache entry limit.",
+                    status_code=413,
+                )
+            try:
+                self.store.save_plant_trigger_response(
+                    channel_id,
+                    idempotency_key,
+                    request_digest,
+                    response,
+                    created_at=response.completed_at,
+                )
+            except TriggerCacheFullError as exc:
+                raise EdgeStateError("trigger_cache_full", str(exc), status_code=507) from exc
+        with self._lock:
+            self._last_trigger_results.put(channel_id, response, size_bytes=size)
+        return response
 
     def last_trigger_result(self, channel_id: str) -> EdgePlantLastResultResponse:
         self.ensure_online()
-        result = self.store.latest_plant_trigger_response(channel_id)
+        with self._lock:
+            result = self._last_trigger_results.get(channel_id)
+        if result is None:
+            result = self.store.latest_plant_trigger_response(channel_id)
         return EdgePlantLastResultResponse(
             channel_id=channel_id,
             available=result is not None,
@@ -902,37 +1016,21 @@ class EdgeAgentState:
                 status_code=409,
                 retryable=True,
             )
-        metadata_path, image_path = self._preview_paths(channel_id)
-        try:
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
-            metadata = {}
-        sequence = int(metadata.get("sequence") or 0)
+        with self._lock:
+            preview = self._previews.get(channel_id)
+        sequence = preview.sequence if preview is not None else 0
         if (
-            not metadata
-            or metadata.get("boot_id") != self.boot_id
+            preview is None
+            or preview.boot_id != self.boot_id
             or sequence <= after_sequence
-            or not image_path.is_file()
         ):
             return EdgePreviewFrame(
                 channel_id=channel_id,
-                workload_release_id=metadata.get("workload_release_id"),
+                workload_release_id=preview.workload_release_id if preview is not None else None,
                 boot_id=self.boot_id,
                 sequence=max(sequence, 0),
             )
-        image_bytes = image_path.read_bytes()
-        return EdgePreviewFrame(
-            channel_id=channel_id,
-            workload_release_id=metadata.get("workload_release_id"),
-            boot_id=self.boot_id,
-            available=True,
-            sequence=sequence,
-            image_base64=base64.b64encode(image_bytes).decode("ascii"),
-            width=metadata.get("width"),
-            height=metadata.get("height"),
-            captured_at=metadata.get("captured_at"),
-            metadata=dict(metadata.get("metadata") or {}),
-        )
+        return preview
 
     def publish_preview_bytes(
         self,
@@ -952,41 +1050,23 @@ class EdgeAgentState:
                 status_code=413,
             )
         with self._lock:
-            metadata_path, image_path = self._preview_paths(channel_id)
-            try:
-                previous = json.loads(metadata_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError, TypeError):
-                previous = {}
-            sequence = int(previous.get("sequence") or 0) + 1
-            payload = {
-                "channel_id": channel_id,
-                "workload_release_id": workload_release_id,
-                "boot_id": self.boot_id,
-                "sequence": sequence,
-                "width": width,
-                "height": height,
-                "captured_at": captured_at or _utc_now(),
-                "metadata": metadata or {},
-            }
-            image_path.parent.mkdir(parents=True, exist_ok=True)
-            image_tmp = image_path.with_suffix(".jpg.tmp")
-            metadata_tmp = metadata_path.with_suffix(".json.tmp")
-            image_tmp.write_bytes(image_bytes)
-            metadata_tmp.write_text(json.dumps(payload), encoding="utf-8")
-            image_tmp.replace(image_path)
-            metadata_tmp.replace(metadata_path)
-        return EdgePreviewFrame(
-            channel_id=channel_id,
-            workload_release_id=workload_release_id,
-            boot_id=self.boot_id,
-            available=True,
-            sequence=sequence,
-            image_base64=base64.b64encode(image_bytes).decode("ascii"),
-            width=width,
-            height=height,
-            captured_at=payload["captured_at"],
-            metadata=metadata or {},
-        )
+            self._preview_sequence += 1
+            preview = EdgePreviewFrame(
+                channel_id=channel_id,
+                workload_release_id=workload_release_id,
+                boot_id=self.boot_id,
+                available=True,
+                sequence=self._preview_sequence,
+                image_base64=base64.b64encode(image_bytes).decode("ascii"),
+                width=width,
+                height=height,
+                captured_at=captured_at or _utc_now(),
+                metadata=metadata or {},
+            )
+            self._previews.put(
+                channel_id, preview, size_bytes=len(preview.model_dump_json().encode("utf-8"))
+            )
+            return preview
 
     def _recover_committed_workloads(self) -> None:
         manifests: list[EdgeDeploymentManifest] = []
@@ -1002,8 +1082,11 @@ class EdgeAgentState:
         record = self.store.deployment(manifest.deployment_id)
         if record is None:
             raise RuntimeError(f"Deployment {manifest.deployment_id} has no persisted state.")
-        engine_builds = record[1].engine_builds
+        # Resolve cached plans from persistent data, even after a new workload release
+        # or missing per-release file. Only missing/invalid matching plans are built.
+        engine_builds = self.engine_manager.ensure_engines(manifest)
         inference_runtime = self.engine_manager.create_inference_runtime(manifest, engine_builds)
+        self._runtime_engine_builds[manifest.deployment_id] = engine_builds
         try:
             return EdgeGraphExecutor.from_manifest(
                 manifest,
@@ -1020,17 +1103,45 @@ class EdgeAgentState:
         manifest: EdgeDeploymentManifest,
         frame: SourceFrame,
         payload: dict[str, Any],
-    ) -> EdgeResultEnvelope:
+    ) -> EdgeResultEnvelope | None:
         is_execution = payload.get("schema_version") == "runtime.execution.result.v1"
-        return self.enqueue_result(
-            channel_id=manifest.channel_id,
-            workload_release_id=manifest.workload_release_id,
-            correlation_id=str(
-                payload.get("correlation_id") or f"edge-frame:{self.boot_id}:{frame.index}"
-            ),
-            result_type="pipeline_execution" if is_execution else "source_frame",
-            payload=payload,
+        policy = RuntimeResultHistoryPolicy.model_validate(
+            manifest.runtime_requirements.get("result_history_policy") or {}
         )
+        if not policy.enabled:
+            return None
+        selected = history_payload(payload)
+        if selected is None:
+            return None
+        with self._lock:
+            previous = self._history_last_emitted.get(manifest.channel_id)
+            now = time.monotonic()
+            if previous is not None and now - previous < policy.sample_interval_seconds:
+                return None
+            envelope = self.enqueue_result(
+                channel_id=manifest.channel_id,
+                workload_release_id=manifest.workload_release_id,
+                correlation_id=str(
+                    payload.get("correlation_id") or f"edge-frame:{self.boot_id}:{frame.index}"
+                ),
+                result_type="pipeline_execution" if is_execution else "source_frame",
+                payload=selected,
+            )
+            self._history_last_emitted.put(manifest.channel_id, now, size_bytes=64)
+            return envelope
+
+    def _ensure_result_disk_capacity(self, additional_bytes: int) -> None:
+        if (
+            self.faults.disk_full
+            or shutil.disk_usage(self.config.data_root).free - additional_bytes
+            < self.config.minimum_disk_free_bytes
+        ):
+            raise EdgeStateError(
+                "result_storage_reserve",
+                "Result storage would consume the disk free-space reserve.",
+                status_code=507,
+                retryable=True,
+            )
 
     def _preview_requested(self, channel_id: str) -> bool:
         return bool(self.store.active_media_leases(channel_id, now=_utc_now()))
@@ -1042,22 +1153,32 @@ class EdgeAgentState:
         execution: dict[str, Any] | None,
     ) -> None:
         leases = self.store.active_media_leases(manifest.channel_id, now=_utc_now())
-        if not leases or frame.image is None:
+        trigger_preview = bool(
+            ((execution or {}).get("runtime_metadata") or {}).get("trigger_preview")
+        )
+        if (not leases and not trigger_preview) or frame.image is None:
             return
-        max_fps = max(lease.max_fps for lease in leases)
+        max_fps = max((lease.max_fps for lease in leases), default=2.0)
         now = time.monotonic()
-        if now - self._preview_last_emitted.get(manifest.channel_id, 0.0) < 1.0 / max_fps:
+        if (
+            not trigger_preview
+            and now - self._preview_last_emitted.get(manifest.channel_id, 0.0) < 1.0 / max_fps
+        ):
             return
         try:
             import cv2  # type: ignore[import-not-found]
 
             image = frame.image.copy()
-            overlays = list((execution or {}).get("overlay_primitives") or [])
-            include_overlay = any(lease.include_overlay for lease in leases)
+            overlays = _preview_overlays(
+                execution,
+                source_width=int(frame.width),
+                source_height=int(frame.height),
+            )
+            include_overlay = trigger_preview or any(lease.include_overlay for lease in leases)
             if include_overlay and overlays:
                 _draw_overlays(image, overlays, cv2)
             height, width = image.shape[:2]
-            max_width = max(lease.max_width for lease in leases)
+            max_width = max((lease.max_width for lease in leases), default=640)
             if width > max_width:
                 target_height = max(1, round(height * max_width / width))
                 image = cv2.resize(image, (max_width, target_height), interpolation=cv2.INTER_AREA)
@@ -1067,6 +1188,12 @@ class EdgeAgentState:
             )
             if not ok:
                 return
+            performance = self.supervisor.performance(manifest.deployment_id)
+            pipeline_timing = (
+                next((item for item in performance.stages if item.key == "pipeline"), None)
+                if performance is not None
+                else None
+            )
             self.publish_preview_bytes(
                 channel_id=manifest.channel_id,
                 workload_release_id=manifest.workload_release_id,
@@ -1076,19 +1203,27 @@ class EdgeAgentState:
                 captured_at=frame.captured_at,
                 metadata={
                     "source_frame_index": frame.index,
+                    "trigger_preview": trigger_preview,
                     "overlay_included": bool(include_overlay and overlays),
                     "overlay_primitives": overlays if include_overlay else [],
                     "correlation_id": (execution or {}).get("correlation_id"),
+                    "source_fps": performance.source_fps if performance is not None else None,
+                    "processed_fps": performance.processed_fps if performance is not None else None,
+                    "latency_ms": pipeline_timing.last_ms if pipeline_timing is not None else None,
+                    "processed_frames": performance.processed_frames
+                    if performance is not None
+                    else None,
+                    "acquired_frames": performance.acquired_frames
+                    if performance is not None
+                    else None,
+                    "pipeline_node_timings": (execution or {})
+                    .get("timing", {})
+                    .get("node_timings_ms", (execution or {}).get("timing", {}).get("nodes", [])),
                 },
             )
             self._preview_last_emitted[manifest.channel_id] = now
         except (ImportError, EdgeStateError, ValueError):
             return
-
-    def _preview_paths(self, channel_id: str) -> tuple[Path, Path]:
-        key = hashlib.sha256(channel_id.encode("utf-8")).hexdigest()
-        root = self.config.data_root / "previews"
-        return root / f"{key}.json", root / f"{key}.jpg"
 
     def _storage_status(self) -> EdgeStorageQuotaStatus:
         disk = shutil.disk_usage(self.config.data_root)
@@ -1231,19 +1366,274 @@ def _optional_environment(name: str, default: str) -> str | None:
     return value or None
 
 
+def _preview_overlays(
+    execution: dict[str, Any] | None,
+    *,
+    source_width: int,
+    source_height: int,
+) -> list[dict[str, Any]]:
+    """Project runtime overlay geometry into the JPEG source-frame coordinate space."""
+    payload = execution or {}
+    overlays = [
+        copy.deepcopy(item)
+        for item in payload.get("overlay_primitives") or []
+        if isinstance(item, dict)
+    ][:500]
+    contexts = {
+        str(item.get("context_id")): item
+        for item in payload.get("image_contexts") or []
+        if isinstance(item, dict) and item.get("context_id")
+    }
+    return [
+        _project_preview_overlay(
+            primitive,
+            contexts=contexts,
+            source_width=source_width,
+            source_height=source_height,
+        )
+        for primitive in overlays
+    ]
+
+
+def _project_preview_overlay(
+    primitive: dict[str, Any],
+    *,
+    contexts: dict[str, dict[str, Any]],
+    source_width: int,
+    source_height: int,
+) -> dict[str, Any]:
+    geometry = primitive.get("geometry")
+    if not isinstance(geometry, dict) or not geometry or primitive.get("primitive_type") in {
+        "heatmap",
+        "mask",
+    }:
+        return primitive
+    coordinate_system = str(
+        geometry.get("coordinate_system") or primitive.get("coordinate_system") or "image_pixels"
+    ).lower()
+    context_id = str(primitive.get("image_context_id") or "")
+    context = contexts.get(context_id)
+    local_width = _positive_float(
+        (context or {}).get("width") or (primitive.get("resolution") or {}).get("width")
+    ) or float(source_width)
+    local_height = _positive_float(
+        (context or {}).get("height") or (primitive.get("resolution") or {}).get("height")
+    ) or float(source_height)
+
+    def project(x: object, y: object) -> tuple[float, float] | None:
+        try:
+            px, py = float(x), float(y)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if "normalized" in coordinate_system:
+            px *= local_width
+            py *= local_height
+        elif "percent" in coordinate_system:
+            px *= local_width / 100.0
+            py *= local_height / 100.0
+        projected = _project_context_point(
+            px,
+            py,
+            context=context,
+            contexts=contexts,
+            source_width=source_width,
+            source_height=source_height,
+        )
+        return projected
+
+    projected_geometry = _project_overlay_geometry(geometry, project)
+    if projected_geometry is None:
+        return primitive
+    projected_geometry["coordinate_system"] = "image_pixels"
+    primitive["geometry"] = projected_geometry
+    primitive["coordinate_system"] = "image_pixels"
+    primitive["resolution"] = {"width": source_width, "height": source_height}
+    root_context = _root_image_context(context, contexts)
+    if root_context is not None:
+        primitive["projected_from_context_id"] = context_id or None
+        primitive["image_context_id"] = root_context.get("context_id")
+        primitive["display_context_id"] = root_context.get("context_id")
+    return primitive
+
+
+def _project_context_point(
+    x: float,
+    y: float,
+    *,
+    context: dict[str, Any] | None,
+    contexts: dict[str, dict[str, Any]],
+    source_width: int,
+    source_height: int,
+) -> tuple[float, float] | None:
+    current = context
+    current_width = _positive_float((current or {}).get("width")) or float(source_width)
+    current_height = _positive_float((current or {}).get("height")) or float(source_height)
+    visited: set[str] = set()
+    while current is not None:
+        current_id = str(current.get("context_id") or "")
+        if not current_id or current_id in visited:
+            break
+        visited.add(current_id)
+        parent_id = str(
+            current.get("parent_image_context_id")
+            or current.get("source_image_context_id")
+            or ""
+        )
+        if not parent_id or parent_id == current_id:
+            break
+        parent = contexts.get(parent_id)
+        if parent is None:
+            break
+        parent_width = _positive_float(parent.get("width")) or current_width
+        parent_height = _positive_float(parent.get("height")) or current_height
+        transform = current.get("transform") if isinstance(current.get("transform"), dict) else {}
+        parameters = (
+            transform.get("parameters") if isinstance(transform.get("parameters"), dict) else {}
+        )
+        transform_type = str(transform.get("transform_type") or "identity")
+        if transform_type == "crop":
+            x += float(parameters.get("x") or 0)
+            y += float(parameters.get("y") or 0)
+        elif transform_type == "roi_crop":
+            box = parameters.get("box") if isinstance(parameters.get("box"), dict) else {}
+            x_min = float(box.get("x_min") or box.get("x") or 0)
+            y_min = float(box.get("y_min") or box.get("y") or 0)
+            x_max = float(box.get("x_max") or 1)
+            y_max = float(box.get("y_max") or 1)
+            normalized = max(abs(x_min), abs(y_min), abs(x_max), abs(y_max)) <= 1.0
+            left = x_min * parent_width if normalized else x_min
+            top = y_min * parent_height if normalized else y_min
+            roi_width = (x_max - x_min) * parent_width if normalized else x_max - x_min
+            roi_height = (y_max - y_min) * parent_height if normalized else y_max - y_min
+            x = left + x * roi_width / max(current_width, 1.0)
+            y = top + y * roi_height / max(current_height, 1.0)
+        elif transform_type == "resize":
+            x *= parent_width / max(current_width, 1.0)
+            y *= parent_height / max(current_height, 1.0)
+        elif transform_type not in {"identity", "mask", "normalize"}:
+            # Distortion and homography transforms need their calibrated inverse.
+            # Leaving the primitive in its original context is safer than drawing
+            # a plausible-looking result at the wrong source position.
+            return None
+        current = parent
+        current_width, current_height = parent_width, parent_height
+    x *= source_width / max(current_width, 1.0)
+    y *= source_height / max(current_height, 1.0)
+    return x, y
+
+
+def _project_overlay_geometry(
+    geometry: dict[str, Any],
+    project: Any,  # noqa: ANN401 - local point projection callable
+) -> dict[str, Any] | None:
+    result = copy.deepcopy(geometry)
+    projected_any = False
+
+    def assign_pair(container: dict[str, Any], x_key: str, y_key: str) -> None:
+        nonlocal projected_any
+        if x_key not in container or y_key not in container:
+            return
+        point = project(container[x_key], container[y_key])
+        if point is not None:
+            container[x_key], container[y_key] = point
+            projected_any = True
+
+    for x_key, y_key in (
+        ("x_min", "y_min"),
+        ("x_max", "y_max"),
+        ("x1", "y1"),
+        ("x2", "y2"),
+        ("x", "y"),
+        ("cx", "cy"),
+    ):
+        assign_pair(result, x_key, y_key)
+    for key in ("start", "end"):
+        nested = result.get(key)
+        if isinstance(nested, dict):
+            assign_pair(nested, "x", "y")
+    points = result.get("points")
+    if isinstance(points, list):
+        projected_points: list[Any] = []
+        for item in points:
+            if isinstance(item, dict):
+                point = project(item.get("x"), item.get("y"))
+                if point is not None:
+                    projected_points.append({**item, "x": point[0], "y": point[1]})
+                    projected_any = True
+                else:
+                    projected_points.append(item)
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                point = project(item[0], item[1])
+                projected_points.append([point[0], point[1]] if point is not None else list(item))
+                projected_any = projected_any or point is not None
+        result["points"] = projected_points
+    if "width" in result and "height" in result and "x" in geometry and "y" in geometry:
+        end = project(
+            float(geometry["x"]) + float(geometry["width"]),
+            float(geometry["y"]) + float(geometry["height"]),
+        )
+        if end is not None and "x" in result and "y" in result:
+            result["width"] = end[0] - float(result["x"])
+            result["height"] = end[1] - float(result["y"])
+    return result if projected_any else None
+
+
+def _root_image_context(
+    context: dict[str, Any] | None,
+    contexts: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    current = context
+    visited: set[str] = set()
+    while current is not None:
+        current_id = str(current.get("context_id") or "")
+        if not current_id or current_id in visited:
+            return current
+        visited.add(current_id)
+        parent_id = str(
+            current.get("parent_image_context_id")
+            or current.get("source_image_context_id")
+            or ""
+        )
+        if not parent_id or parent_id == current_id or parent_id not in contexts:
+            return current
+        current = contexts[parent_id]
+    return None
+
+
+def _positive_float(value: object) -> float | None:
+    try:
+        parsed = float(value) if value is not None else 0.0
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _draw_overlays(
     image: Any,  # noqa: ANN401 - optional OpenCV array type
     overlays: list[dict[str, Any]],
     cv2: Any,  # noqa: ANN401 - optional OpenCV module type
 ) -> None:
     """Render the bounded E1 primitive subset; full primitive data stays in metadata."""
+    height, width = image.shape[:2]
     for primitive in overlays[:500]:
         geometry = primitive.get("geometry") or {}
         primitive_type = primitive.get("primitive_type")
         color = (0, 220, 0)
         if primitive_type == "box":
-            point_a = (int(geometry.get("x1", 0)), int(geometry.get("y1", 0)))
-            point_b = (int(geometry.get("x2", 0)), int(geometry.get("y2", 0)))
+            point_a = _overlay_pixel_point(
+                geometry.get("x_min", geometry.get("left", geometry.get("x1", 0))),
+                geometry.get("y_min", geometry.get("top", geometry.get("y1", 0))),
+                primitive=primitive,
+                width=width,
+                height=height,
+            )
+            point_b = _overlay_pixel_point(
+                geometry.get("x_max", geometry.get("right", geometry.get("x2", 0))),
+                geometry.get("y_max", geometry.get("bottom", geometry.get("y2", 0))),
+                primitive=primitive,
+                width=width,
+                height=height,
+            )
             cv2.rectangle(image, point_a, point_b, color, 2)
             origin = (point_a[0], max(point_a[1] - 6, 12))
         elif primitive_type == "polygon":
@@ -1252,8 +1642,17 @@ def _draw_overlays(
 
                 points = np.asarray(
                     [
-                        [int(point.get("x", 0)), int(point.get("y", 0))]
+                        list(
+                            _overlay_pixel_point(
+                                point.get("x", 0),
+                                point.get("y", 0),
+                                primitive=primitive,
+                                width=width,
+                                height=height,
+                            )
+                        )
                         for point in geometry.get("points") or []
+                        if isinstance(point, dict)
                     ],
                     dtype=np.int32,
                 )
@@ -1263,7 +1662,13 @@ def _draw_overlays(
             except (TypeError, ValueError):
                 origin = (12, 24)
         else:
-            origin = (int(geometry.get("x", 12)), int(geometry.get("y", 24)))
+            origin = _overlay_pixel_point(
+                geometry.get("x", 12),
+                geometry.get("y", 24),
+                primitive=primitive,
+                width=width,
+                height=height,
+            )
         label = str(primitive.get("label") or "")
         confidence = primitive.get("confidence")
         if confidence is not None:
@@ -1279,3 +1684,28 @@ def _draw_overlays(
                 1,
                 cv2.LINE_AA,
             )
+
+
+def _overlay_pixel_point(
+    x: object,
+    y: object,
+    *,
+    primitive: dict[str, Any],
+    width: int,
+    height: int,
+) -> tuple[int, int]:
+    try:
+        px, py = float(x), float(y)
+    except (TypeError, ValueError, OverflowError):
+        return 0, 0
+    geometry = primitive.get("geometry") if isinstance(primitive.get("geometry"), dict) else {}
+    coordinate_system = str(
+        geometry.get("coordinate_system") or primitive.get("coordinate_system") or "image_pixels"
+    ).lower()
+    if "normalized" in coordinate_system:
+        px *= width
+        py *= height
+    elif "percent" in coordinate_system:
+        px *= width / 100.0
+        py *= height / 100.0
+    return round(px), round(py)

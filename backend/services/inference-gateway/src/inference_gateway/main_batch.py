@@ -3,6 +3,7 @@ from fastapi import APIRouter, FastAPI
 from cv_core import create_service_app
 
 from inference_gateway.api import batch, public_batch
+from inference_gateway.runtime.lifecycle import start_local_model_reconciler, stop_local_model_reconciler
 
 
 def _close_gateway(app: FastAPI) -> None:
@@ -20,5 +21,6 @@ app = create_service_app(
     title="CV Platform Inference Gateway Batch",
     service_name="inference-gateway-batch",
     api_router=router,
-    shutdown_hooks=[_close_gateway],
+    startup_hooks=[start_local_model_reconciler],
+    shutdown_hooks=[stop_local_model_reconciler, _close_gateway],
 )

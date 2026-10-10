@@ -515,6 +515,7 @@ class ExecutablePipelineGraph:
             timing={
                 "total_ms": _elapsed_ms(started),
                 "node_timings_ms": node_timings,
+                "stem_stage_timings_ms": dict(context.stem_stage_timings_ms),
                 "slowest_node": _slowest_node_timing(node_timings),
                 "inference_timings_ms": _inference_timings(executed_payloads),
                 "node_execution_mode": ("parallel_dag" if parallel_node_keys else "sequential"),

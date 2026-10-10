@@ -19,6 +19,8 @@ from cv_edge.software import canonical_manifest, verify_software_package
 
 ROOT = Path(__file__).resolve().parents[3]
 
+pytestmark = pytest.mark.usefixtures("edge_system_package_cache")
+
 
 @pytest.mark.parametrize(
     ("required", "installed", "matches"),

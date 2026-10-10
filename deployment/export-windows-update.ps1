@@ -1,10 +1,17 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Config = ""
+    [string]$Config = "",
+    [switch]$EdgeSigningPassphraseStdin
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+# The GUI supplies one UTF-8 stdin line; secrets never enter arguments, environment or files.
+$edgeSigningPassphrase = ""
+if ($EdgeSigningPassphraseStdin) {
+    [Console]::InputEncoding = New-Object Text.UTF8Encoding($false)
+    $edgeSigningPassphrase = [Console]::In.ReadLine()
+}
 trap {
     Write-Host ("FEHLER: {0}" -f $_.Exception.Message)
     exit 1
@@ -79,6 +86,59 @@ function Resolve-ExecutableCommand {
         }
     }
     return ""
+}
+
+function Export-EdgeRuntimePackages {
+    param([string]$ReleaseDirectory, [string]$Version, [string]$AppArchive, [AllowEmptyString()][string]$Passphrase)
+    $targetDirectory = Join-Path $ReleaseDirectory "edge-runtime"
+    New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+    $configPath = Join-Path ([IO.Path]::GetTempPath()) ("edge-export-{0}.json" -f [guid]::NewGuid().ToString("N"))
+    $python = Resolve-PythonForWheelDownload
+    $settings = @{
+        bundles = @($EdgeRuntimeBundles)
+        signing_key = $EdgeSigningKeyPath
+        openssl = $EdgeOpenSslExecutable
+        package_index_url = $EdgePackageIndexUrl
+        additional_wheel_directory = $EdgeAdditionalWheelDirectory
+    }
+    $process = $null
+    try {
+        $settings | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding UTF8
+        $arguments = @($python.Arguments) + @(
+            (Join-Path (Get-Location).Path "scripts\release\build_central_edge_updates.py"),
+            "--config", $configPath, "--output", $targetDirectory,
+            "--central-release-id", $Version, "--app-archive", $AppArchive
+        )
+        $quoted = foreach ($argument in $arguments) {
+            $escaped = ([string]$argument) -replace '(\\*)"', '$1$1\"'
+            $escaped = $escaped -replace '(\\+)$', '$1$1'
+            '"' + $escaped + '"'
+        }
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $python.FilePath
+        $startInfo.Arguments = $quoted -join ' '
+        $startInfo.WorkingDirectory = (Get-Location).Path
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardInput = $true
+        # Output inherits the existing exporter log stream.
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        [void]$process.Start()
+        $inputBytes = [Text.Encoding]::UTF8.GetBytes($Passphrase + "`n")
+        $process.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
+        $process.StandardInput.BaseStream.Flush()
+        [Array]::Clear($inputBytes, 0, $inputBytes.Length)
+        $process.StandardInput.Close()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) { throw "Edge-Pakete konnten nicht erstellt werden. Siehe Exportprotokoll." }
+    }
+    finally {
+        $Passphrase = $null
+        if ($null -ne $process) { $process.Dispose() }
+        Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
+    }
+    return @(Get-ChildItem -LiteralPath $targetDirectory -File | ForEach-Object { "edge-runtime/$($_.Name)" })
 }
 
 function Resolve-DockerCommand {
@@ -944,7 +1004,7 @@ function Restore-FrontendBuildEnv {
 }
 
 function New-AppArchive {
-    param([Parameter(Mandatory = $true)][string]$OutputPath)
+    param([Parameter(Mandatory = $true)][string]$OutputPath, [string[]]$ExcludedInputs = @())
 
     $rootExcludeNames = @(
         ".git",
@@ -997,8 +1057,21 @@ function New-AppArchive {
         "--exclude=*.log",
         "--exclude=*.db",
         "--exclude=*.sqlite",
-        "--exclude=*.sqlite3"
+        "--exclude=*.sqlite3",
+        "--exclude=deployment/edge/*.tar.gz",
+        "--exclude=deployment/edge/*.zip",
+        "--exclude=./deployment/edge/*.tar.gz",
+        "--exclude=./deployment/edge/*.zip"
     )
+    $workspacePrefix = [IO.Path]::GetFullPath((Get-Location).Path).TrimEnd('\') + '\'
+    foreach ($inputPath in $ExcludedInputs) {
+        if ([string]::IsNullOrWhiteSpace($inputPath)) { continue }
+        $absoluteInput = [IO.Path]::GetFullPath($inputPath)
+        if ($absoluteInput.StartsWith($workspacePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $relativeInput = $absoluteInput.Substring($workspacePrefix.Length).Replace('\', '/')
+            $excludeArgs += @("--exclude=$relativeInput", "--exclude=./$relativeInput")
+        }
+    }
 
     $tarArgs = @("-czf", $OutputPath) + $excludeArgs + $includeArgs
     Invoke-CheckedCommand -Description "Packe Anwendungscode in app.tar.gz." -FilePath "tar" -Arguments $tarArgs -WorkingDirectory (Get-Location).Path
@@ -1195,6 +1268,11 @@ $GStreamerDebBundleCacheDir = [string](Get-ConfigValue -Name "GStreamerDebBundle
 $GStreamerDebBundleDistroName = [string](Get-ConfigValue -Name "GStreamerDebBundleDistroName" -DefaultValue "")
 $ConfiguredPythonWheelBundlePath = [string](Get-ConfigValue -Name "PythonWheelBundlePath" -DefaultValue "")
 $PythonWheelBundleCacheDir = [string](Get-ConfigValue -Name "PythonWheelBundleCacheDir" -DefaultValue ".runtime\python-wheels")
+$EdgeRuntimeBundles = @(Get-ConfigValue -Name "EdgeRuntimeBundles" -DefaultValue @())
+$EdgeSigningKeyPath = [string](Get-ConfigValue -Name "EdgeSigningKeyPath" -DefaultValue "")
+$EdgeOpenSslExecutable = [string](Get-ConfigValue -Name "EdgeOpenSslExecutable" -DefaultValue "openssl")
+$EdgePackageIndexUrl = [string](Get-ConfigValue -Name "EdgePackageIndexUrl" -DefaultValue "https://pypi.org/simple")
+$EdgeAdditionalWheelDirectory = [string](Get-ConfigValue -Name "EdgeAdditionalWheelDirectory" -DefaultValue "")
 if ([string]::IsNullOrWhiteSpace($GStreamerDebBundleDistroName)) {
     $GStreamerDebBundleDistroName = $ManagedRuntimeDistroName
 }
@@ -1267,11 +1345,13 @@ if (Test-Path -LiteralPath $bundlePath) {
 }
 
 $appArchivePath = Join-Path $releaseDir "app.tar.gz"
-New-AppArchive -OutputPath $appArchivePath
+New-AppArchive -OutputPath $appArchivePath -ExcludedInputs (@($EdgeSigningKeyPath, $EdgeAdditionalWheelDirectory) + $EdgeRuntimeBundles)
 if ($BuildFrontend) {
     Assert-AppArchiveContainsFrontend -ArchivePath $appArchivePath
 }
 $appArchiveSha256 = (Get-FileHash -LiteralPath $appArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$edgeBundleFiles = @(Export-EdgeRuntimePackages -ReleaseDirectory $releaseDir -Version $AppVersion -AppArchive $appArchivePath -Passphrase $edgeSigningPassphrase)
+$edgeSigningPassphrase = $null
 
 $tritonArchiveBundlePath = ""
 $tritonArchiveSha256 = ""
@@ -1366,6 +1446,7 @@ $bundleManifest = [ordered]@{
     BuildTimestamp = (Get-Date).ToUniversalTime().ToString("o")
     AppArchive = "app.tar.gz"
     AppArchiveSha256 = $appArchiveSha256
+    EdgeRuntimeTargets = "edge-runtime/targets.json"
     TritonServerArchive = if ([string]::IsNullOrWhiteSpace($tritonArchiveBundlePath)) { $null } else { $tritonArchiveBundlePath }
     TritonServerArchiveSha256 = if ([string]::IsNullOrWhiteSpace($tritonArchiveSha256)) { $null } else { $tritonArchiveSha256 }
     MediaMtxArchive = if ([string]::IsNullOrWhiteSpace($mediaMtxArchiveBundlePath)) { $null } else { $mediaMtxArchiveBundlePath }
@@ -1412,6 +1493,7 @@ if (-not [string]::IsNullOrWhiteSpace($gStreamerDebBundlePath)) {
 if (-not [string]::IsNullOrWhiteSpace($pythonWheelBundlePath)) {
     $bundleFileNames += $pythonWheelBundlePath
 }
+$bundleFileNames += $edgeBundleFiles
 New-Sha256Manifest -ReleaseDir $releaseDir -FileNames $bundleFileNames
 
 Write-Log "Erstelle Windows/WSL2 Offline-Update-Bundle."

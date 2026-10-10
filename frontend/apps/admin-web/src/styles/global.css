@@ -5610,7 +5610,7 @@ code {
 
 .deployment-api-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -5623,6 +5623,49 @@ code {
 
 .inference-raw-result {
   max-height: 340px;
+}
+
+.deployment-api-test {
+  min-width: 0;
+}
+
+.project-inference-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.78fr) minmax(300px, 1.22fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.project-inference-upload .inference-upload__preview {
+  min-height: 280px;
+}
+
+.project-inference-controls {
+  display: grid;
+  gap: 1rem;
+  align-content: center;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fbfcfb;
+}
+
+.project-inference-controls p {
+  margin: 0.35rem 0 0;
+}
+
+.project-inference-result {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.project-inference-result__visual {
+  grid-template-columns: minmax(360px, 1.3fr) minmax(280px, 0.7fr);
+}
+
+.project-inference-oriented-overlay {
+  z-index: 2;
+  pointer-events: none;
 }
 
 .automation-flow {
@@ -5806,7 +5849,9 @@ code {
 
   .automation-flow,
   .automation-switches,
-  .deployment-api-grid {
+  .deployment-api-grid,
+  .project-inference-layout,
+  .project-inference-result__visual {
     grid-template-columns: 1fr;
   }
 
