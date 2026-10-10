@@ -805,15 +805,16 @@ function DatasetSection(props: DatasetSectionProps) {
         </div>
       </div>
 
-      <Panel title="Datenbereitschaft">
-        <div className="dataset-overview-grid">
-          <MetricPill label="Bereitschaft" value={`${readiness.readiness_percent.toFixed(0)}%`} tone={validSnapshot ? 'success' : 'warn'} />
-          <MetricPill label="Verwendbare Bilder" value={String(readiness.eligible_task_count)} tone="success" />
-          <MetricPill label="Entwürfe" value={String(readiness.draft_task_count)} />
-          <MetricPill label="Ausgeschlossen" value={String(readiness.invalid_task_count)} tone={readiness.invalid_task_count ? 'warn' : 'neutral'} />
-          <MetricPill label="Letzter Snapshot" value={validSnapshot ? `#${validSnapshot.snapshot_no}` : 'Keiner'} />
-          <MetricPill label="Letzte LS-Aktivität" value={formatDate(props.labelProject?.last_activity_at)} />
-        </div>
+      <section className="project-readiness" aria-labelledby="project-readiness-title">
+        <header><h3 id="project-readiness-title">Datenbereitschaft</h3></header>
+        <dl className="project-readiness__facts">
+          <div><dt>Bereitschaft</dt><dd>{readiness.readiness_percent.toFixed(0)}%</dd></div>
+          <div><dt>Verwendbare Bilder</dt><dd>{readiness.eligible_task_count}</dd></div>
+          <div><dt>Entwürfe</dt><dd>{readiness.draft_task_count}</dd></div>
+          <div><dt>Ausgeschlossen</dt><dd>{readiness.invalid_task_count}</dd></div>
+          <div><dt>Letzter gültiger Snapshot</dt><dd>{validSnapshot ? `#${validSnapshot.snapshot_no}` : 'Keiner'}</dd></div>
+          <div><dt>Letzte Label-Studio-Aktivität</dt><dd>{formatDate(props.labelProject?.last_activity_at)}</dd></div>
+        </dl>
         <ol className="dataset-flow" aria-label="Fortschritt zur Trainingsbereitschaft">
           {flow.map((step, index) => (
             <li key={step.label} className={`dataset-flow__step lifecycle--${step.state}`}>
@@ -826,7 +827,7 @@ function DatasetSection(props: DatasetSectionProps) {
           <div className="inline-alert inline-alert--danger">
             <strong>Snapshot konnte nicht erstellt werden</strong>
             <p>{readiness.readiness_reason}</p>
-            {props.canWrite ? <button onClick={props.onSync}>Erneut synchronisieren</button> : null}
+            {props.canWrite ? <button onClick={props.onSync} disabled={props.syncPending}>{props.syncPending ? 'Synchronisiert…' : 'Erneut synchronisieren'}</button> : null}
           </div>
         ) : null}
         <div className="dataset-distribution">
@@ -836,14 +837,14 @@ function DatasetSection(props: DatasetSectionProps) {
               {Object.entries(readiness.class_distribution).map(([label, count]) => (
                 <div key={label}>
                   <span>{label}</span>
-                  <progress value={count} max={Math.max(...Object.values(readiness.class_distribution), 1)} />
+                  <progress aria-label={`Anzahl für ${label}`} value={count} max={Math.max(...Object.values(readiness.class_distribution), 1)} />
                   <strong>{count}</strong>
                 </div>
               ))}
             </div>
           ) : <p className="subtle-text">Noch keine Klassenstatistik verfügbar.</p>}
         </div>
-      </Panel>
+      </section>
 
       <Panel title="Bilder hinzufügen">
         {!pipeline.dataset_id ? (

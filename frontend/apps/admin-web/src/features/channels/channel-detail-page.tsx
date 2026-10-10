@@ -2,7 +2,8 @@ import { useUnsavedWorkspace } from '../../components/use-unsaved-workspace';
 import { Icon, Modal, ToolButton, Tabs } from '../../components/workspace-ui';
 import { OverlayControls, LiveViewport } from '../../components/live-workspace-controls';
 import { FacilitySelect } from './places';
-import { ResultHistoryPage } from '../results/result-history-page';
+import { ChannelResultsWorkspace } from './channel-results-workspace';
+import { LabelStudioProjectLink } from '../pipelines/label-studio-link';
 import {
   type CSSProperties,
   type SetStateAction,
@@ -149,7 +150,7 @@ export function ChannelDetailPage() {
   const [workspaceTab, setWorkspaceTab] = useState('Betrieb');
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [pipelineOpened, setPipelineOpened] = useState(false);
-  const liveVisible = workspaceTab === 'Betrieb' || workspaceTab === 'Aufnahmen';
+  const liveVisible = workspaceTab === 'Betrieb';
   const { channelId } = useParams({ from: '/authenticated/channels/$channelId' });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -995,9 +996,8 @@ export function ChannelDetailPage() {
   return (
     <div className="panel-stack panel-stack--wide channel-detail-page">
       <div className="ws-object-bar"><Link to="/channels" className="ws-back-button" aria-label="Zurück zu Kanälen"><Icon name="back" size={16}/></Link><div><strong>{channel.name}</strong><small>{channel.technical_place || 'Nicht zugeordnet'}</small></div><span className={`ws-badge ws-badge--${statusPillTone === 'success' ? 'ok' : statusPillTone === 'danger' ? 'bad' : 'muted'}`}><i/>{statusPillValue}</span><span className="ws-spacer"/><span className="ws-muted">{channel.placement.target === 'edge_device' ? `Edge · ${channel.placement.edge_device_name ?? channel.placement.edge_management_ip ?? 'Gerät'}` : 'Zentraler Server'}</span></div>
-      <div className="workspace-channel-tabs">      <Tabs tabs={['Betrieb', 'Pipeline', 'Aufnahmen', 'Ergebnisse', 'Konfiguration']} value={workspaceTab} onChange={tab => {setWorkspaceTab(tab); if(tab === 'Pipeline') setPipelineOpened(true);}}/><span hidden={workspaceTab !== 'Betrieb'}><ToolButton icon="panel" label="Inspektor ein-/ausblenden" active={inspectorOpen} onClick={() => setInspectorOpen(v => !v)}/></span></div>
-      <div className="workspace-tab-body" hidden={workspaceTab !== 'Ergebnisse'}>{workspaceTab === 'Ergebnisse' && <ResultHistoryPage fixedChannelId={channelId}/>}</div>
-      <div className="workspace-tab-body" hidden={workspaceTab !== 'Aufnahmen'}>{manualCapturePanel}</div>
+      <div className="workspace-channel-tabs">      <Tabs tabs={['Betrieb', 'Pipeline', 'Ergebnisverlauf', 'Konfiguration']} value={workspaceTab} onChange={tab => {setWorkspaceTab(tab); if(tab === 'Pipeline') setPipelineOpened(true);}}/><span hidden={workspaceTab !== 'Betrieb'}><ToolButton icon="panel" label="Inspektor ein-/ausblenden" active={inspectorOpen} onClick={() => setInspectorOpen(v => !v)}/></span></div>
+      <div className="workspace-tab-body workspace-results-tab" hidden={workspaceTab !== 'Ergebnisverlauf'}>{workspaceTab === 'Ergebnisverlauf' && <ChannelResultsWorkspace key={channelId} channelId={channelId} historyEnabled={channel.result_history_policy.enabled} onConfigure={() => {setConfigSection('Datenerfassung & Historie'); setWorkspaceTab('Konfiguration');}}/>}</div>
       <div className="channel-operation-tab" hidden={workspaceTab !== 'Betrieb'}>
 
       <div className={inspectorOpen ? "channel-live-workspace" : "channel-live-workspace channel-live-workspace--expanded"}>
@@ -1028,6 +1028,7 @@ export function ChannelDetailPage() {
                 <li key={`${primitive.layer}-${index}`}>{primitive.label ?? overlayLayerLabel(primitive.layer)}</li>
               ))}</ul>
             ) : <p className="subtle-text">Noch keine Messwerte verfügbar.</p>}
+            <button onClick={() => setWorkspaceTab('Ergebnisverlauf')}><Icon name="results" size={14}/>Gespeicherte Ergebnisse ansehen</button>
           </section>
       {stemRotationOptimizationEnabled ? (
         <StemRotationOptimizationView
@@ -1144,6 +1145,10 @@ export function ChannelDetailPage() {
           </section>
 
 
+          <details className="workspace-capture-section">
+            <summary><strong>Aufnahmen</strong><span className={`ws-badge ws-badge--${manualCaptureSessionQuery.data?.session.state === 'running' ? 'ok' : manualCaptureSessionQuery.data?.session.state === 'failed' ? 'bad' : 'muted'}`}><i/>{({idle:'Bereit',running:'Serie läuft',stopped:'Gestoppt',failed:'Fehler'})[manualCaptureSessionQuery.data?.session.state ?? 'idle']}</span></summary>
+            {manualCapturePanel}
+          </details>
         </aside>
       </div>
 
@@ -3252,7 +3257,7 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
   const content = (
       <div className={`manual-capture ${props.compact ? 'manual-capture--compact' : ''}`}>
         <label className="filter-field">
-          <span>Label Studio project</span>
+          <span>{props.compact ? 'Label-Studio-Projekt' : 'Label Studio project'}</span>
           <select
             value={props.selectedTargetId}
             onChange={(event) => props.onSelectTarget(event.target.value)}
@@ -3265,17 +3270,18 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
                 </option>
               ))
             ) : (
-              <option value="">No projects available</option>
+              <option value="">Keine Projekte verfügbar</option>
             )}
           </select>
-          <small className="subtle-text">
+          {props.compact ? <small className="subtle-text">Zielprojekt für Einzelbilder und Serienaufnahmen.</small> : <small className="subtle-text">
             Use a dedicated segmentation project for the canonical corridor.{' '}
             <a href="/datasets/projects">Create or map project</a>
-          </small>
+          </small>}
         </label>
+        {props.compact && <LabelStudioProjectLink projectId={selectedTarget?.label_studio_project_id}/>}
 
         <label className="filter-field">
-          <span>Capture image</span>
+          <span>{props.compact ? 'Bildquelle' : 'Capture image'}</span>
           <select
             value={props.captureSource}
             onChange={(event) =>
@@ -3285,14 +3291,14 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
             }
             disabled={running || props.busy}
           >
-            <option value="LIVE_VIEW_FRAME">Full/live view (legacy)</option>
-            <option value="PIPELINE_IMAGE_OUTPUT">Canonical model/Label Studio view</option>
+            <option value="LIVE_VIEW_FRAME">{props.compact ? 'Vollständiges Kamerabild' : 'Full/live view (legacy)'}</option>
+            <option value="PIPELINE_IMAGE_OUTPUT">{props.compact ? 'Modellbild / Label Studio' : 'Canonical model/Label Studio view'}</option>
           </select>
         </label>
 
         {props.captureSource === 'PIPELINE_IMAGE_OUTPUT' ? (
           props.viewProfileId ? (
-            <p className="subtle-text">
+            props.compact ? <p className="subtle-text">Profil: {props.viewProfileId}. Das geprüfte Modellbild wird unverändert übernommen; kein Rückfall auf das Vollbild.</p> : <p className="subtle-text">
               Label image: {props.viewProfileId}. The capture service verifies this profile,
               enforces explicit eligibility rejections, sends these exact pixels to Label Studio,
               and never falls back to the full frame. This source is selected automatically when a
@@ -3327,7 +3333,7 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
         {props.captureSource === 'PIPELINE_IMAGE_OUTPUT' &&
         props.sourceFrame?.image_base64 &&
         props.modelFrame?.image_base64 ? (
-          <div className="manual-capture__comparison" aria-label="Capture source comparison">
+          <details className="manual-capture__image-details" open={props.compact ? undefined : true}><summary>Bildvergleich</summary><div className="manual-capture__comparison" aria-label="Capture source comparison">
             <figure>
               <img
                 src={liveImageSource(
@@ -3345,14 +3351,15 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
               />
               <figcaption>Actual Label Studio / model input</figcaption>
             </figure>
-          </div>
+          </div></details>
         ) : null}
 
         {props.compact ? (
           <div className="manual-capture__compact-state">
             <span>Letzte Aufnahme</span>
             <strong>{lastResult ? formatActivity(lastResult.captured_at) : 'Noch keine'}</strong>
-            <span>{manualCaptureResultLabel(lastResult?.status)}</span>
+            {lastResult && <span>{({success:'Aufgenommen',queued:'In Warteschlange',failed:'Fehlgeschlagen'})[lastResult.status]}</span>}
+            <small>{props.session?.capture_count ?? 0} Aufnahmen · {props.session?.failure_count ?? 0} Fehler in dieser Sitzung</small>
           </div>
         ) : (
           <div className="manual-capture__state">
@@ -3376,10 +3383,10 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
             onClick={props.onCaptureOnce}
             disabled={!canCapture}
           >
-            Capture once
+            {props.compact ? 'Einzelbild aufnehmen' : 'Capture once'}
           </button>
           <label className="manual-capture__interval">
-            <span>Every</span>
+            <span>{props.compact ? 'Intervall' : 'Every'}</span>
             <input
               type="number"
               min={1}
@@ -3398,7 +3405,7 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
             onClick={props.onStartInterval}
             disabled={!canStart}
           >
-            Start
+            {props.compact ? 'Serie starten' : 'Start'}
           </button>
           <button
             type="button"
@@ -3406,7 +3413,7 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
             onClick={props.onStopInterval}
             disabled={!canStop}
           >
-            Stop
+            {props.compact ? 'Serie stoppen' : 'Stop'}
           </button>
         </div>
 
@@ -3417,7 +3424,7 @@ export function ManualLiveCapturePanel(props: ManualLiveCapturePanelProps) {
             onChange={(event) => props.onRequestPredictionsChange(event.target.checked)}
             disabled={running || props.busy}
           />
-          <span>Predictions</span>
+          <span>{props.compact ? 'Vorhersagen anfordern' : 'Predictions'}</span>
         </label>
 
         {!props.compact ? <dl className="definition-list definition-list--inline">

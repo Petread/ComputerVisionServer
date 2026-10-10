@@ -14,21 +14,41 @@ Datasets, Modelle, Aufnahmen und Edge-Verwaltung. Der lokale Demo-Einstieg bleib
 - Startseite: Kanäle; Label-Manager starten in Projekte.
 - Projekte: kompakte Tabelle, anschließend Dataset, Modelle, Automatisierung und
   Administration als Tabs. Vorhandene Modell-Unteransichten bleiben verfügbar.
+  Die Datenbereitschaft zeigt Kennzahlen, fünf Verarbeitungsschritte und
+  Klassenverteilung als flache Übersicht. Lange Begründungen, Klassen-, Modell- und
+  Template-Namen umbrechen vollständig innerhalb ihrer Spalten.
 - **Label Studio:** Der Link in jeder Projektzeile, im Projektkopf und im Dataset öffnet
   `/label-studio/projects/<label_studio_project_id>/data/` über den vorhandenen Proxy.
   Eine fehlende oder ungültige ID erzeugt keinen Link zur allgemeinen Projektliste.
 - Kanäle: Strukturnavigation nach Bereich und Anlage, Listen- und Monitoransicht.
   Die Stammdaten werden unter System → Bereiche und Anlagen verwaltet; die Zuordnung
   erfolgt beim Anlegen oder im Konfigurationstab eines Kanals.
-- Kanal: Betrieb, Pipeline, Aufnahmen, Ergebnisse und Konfiguration. Die Liveansicht
+- Kanal: Betrieb, Pipeline, Ergebnisverlauf und Konfiguration. Die Liveansicht
   enthält einen großen Bildbereich und einen einblendbaren Inspektor. Das Overlay-Menü
   bietet Sichtbarkeit je Ebene, Solo, Alle/Keine und Deckkraft. Einpassen, Zoom,
-  Verschieben, Standbild und Vollbild arbeiten auf dem vorhandenen Livebild.
+  Verschieben, Standbild und Vollbild arbeiten auf dem vorhandenen Livebild; die
+  Bildsteuerung sitzt unten links. Die Schaltflächen im Inspektor verwenden denselben
+  kompakten Standard wie die Kanalübersicht.
+- Aufnahmen: aufklappbarer Abschnitt im Betriebsinspektor mit Einzelbild, Serienaufnahme,
+  Intervall, Vorhersagen und Zielprojekt samt direktem Label-Studio-Projektlink.
+  Eine laufende Serie bleibt auch bei geschlossenem Abschnitt am Status erkennbar.
+  Der Bildvergleich ist separat aufklappbar; Prüfregeln für kanonische Modellbilder
+  und der vorhandene Aufnahme-/Sessionpfad bleiben erhalten.
+- Ergebnisverlauf: eigener Kanal-Arbeitsbereich mit Ausführungsliste links und
+  Messwerten rechts. Suche, Status, Zeitraum und Blättern verwenden die bestehende
+  Ergebnis-API mit festem Kanalbezug. Die erste Seite folgt alle fünf Sekunden den
+  neuesten Ergebnissen; eine angeklickte Ausführung bleibt zum Prüfen fixiert.
+  „Neueste“ löst die Auswahl, „Pausiert“ unterbricht die Aktualisierung.
+  Fachliche Stammauswertungen und Bewertungen bleiben verfügbar; verschachtelte
+  Ausgaben und Rohdaten sind aufklappbar. Das aktuelle Live-Ergebnis bietet einen
+  direkten Einstieg. Bei deaktivierter Speicherung führt ein Link zur Kanalkonfiguration.
 - Pipeline: Graph als primärer Editor, Palette links, Eigenschaften rechts.
   Die dunkle Graphfläche unterstützt Verschieben, Zoom und Einpassen. Die Palette ist
   durchsuchbar; Bausteine können per Klick oder Drag-and-drop eingefügt werden.
   Komplexe Kalibrierungen, der geführte Aufbau und Version/Vorlage öffnen sich in
   Dialogen. Prüfergebnisse stehen in einer ausklappbaren unteren Zeile.
+  „Version & Vorlage“ trennt Versionsstand und Änderungsnotiz vom Vorlagenwechsel
+  in zwei flache Formularansichten. Speichern und Aktivieren bleiben getrennte Aktionen.
   Entwürfe bleiben beim Tabwechsel erhalten;
   beim Verlassen eines ungespeicherten Kanal-/Graph-Arbeitsbereichs wird nachgefragt.
 - Edge-Details und Systemverwaltung verwenden denselben kompakten Aufbau mit
@@ -77,6 +97,18 @@ Update auswählen. Alternativ den vorhandenen `apply-windows-update.ps1` mit
 ein bloßes Kopieren von CSS/JavaScript reicht wegen der Stammdatenmigration nicht aus.
 
 ## Verifikation
+
+Die Projektkorrektur `2026.09.13-workspace4` passt Datenbereitschaft und Projektmodelle
+an das Workspace-Design an. Sie ändert keine Backendverträge oder Datenbanktabellen.
+Die isolierte Browserprüfung enthält lange Bezeichnungen und prüft die Dataset- und
+Modellansicht bei 1024, 1366 und 1670 Pixel Breite sowie die Modellauswahl.
+
+Die Kanalüberarbeitung `2026.09.13-workspace3` verwendet ausschließlich bestehende
+Backendverträge und benötigt keine zusätzliche Datenbankmigration. Lokal werden
+TypeScript, ESLint, Produktionsbuild, Kanal-/Designer-/Ergebnistests und die erweiterte
+isolierte Browserprüfung ausgeführt. Letztere prüft auch die Bildsteuerung unten links,
+Aufnahmen im Inspektor, Version/Vorlage sowie Kanalsuche, Auswahl und Blättern im
+Ergebnisverlauf. Der Prüfbericht liegt unter `.tmp/ui-workspace-validation/report.json`.
 
 Die Layoutkorrektur `2026.09.07-workspace2` behebt die alten `align-items: start`-
 und Größenregeln, die trotz Workspace-Styling Inhalte auf Eigenbreite und geringe Höhe

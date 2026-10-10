@@ -9,6 +9,9 @@ const report = {status:'valid',issues:[],error_count:0,warning_count:0};
 const version = {pipeline_version_id:'version-1',pipeline_definition_id:'definition-1',version_no:1,status:'published',mode:'realtime',config_digest:'fixture',validation_status:'valid',error_count:0,warning_count:0,graph,validation_report:report,model_capability_constraints:{},node_contract_versions:{}};
 const definition = {pipeline_definition_id:'definition-1',slug:'layout',name:'Stammdrehung · Pipeline',status:'published',latest_version_id:'version-1',published_version_id:'version-1',latest_version_mode:'realtime',published_version_mode:'realtime',template:false,scope:'channel_instance',owner_channel_id:channel.channel_id,version_count:1,versions:[version],latest_version:version};
 const projects = Array.from({length:11},(_,index)=>({label_project_id:`project-${index}`,label_studio_project_id:index+21,title:['Sprühnebelsegmentierung – Fehlererkennung','Stammsegmentierung','Jahrringerkennung Stirn + Schräg'][index%3],task_type:'segmentation',status:'ready',next_recommended_action:'Modell trainieren',readiness:{readiness_percent:100,eligible_task_count:317,readiness_reason:'Bereit'},models:[],current_endpoints:[],training_pipeline_slug:'inspection'}));
+const longName = 'Brettoberflächeninspektion_Kamera_Vorzentrierung_Qualitätssicherung_Segmentierungsmodell';
+const projectModels = Array.from({length:3},(_,index)=>({model_family_id:`model-${index}`,slug:`model-${index}`,display_name:index===0?longName:`${longName}_${index+1}`,description:'Segmentierung langer Werkstücke mit mehreren Prüfklassen.',architecture:'unet',template_key:'semantic_segmentation_production_template_with_extended_configuration',latest_model_version_no:12,uses_all_classes:true,segmentation_mode:'semantic',promotion_policy:{criteria:[],allow_model_override:false}}));
+const projectDetail = {...projects[0],models:projectModels,readiness:{...projects[0].readiness,task_count:347,annotation_count:317,annotations_ready:true,draft_task_count:20,invalid_task_count:10,readiness_reason:'Annotationen vorhanden. Die zusätzliche Qualitätsprüfung für sehr lange Werkstücke und seltene Fehlerklassen ist abgeschlossen.',class_distribution:{['Oberflächenfehler_Längsrisse_Harzstellen_und_unregelmäßige_Brettkonturen']:217,Gutteil:100}},latest_snapshot:{snapshot_no:12,status:'ready',validation_status:'passed'},latest_valid_snapshot:{snapshot_no:12,status:'ready',validation_status:'passed'},prediction_backend:{model_family_id:'model-0'},automation_policy:null,model_templates:[],supported_model_architectures:[],training_history:[],activity_timeline:[]};
 const liveState = {channel_id:channel.channel_id,actual_state:'stopped',available:false,stale:true,frame:null,source_frame:null,overlay:[],layers_available:[],source_health:{state:'unknown',connected:false,status_text:'Gestoppt',reconnect_count:0,source_error_count:0},metrics:{frame_count:0,acquired_frame_count:0,dropped_frame_count:0,reconnect_count:0,source_error_count:0,buffer_depth:0}};
 export function useLiveFixture(image, width=1280, height=720) {
   Object.assign(channel,{status:'running',observed_state:'running',desired_state:'running',health:{state:'ok',status_text:'Läuft'}});
@@ -16,7 +19,16 @@ export function useLiveFixture(image, width=1280, height=720) {
   const overlay=[{primitive_type:'box',layer:'detections',label:'Testkontur',geometry:{x_min:.2,y_min:.2,x_max:.8,y_max:.8},style:{stroke:'#65caac'},metadata:{}},{primitive_type:'line',layer:'reference',geometry:{start:{x:width*.1,y:height*.5},end:{x:width*.9,y:height*.5},coordinate_system:'pixel_xy'},style:{stroke:'#a1bad4'},metadata:{}}];
   Object.assign(liveState,{actual_state:'running',available:true,stale:false,frame,source_frame:frame,overlay,source_overlay:overlay,raw_overlay:overlay,layers_available:['detections','reference'],source_health:{...liveState.source_health,state:'ok',connected:true,status_text:'Layout-Testbild'},updated_at:new Date().toISOString()});
 }
-export function fixtureResponse(path, method, body) {
+export const resultRequests = [];
+const history = Array.from({length:35}, (_, index) => ({result_record_id:`result-${index}`,channel_id:channel.channel_id,channel_name:channel.name,pipeline_version_id:'version-1',correlation_id:`correlation-${index}`,completed_at:new Date(Date.UTC(2026,8,13,10,0,35-index)).toISOString(),mode:'realtime',status:index%5===1?'failed':'completed',result_type:'realtime_frame',schema_version:'runtime.execution.result.v1',result:{},trigger_response:index%5===1?{}:{object_count:3,length_mm:1234+index},derived_preview:{},inference_output_count:1,derived_output_count:1,overlay_primitive_count:0,timing:{total_ms:18.4},model_routes:[],normalized_inference_outputs:[{node_key:'segmentation',payload:{count:3}}],raw_inference_outputs:[],derived_outputs:[],overlay_primitives:[],runtime_metadata:{},execution_result:index%5===1?{error:'Test: Bildquelle nicht verfügbar'}:{}}));
+export function fixtureResponse(path, method, body, params = new URLSearchParams()) {
+  if(path.endsWith('/runtime/results')) {
+    resultRequests.push(Object.fromEntries(params));
+    const items = history.filter(item => (!params.get('channel_id') || item.channel_id===params.get('channel_id')) && (!params.get('status') || item.status===params.get('status')) && (!params.get('completed_from') || item.completed_at>=params.get('completed_from')) && (!params.get('search') || JSON.stringify(item).includes(params.get('search'))));
+    const offset=Number(params.get('offset')??0),limit=Number(params.get('limit')??30);
+    return {items:items.slice(offset,offset+limit),total:items.length,limit,offset};
+  }
+  if(path.includes('/runtime/results/result-')) return {item:history.find(item=>path.endsWith(`/${item.result_record_id}`))};
   if(path==='/api/v1/auth/me') return {authenticated:true,user:{username:'operator',display_name:'Layout Test',role:'platform_admin'}};
   if(path.endsWith('/runtime/places')) return {areas:[{id:'area-1',name:'Säge'},{id:'area-2',name:'Weiterverarbeitung'}],facilities:[{id:'facility-1',area_id:'area-1',name:'Linie 1'},{id:'facility-2',area_id:'area-2',name:'Coatinglinie'}]};
   if(path.endsWith('/runtime/channels')) return {items:channels};
@@ -28,11 +40,15 @@ export function fixtureResponse(path, method, body) {
   if(path.endsWith('/authoring-context')) return {context:null};
   if(path.endsWith('/live-view/latest') || path.endsWith('/pipeline-preview')) return {state:liveState};
   if(path.endsWith('/manual-capture/session')) return {session:{channel_id:channel.channel_id,state:'idle',capture_count:0,failure_count:0,last_result:null}};
-  if(path.endsWith('/runtime/pipeline-definitions')) return {items:[definition]};
+  if(path.endsWith('/manual-capture/targets')) return {items:[{capture_target_id:'capture-1',display_name:'Brettprüfung',task_type:'segmentation',status:'ready',selectable:true,label_studio_project_id:21}]};
+  if(path.endsWith('/runtime/pipeline-definitions')) return {items:[definition,{...definition,pipeline_definition_id:'template-1',name:'Inspektion Standard',description:'Kamerabild, Segmentierung und Ergebnisausgabe.',template:true,scope:'template',owner_channel_id:null}]};
   if(path.endsWith('/runtime/pipeline-definitions/definition-1')) return definition;
   if(path.endsWith('/runtime/node-types')) return {items:nodeTypes};
   if(path.endsWith('/api/v1/project-pipelines:refresh')) return {job_id:'layout-refresh',status:'queued'};
   if(path.endsWith('/api/v1/project-pipelines')) return {items:projects};
+  if(path.endsWith('/api/v1/project-pipelines/project-0')) return projectDetail;
+  if(path.includes('/api/v1/project-pipelines/project-0/models/')) return {model:projectModels.find(model=>path.endsWith(`/${model.model_family_id}`)),versions:[],training_history:[],endpoints:[],lifecycle:[],activity_timeline:[]};
+  if(path.endsWith('/api/v1/datasets')) return {items:[]};
   if(['/manual-capture/targets','/manual-capture/history','/runtime/trigger-endpoints','/runtime/model-capabilities','/label-projects','/runtime/edge-devices'].some(suffix=>path.endsWith(suffix))) return {items:[]};
   return undefined;
 }
